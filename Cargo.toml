@@ -1,0 +1,15 @@
+[package]
+name = "rdedup"
+version = "0.1.0"
+authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "rdedup"
+path = "src/bin.rs"
+
+[dependencies]
+rollsum = "0.2.0"
+rust-crypto = "^0.2"
