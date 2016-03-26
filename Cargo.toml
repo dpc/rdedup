@@ -13,3 +13,4 @@ path = "src/bin.rs"
 [dependencies]
 rollsum = "0.2.0"
 rust-crypto = "^0.2"
+log = "*"
