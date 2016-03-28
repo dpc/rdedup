@@ -15,8 +15,14 @@ use rollsum::Engine;
 use crypto::sha2;
 use crypto::digest::Digest;
 
+#[derive(Copy, Clone, Debug)]
+enum ChunkType {
+    Index,
+    Data,
+}
+
 enum Message {
-    Data(Vec<u8>, Vec<Edge>),
+    Data(Vec<u8>, Vec<Edge>, ChunkType),
     Exit,
 }
 
@@ -96,15 +102,19 @@ impl Chunker {
     }
 }
 
-fn write_with_io<F>(tx : mpsc::Sender<Message>, mut input_f : F)
-where F : FnMut() -> Vec<u8> {
-    let mut stdin = io::stdin();
+/// Store data, using input_f to get chunks of data
+///
+/// Return final digest
+fn store_with_io_func(tx : mpsc::Sender<Message>,
+                      mut input_f : &mut FnMut() -> Vec<u8>,
+                      chunk_type : ChunkType,
+                      ) -> Vec<u8> {
     let mut chunker = Chunker::new();
 
     let mut index : Vec<u8> = vec!();
     loop {
-        let mut buf = input_f();
-        let len = stdin.read(&mut buf).unwrap();
+        let buf = input_f();
+        let len = buf.len();
 
         if len == 0 {
             break;
@@ -115,66 +125,42 @@ where F : FnMut() -> Vec<u8> {
         for &(_, ref sum) in &edges {
             index.append(&mut sum.clone());
         }
-        tx.send(Message::Data(buf, edges)).unwrap();
+        tx.send(Message::Data(buf, edges, chunk_type)).unwrap();
     }
     let edges = chunker.finish();
 
     for &(_, ref sum) in &edges {
         index.append(&mut sum.clone());
     }
-    tx.send(Message::Data(vec!(), edges)).unwrap();
-    tx.send(Message::Exit).unwrap();
+    tx.send(Message::Data(vec!(), edges, chunk_type)).unwrap();
 
     println!("index size: {}", index.len());
     println!("chunks found: {}", chunker.chunks_total);
+
+    if index.len() > 32 {
+        store_with_io_func(tx, &mut || mem::replace(&mut index, vec!()), ChunkType::Index)
+    } else {
+        index
+    }
+
 }
 
-fn write_stdio(tx : mpsc::Sender<Message>) {
+/// Store stdio and return a digest
+fn store_stdio(tx : mpsc::Sender<Message>) -> Vec<u8> {
     let mut stdin = io::stdin();
-    write_with_io(tx, || {
+    store_with_io_func(tx, &mut || {
         let mut buf = vec![0u8; 16 * 1024];
         let len = stdin.read(&mut buf).unwrap();
         buf.truncate(len);
         buf
-    });
+    }, ChunkType::Data)
 }
 
-/*
-fn read_stdio(tx : mpsc::Sender<Message>) {
-    let mut stdin = io::stdin();
-    let mut chunker = Chunker::new();
-
-    let mut index : Vec<u8> = vec!();
-    loop {
-        let mut buf = vec![0u8; 16 * 1024];
-        let len = stdin.read(&mut buf).unwrap();
-
-        if len == 0 {
-            break;
-        }
-
-        let edges = chunker.input(&buf[..len]);
-
-        for &(_, ref sum) in &edges {
-            index.append(&mut sum.clone());
-        }
-        tx.send(Message::Data(buf, edges)).unwrap();
-    }
-    let edges = chunker.finish();
-
-    for &(_, ref sum) in &edges {
-        index.append(&mut sum.clone());
-    }
-    tx.send(Message::Data(vec!(), edges)).unwrap();
-    tx.send(Message::Exit).unwrap();
-
-    println!("index size: {}", index.len());
-    println!("chunks found: {}", chunker.chunks_total);
-}
-*/
-
-fn digest_to_path(digest : &[u8]) -> PathBuf {
-    Path::new(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex())
+fn digest_to_path(chunk_type : ChunkType, digest : &[u8]) -> PathBuf {
+    match chunk_type {
+        ChunkType::Data => Path::new("chunks"),
+        ChunkType::Index => Path::new("index"),
+    }.join(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex())
 }
 
 fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<Message>) {
@@ -185,14 +171,14 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<Message>) {
                 assert!(pending_data.is_empty());
                 return
             }
-            Message::Data(data, edges) => if edges.is_empty() {
+            Message::Data(data, edges, chunk_type) => if edges.is_empty() {
                 println!("0 edges");
                 pending_data.push(data)
             } else {
                 println!("{} edges", edges.len());
                 let mut prev_ofs = 0;
                 for &(ref ofs, ref sha256) in &edges {
-                    let path = digest_to_path(&sha256);
+                    let path = digest_to_path(chunk_type, &sha256);
                     let path = dest_base_dir.join(path);
                     println!("Would write {:?}", path);
                     if !path.exists() {
@@ -225,9 +211,10 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<Message>) {
 fn main() {
     let (tx, rx) = mpsc::channel();
 
-    let chunk_writer_join = thread::spawn(|| chunk_writer(Path::new("chunks"), rx));
+    let chunk_writer_join = thread::spawn(|| chunk_writer(Path::new("backup_dir"), rx));
 
-    write_stdio(tx);
+    store_stdio(tx.clone());
 
+    tx.send(Message::Exit).unwrap();
     chunk_writer_join.join().unwrap();
 }
