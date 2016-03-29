@@ -144,20 +144,21 @@ fn extract(dest_base_dir : &Path, digest : &[u8]) -> Vec<u8> {
 /// Store data, using input_f to get chunks of data
 ///
 /// Return final digest
-fn store_with_io_func(tx : mpsc::Sender<ChunkWriterMessage>,
-                      mut input_f : &mut FnMut() -> Vec<u8>,
+fn store_with_io_func<R : Read>(tx : mpsc::Sender<ChunkWriterMessage>,
+                      mut reader : R,
                       chunk_type : ChunkType,
                       ) -> Vec<u8> {
     let mut chunker = Chunker::new();
 
     let mut index : Vec<u8> = vec!();
     loop {
-        let buf = input_f();
-        let len = buf.len();
+        let mut buf = vec![0u8; 16 * 1024];
+        let len = reader.read(&mut buf).unwrap();
 
         if len == 0 {
             break;
         }
+        buf.truncate(len);
 
         let edges = chunker.input(&buf[..len]);
 
@@ -177,7 +178,7 @@ fn store_with_io_func(tx : mpsc::Sender<ChunkWriterMessage>,
     println!("chunks found: {}", chunker.chunks_total);
 
     if index.len() > 32 {
-        store_with_io_func(tx, &mut || mem::replace(&mut index, vec!()), ChunkType::Index)
+        store_with_io_func(tx, &mut io::Cursor::new(index), ChunkType::Index)
     } else {
         index
     }
@@ -187,12 +188,7 @@ fn store_with_io_func(tx : mpsc::Sender<ChunkWriterMessage>,
 /// Store stdio and return a digest
 fn store_stdio(tx : mpsc::Sender<ChunkWriterMessage>) -> Vec<u8> {
     let mut stdin = io::stdin();
-    store_with_io_func(tx, &mut || {
-        let mut buf = vec![0u8; 16 * 1024];
-        let len = stdin.read(&mut buf).unwrap();
-        buf.truncate(len);
-        buf
-    }, ChunkType::Data)
+    store_with_io_func(tx, &mut stdin, ChunkType::Data)
 }
 
 fn digest_to_path(chunk_type : ChunkType, dest_base_dir : &Path, digest : &[u8]) -> PathBuf {
