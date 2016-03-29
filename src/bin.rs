@@ -3,17 +3,21 @@ extern crate crypto;
 #[macro_use]
 extern crate log;
 extern crate rustc_serialize as serialize;
+extern crate argparse;
 
 use std::io::{Read, Write};
-use std::{fs, mem, thread, io};
+use std::{fs, mem, thread, io, process};
 use std::path::{Path, PathBuf};
-use serialize::hex::ToHex;
+use serialize::hex::{ToHex, FromHex};
+use std::str::FromStr;
 
 use std::sync::mpsc;
 
 use rollsum::Engine;
 use crypto::sha2;
 use crypto::digest::Digest;
+
+use argparse::{ArgumentParser, StoreTrue, Store, List};
 
 #[derive(Copy, Clone, Debug)]
 enum ChunkType {
@@ -176,9 +180,6 @@ fn store_data<R : Read>(tx : mpsc::Sender<ChunkWriterMessage>,
     }
     tx.send(ChunkWriterMessage::Data(vec!(), edges, chunk_type)).unwrap();
 
-    println!("index size: {}", index.len());
-    println!("chunks found: {}", chunker.chunks_total);
-
     if index.len() > 32 {
         store_data(tx, &mut io::Cursor::new(index), ChunkType::Index)
     } else {
@@ -212,14 +213,11 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<ChunkWriterMessage>) 
                 return
             }
             ChunkWriterMessage::Data(data, edges, chunk_type) => if edges.is_empty() {
-                println!("0 edges");
                 pending_data.push(data)
             } else {
-                println!("{} edges", edges.len());
                 let mut prev_ofs = 0;
                 for &(ref ofs, ref sha256) in &edges {
                     let path = digest_to_path(chunk_type, &dest_base_dir, &sha256);
-                    println!("Would write {:?}", path);
                     if !path.exists() {
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(path).unwrap();
@@ -247,13 +245,78 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<ChunkWriterMessage>) 
     }
 }
 
+
+struct GlobalOptions {
+    verbose : bool,
+}
+
+enum Command {
+    Help,
+    Save,
+    Restore,
+}
+
+impl FromStr for Command {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Command, ()> {
+        return match src {
+            "help" => Ok(Command::Help),
+            "save" => Ok(Command::Save),
+            "restore" => Ok(Command::Restore),
+            _ => Err(()),
+        };
+    }
+}
+
 fn main() {
+    let mut options = GlobalOptions {
+        verbose: false,
+    };
+
+    let mut subcommand = Command::Help;
+    let mut args : Vec<String> = vec!();
+
+    {
+        let mut ap = ArgumentParser::new();
+        ap.set_description("mgit");
+        ap.refer(&mut options.verbose)
+            .add_option(&["-v", "--verbose"], StoreTrue,
+                        "Be verbose");
+        ap.refer(&mut subcommand)
+            .add_argument("command", Store,
+                r#"Command to run (either "save" or "restore")"#);
+        ap.refer(&mut args)
+            .add_argument("arguments", List,
+                r#"Arguments for command"#);
+        ap.stop_on_first_argument(true);
+        ap.parse_args_or_exit();
+    }
+
     let (tx, rx) = mpsc::channel();
+    let dst_dir = Path::new("backup_dir");
 
-    let chunk_writer_join = thread::spawn(|| chunk_writer(Path::new("backup_dir"), rx));
+    match subcommand {
+        Command::Help => {
+            println!("Use save / restore argument");
+        },
+        Command::Save => {
+            let chunk_writer_join = thread::spawn(move || chunk_writer(dst_dir, rx));
 
-    store_stdio(tx.clone());
+            let final_digest = store_stdio(tx.clone());
 
-    tx.send(ChunkWriterMessage::Exit).unwrap();
-    chunk_writer_join.join().unwrap();
+            println!("Stored as {}", final_digest.to_hex());
+
+            tx.send(ChunkWriterMessage::Exit).unwrap();
+            chunk_writer_join.join().unwrap();
+        },
+        Command::Restore => {
+            if args.len() != 1 {
+                println!("One argument required");
+                process::exit(-1);
+            }
+
+            let digest = args[0].from_hex().unwrap();
+            restore_data::<io::Stdout>(dst_dir, &digest, &mut io::stdout());
+        }
+    }
 }
