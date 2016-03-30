@@ -20,6 +20,15 @@ use crypto::digest::Digest;
 
 use argparse::{ArgumentParser, StoreTrue, Store, List};
 
+macro_rules! printerrln {
+    ($($arg:tt)*) => ({
+        use std::io::prelude::*;
+        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}\n", format_args!($($arg)*)) {
+            panic!("Failed to write to stderr.\nOriginal error output: {}\nSecondary error writing to stderr: {}", format!($($arg)*), e);
+        }
+    })
+}
+
 #[derive(Copy, Clone, Debug)]
 enum ChunkType {
     Index,
@@ -125,15 +134,21 @@ fn restore_data_recursive<W : Write>(
     options : &GlobalOptions,
     ctx : &mut Option<gpgme::Context>) {
 
-    fn read_to_writer(path : &Path,
+    fn read_file_to_writer(path : &Path,
                       writer: &mut Write,
                       options : &GlobalOptions,
                       ctx : &mut Option<gpgme::Context>
                      ) {
         if options.use_gpg {
-            let mut cipher = gpgme::Data::load(&path).unwrap();
+            let mut cipher = gpgme::Data::load(path.to_str().unwrap()).unwrap();
             let mut plain = gpgme::Data::new().unwrap();
-            ctx.as_mut().unwrap().decrypt(&mut cipher, &mut plain).unwrap();
+            ctx.as_mut().unwrap().with_passphrase_handler(|_: gpgme::context::PassphraseRequest, out: &mut Write| {
+                printerrln!("Asking for passphrase");
+                //try!(out.write_all(b"some passphrase"));
+                Ok(())
+            }, |mut ctx| {
+                ctx.decrypt(&mut cipher, &mut plain).unwrap();
+            });
             plain.seek(io::SeekFrom::Start(0)).unwrap();
             io::copy(&mut plain, writer).unwrap();
         } else {
@@ -146,7 +161,7 @@ fn restore_data_recursive<W : Write>(
             let path = digest_to_path(digest, ChunkType::Index, options);
             let mut index_data = vec!();
 
-            read_to_writer(&path, &mut index_data, options, ctx);
+            read_file_to_writer(&path, &mut index_data, options, ctx);
 
                 assert!(index_data.len() % 32 == 0);
 
@@ -158,7 +173,7 @@ fn restore_data_recursive<W : Write>(
         Some(ChunkType::Data) => {
             let path = digest_to_path(digest, ChunkType::Data, options);
 
-            read_to_writer(&path, writer, options, ctx);
+            read_file_to_writer(&path, writer, options, ctx);
         },
         None => {
             panic!("File for {} not found", digest.to_hex());
