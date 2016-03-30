@@ -6,7 +6,7 @@ extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate gpgme;
 
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek};
 use std::{fs, mem, thread, io, process};
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
@@ -119,33 +119,67 @@ fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
 }
 
 /// Load a chunk by ID, using output_f to operate on its parts
-fn restore_data<W : Write>(
+fn restore_data_recursive<W : Write>(
     digest : &[u8],
     writer : &mut Write,
-    options : &GlobalOptions) {
+    options : &GlobalOptions,
+    ctx : &mut Option<gpgme::Context>) {
 
+    fn read_to_writer(path : &Path,
+                      writer: &mut Write,
+                      options : &GlobalOptions,
+                      ctx : &mut Option<gpgme::Context>
+                     ) {
+        if options.use_gpg {
+            let mut cipher = gpgme::Data::load(&path).unwrap();
+            let mut plain = gpgme::Data::new().unwrap();
+            ctx.as_mut().unwrap().decrypt(&mut cipher, &mut plain).unwrap();
+            plain.seek(io::SeekFrom::Start(0)).unwrap();
+            io::copy(&mut plain, writer).unwrap();
+        } else {
+            let mut file = fs::File::open(path).unwrap();
+            io::copy(&mut file, writer).unwrap();
+        }
+    }
     match chunk_type(digest, &options) {
         Some(ChunkType::Index) => {
             let path = digest_to_path(digest, ChunkType::Index, options);
-            let mut file = fs::File::open(path).unwrap();
             let mut index_data = vec!();
-            io::copy(&mut file, &mut index_data).unwrap();
-            assert!(index_data.len() % 32 == 0);
+
+            read_to_writer(&path, &mut index_data, options, ctx);
+
+                assert!(index_data.len() % 32 == 0);
 
             let _ = index_data.chunks(32).map(|slice| {
-                restore_data::<W>(slice, writer, options)
+                restore_data_recursive::<W>(slice, writer, options, ctx)
             }).count();
 
         },
         Some(ChunkType::Data) => {
             let path = digest_to_path(digest, ChunkType::Data, options);
-            let mut file = fs::File::open(path).unwrap();
-            io::copy(&mut file, writer).unwrap();
+
+            read_to_writer(&path, writer, options, ctx);
         },
         None => {
             panic!("File for {} not found", digest.to_hex());
         },
     }
+}
+
+fn restore_data<W : Write+Send>(
+    digest : &[u8],
+    writer : &mut Write,
+    options : &GlobalOptions) {
+
+
+    let mut ctx = if options.use_gpg {
+        let ctx = gpgme::create_context().unwrap();
+
+        Some(ctx)
+    } else {
+        None
+    };
+    restore_data_recursive::<W>(digest, writer, options, &mut ctx)
 }
 
 /// Store data, using input_f to get chunks of data
