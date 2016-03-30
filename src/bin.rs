@@ -107,9 +107,9 @@ impl Chunker {
     }
 }
 
-fn chunk_type(dest_base_dir : &Path, digest : &[u8]) -> Option<ChunkType> {
+fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
     for i in &[ChunkType::Index, ChunkType::Data] {
-        let file_path = digest_to_path(*i, dest_base_dir, digest);
+        let file_path = digest_to_path(digest, *i, options);
         if file_path.exists() {
             return Some(*i)
         }
@@ -119,25 +119,25 @@ fn chunk_type(dest_base_dir : &Path, digest : &[u8]) -> Option<ChunkType> {
 
 /// Load a chunk by ID, using output_f to operate on its parts
 fn restore_data<W : Write>(
-    dest_base_dir : &Path,
     digest : &[u8],
-    writer : &mut Write) {
+    writer : &mut Write,
+    options : &GlobalOptions) {
 
-    match chunk_type(dest_base_dir, digest) {
+    match chunk_type(digest, &options) {
         Some(ChunkType::Index) => {
-            let path = digest_to_path(ChunkType::Index, dest_base_dir, digest);
+            let path = digest_to_path(digest, ChunkType::Index, options);
             let mut file = fs::File::open(path).unwrap();
             let mut index_data = vec!();
             io::copy(&mut file, &mut index_data).unwrap();
             assert!(index_data.len() % 32 == 0);
 
             let _ = index_data.chunks(32).map(|slice| {
-                restore_data::<W>(dest_base_dir, slice, writer)
+                restore_data::<W>(slice, writer, options)
             }).count();
 
         },
         Some(ChunkType::Data) => {
-            let path = digest_to_path(ChunkType::Data, dest_base_dir, digest);
+            let path = digest_to_path(digest, ChunkType::Data, options);
             let mut file = fs::File::open(path).unwrap();
             io::copy(&mut file, writer).unwrap();
         },
@@ -194,17 +194,24 @@ fn store_stdio(tx : mpsc::Sender<ChunkWriterMessage>) -> Vec<u8> {
     store_data(tx, &mut stdin, ChunkType::Data)
 }
 
-fn digest_to_path(chunk_type : ChunkType, dest_base_dir : &Path, digest : &[u8]) -> PathBuf {
+fn digest_to_path(digest : &[u8], chunk_type : ChunkType, options : &GlobalOptions) -> PathBuf {
     let i_or_c = match chunk_type {
         ChunkType::Data => Path::new("chunks"),
         ChunkType::Index => Path::new("index"),
     };
 
-    dest_base_dir.join(i_or_c)
-        .join(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex())
+    let mut path = options.dst_dir.join(i_or_c)
+        .join(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex());
+
+    if options.use_gpg {
+        path.set_extension("gpg");
+    }
+
+    path
 }
 
-fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<ChunkWriterMessage>) {
+/// Accept messages on rx and writes them to chunk files
+fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOptions) {
     let mut pending_data = vec!();
     loop {
         match rx.recv().unwrap() {
@@ -217,7 +224,7 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<ChunkWriterMessage>) 
             } else {
                 let mut prev_ofs = 0;
                 for &(ref ofs, ref sha256) in &edges {
-                    let path = digest_to_path(chunk_type, &dest_base_dir, &sha256);
+                    let path = digest_to_path(&sha256, chunk_type, &options);
                     if !path.exists() {
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(path).unwrap();
@@ -245,9 +252,11 @@ fn chunk_writer(dest_base_dir : &Path, rx : mpsc::Receiver<ChunkWriterMessage>) 
     }
 }
 
-
+#[derive(Clone)]
 struct GlobalOptions {
     verbose : bool,
+    use_gpg : bool,
+    dst_dir : PathBuf,
 }
 
 enum Command {
@@ -271,6 +280,8 @@ impl FromStr for Command {
 fn main() {
     let mut options = GlobalOptions {
         verbose: false,
+        use_gpg: false,
+        dst_dir: Path::new("backup_dir").to_owned(),
     };
 
     let mut subcommand = Command::Help;
@@ -282,6 +293,8 @@ fn main() {
         ap.refer(&mut options.verbose)
             .add_option(&["-v", "--verbose"], StoreTrue,
                         "Be verbose");
+        ap.refer(&mut options.use_gpg)
+            .add_option(&["--gpg"], StoreTrue, "Use gpg");
         ap.refer(&mut subcommand)
             .add_argument("command", Store,
                 r#"Command to run (either "save" or "restore")"#);
@@ -293,14 +306,13 @@ fn main() {
     }
 
     let (tx, rx) = mpsc::channel();
-    let dst_dir = Path::new("backup_dir");
 
     match subcommand {
         Command::Help => {
             println!("Use save / restore argument");
         },
         Command::Save => {
-            let chunk_writer_join = thread::spawn(move || chunk_writer(dst_dir, rx));
+            let chunk_writer_join = thread::spawn(move || chunk_writer(rx, &options));
 
             let final_digest = store_stdio(tx.clone());
 
@@ -316,7 +328,7 @@ fn main() {
             }
 
             let digest = args[0].from_hex().unwrap();
-            restore_data::<io::Stdout>(dst_dir, &digest, &mut io::stdout());
+            restore_data::<io::Stdout>(&digest, &mut io::stdout(), &options);
         }
     }
 }
