@@ -4,6 +4,7 @@ extern crate crypto;
 extern crate log;
 extern crate rustc_serialize as serialize;
 extern crate argparse;
+extern crate gpgme;
 
 use std::io::{Read, Write};
 use std::{fs, mem, thread, io, process};
@@ -212,6 +213,16 @@ fn digest_to_path(digest : &[u8], chunk_type : ChunkType, options : &GlobalOptio
 
 /// Accept messages on rx and writes them to chunk files
 fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOptions) {
+
+    let (mut ctx, key) = if options.use_gpg {
+        let ctx = gpgme::create_context().unwrap();
+        let key = ctx.find_key("dpc@dpc.pw").unwrap();
+
+        (Some(ctx), Some(key))
+    } else {
+        (None, None)
+    };
+
     let mut pending_data = vec!();
     loop {
         match rx.recv().unwrap() {
@@ -229,12 +240,25 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(path).unwrap();
 
-                        for data in pending_data.drain(..) {
-                            chunk_file.write(&data).unwrap();
-                        }
+                        if options.use_gpg {
 
-                        if *ofs != prev_ofs {
-                            chunk_file.write(&data[prev_ofs..*ofs]).unwrap();
+                            let mut cipher = gpgme::Data::from_writer(chunk_file).unwrap();
+                            for data in pending_data.drain(..) {
+                                let mut plain = gpgme::Data::from_buffer(&data).unwrap();
+                                ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
+                            }
+                            if *ofs != prev_ofs {
+                                let mut plain = gpgme::Data::from_buffer(&data[prev_ofs..*ofs]).unwrap();
+                                ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
+                            }
+                        } else {
+                            for data in pending_data.drain(..) {
+                                chunk_file.write(&data).unwrap();
+                            }
+
+                            if *ofs != prev_ofs {
+                                chunk_file.write(&data[prev_ofs..*ofs]).unwrap();
+                            }
                         }
                     } else {
                         pending_data.clear();
