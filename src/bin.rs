@@ -4,7 +4,7 @@ extern crate crypto;
 extern crate log;
 extern crate rustc_serialize as serialize;
 extern crate argparse;
-extern crate gpgme;
+extern crate sodiumoxide;
 
 use std::io::{Read, Write, Seek};
 use std::{fs, mem, thread, io, process};
@@ -293,26 +293,20 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(path).unwrap();
 
-                        if options.use_gpg {
+                        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
 
-                            let mut cipher = gpgme::Data::from_writer(chunk_file).unwrap();
+                        let whole_data = vec!();
+
                             for data in pending_data.drain(..) {
+                                whole_data.append(&data);
                                 let mut plain = gpgme::Data::from_buffer(&data).unwrap();
+                                let cipher = box_::seal(&
                                 ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
                             }
                             if *ofs != prev_ofs {
                                 let mut plain = gpgme::Data::from_buffer(&data[prev_ofs..*ofs]).unwrap();
                                 ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
                             }
-                        } else {
-                            for data in pending_data.drain(..) {
-                                chunk_file.write(&data).unwrap();
-                            }
-
-                            if *ofs != prev_ofs {
-                                chunk_file.write(&data[prev_ofs..*ofs]).unwrap();
-                            }
-                        }
                     } else {
                         pending_data.clear();
                     }
@@ -329,36 +323,81 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
     }
 }
 
+fn key_file_path(&options : &GlobalOptions) {
+    options.dst_dir.join("key")
+}
+
+fn load_pub_key_into_options(options : &GlobalOptions) {
+    let path = key_file_path(options);
+
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(e) => {
+            printerrln!("Couldn't open {}: {}", path, e);
+            process::exit(-1);
+        }
+    };
+
+    file.read_to_end(&mut options.pub_key).unwrap();
+}
+
+fn load_sec_key_into_options(options : &mut GlobalOptions) {
+    printerrln!("Enter secret key:");
+    let mut s = String::new();
+    io::stdio().read_line(&mut s);
+    options.sec_key = s.from_hex().unwrap();
+}
+
+fn repo_init(options : &mut GlobalOptions) {
+    fs::create_dir_all(options.dst_dir).unwrap();
+    let path = key_file_path(options);
+
+    if path.exists() {
+        printerrln("{} exists - backup store initialized already");
+        process::exit(-1);
+    }
+
+    let mut file = File::create(path);
+    let (pk, sk) = box_::gen_keypair();
+
+    file.write_all(pk).unwrap();
+    file.flush().unwrap();
+    println!("{}", sk.to_hex());
+    printerrln!("Remember to write down above secret key!");
+}
+
 #[derive(Clone)]
 struct GlobalOptions {
     verbose : bool,
-    use_gpg : bool,
     dst_dir : PathBuf,
+    pub_key : Vec<u8>,
+    sec_key : Vec<u8>,
 }
 
 enum Command {
     Help,
     Save,
-    Restore,
+    Load,
+    Init,
 }
 
 impl FromStr for Command {
     type Err = ();
     fn from_str(src: &str) -> Result<Command, ()> {
-        return match src {
+        match src {
             "help" => Ok(Command::Help),
             "save" => Ok(Command::Save),
-            "restore" => Ok(Command::Restore),
+            "load" => Ok(Command::Load),
+            "init" => Ok(Command::Init),
             _ => Err(()),
-        };
+        }
     }
 }
 
 fn main() {
     let mut options = GlobalOptions {
         verbose: false,
-        use_gpg: false,
-        dst_dir: Path::new("backup_dir").to_owned(),
+        dst_dir: Path::new("backup").to_owned(),
     };
 
     let mut subcommand = Command::Help;
@@ -366,7 +405,7 @@ fn main() {
 
     {
         let mut ap = ArgumentParser::new();
-        ap.set_description("mgit");
+        ap.set_description("rdedup");
         ap.refer(&mut options.verbose)
             .add_option(&["-v", "--verbose"], StoreTrue,
                         "Be verbose");
@@ -389,6 +428,7 @@ fn main() {
             println!("Use save / restore argument");
         },
         Command::Save => {
+            load_pub_key_into_options(&mut options);
             let chunk_writer_join = thread::spawn(move || chunk_writer(rx, &options));
 
             let final_digest = store_stdio(tx.clone());
@@ -398,14 +438,18 @@ fn main() {
             tx.send(ChunkWriterMessage::Exit).unwrap();
             chunk_writer_join.join().unwrap();
         },
-        Command::Restore => {
+        Command::Load => {
             if args.len() != 1 {
                 println!("One argument required");
                 process::exit(-1);
             }
+            load_pub_key_into_options(&mut options);
 
             let digest = args[0].from_hex().unwrap();
             restore_data::<io::Stdout>(&digest, &mut io::stdout(), &options);
+        }
+        Command::Init => {
+            repo_init(&options);
         }
     }
 }

@@ -16,5 +16,4 @@ rust-crypto = "^0.2"
 log = "*"
 rustc-serialize = "*"
 argparse = "*"
-#gpgme = "*"
-gpgme = {git = "https://github.com/johnschug/rust-gpgme.git" }
+sodiumoxide = "0.0.9"
