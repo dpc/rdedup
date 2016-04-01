@@ -6,7 +6,7 @@ extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate sodiumoxide;
 
-use std::io::{Read, Write, Seek};
+use std::io::{Read, Write};
 use std::{fs, mem, thread, io, process};
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
@@ -17,6 +17,8 @@ use std::sync::mpsc;
 use rollsum::Engine;
 use crypto::sha2;
 use crypto::digest::Digest;
+
+use sodiumoxide::crypto::box_;
 
 use argparse::{ArgumentParser, StoreTrue, Store, List};
 
@@ -132,52 +134,44 @@ fn restore_data_recursive<W : Write>(
     digest : &[u8],
     writer : &mut Write,
     options : &GlobalOptions,
-    ctx : &mut Option<gpgme::Context>) {
+    ) {
 
     fn read_file_to_writer(path : &Path,
+                           digest : &[u8],
                       writer: &mut Write,
                       options : &GlobalOptions,
-                      ctx : &mut Option<gpgme::Context>
                      ) {
-        if options.use_gpg {
-                printerrln!("Opening {:?}", path);
             let mut file = fs::File::open(path).unwrap();
-            let mut cipher = gpgme::Data::new().unwrap();
-            io::copy(&mut file, &mut cipher).unwrap();
-            cipher.seek(io::SeekFrom::Start(0)).unwrap();
-            let mut plain = gpgme::Data::new().unwrap();
-            ctx.as_mut().unwrap().with_passphrase_handler(|_: gpgme::context::PassphraseRequest, out: &mut Write| {
-                printerrln!("Asking for passphrase");
-                //try!(out.write_all(b"some passphrase"));
-                Ok(())
-            }, |mut ctx| {
-                ctx.decrypt(&mut cipher, &mut plain).unwrap();
-            });
-            plain.seek(io::SeekFrom::Start(0)).unwrap();
-            io::copy(&mut plain, writer).unwrap();
-        } else {
-            let mut file = fs::File::open(path).unwrap();
-            io::copy(&mut file, writer).unwrap();
-        }
+            let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
+            file.read_exact(&mut ephemeral_pub).unwrap();
+
+            let mut cipher = vec!();
+            file.read_to_end(&mut cipher).unwrap();
+
+            let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
+            let sec_key = box_::SecretKey::from_slice(&options.sec_key).unwrap();
+            let plain = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), &sec_key).unwrap();
+            io::copy(&mut io::Cursor::new(plain), writer).unwrap();
     }
+
     match chunk_type(digest, &options) {
         Some(ChunkType::Index) => {
             let path = digest_to_path(digest, ChunkType::Index, options);
             let mut index_data = vec!();
 
-            read_file_to_writer(&path, &mut index_data, options, ctx);
+            read_file_to_writer(&path, digest, &mut index_data, options);
 
-                assert!(index_data.len() % 32 == 0);
+            assert!(index_data.len() % 32 == 0);
 
             let _ = index_data.chunks(32).map(|slice| {
-                restore_data_recursive::<W>(slice, writer, options, ctx)
+                restore_data_recursive::<W>(slice, writer, options)
             }).count();
 
         },
         Some(ChunkType::Data) => {
             let path = digest_to_path(digest, ChunkType::Data, options);
 
-            read_file_to_writer(&path, writer, options, ctx);
+            read_file_to_writer(&path, digest, writer, options);
         },
         None => {
             panic!("File for {} not found", digest.to_hex());
@@ -190,15 +184,7 @@ fn restore_data<W : Write+Send>(
     writer : &mut Write,
     options : &GlobalOptions) {
 
-
-    let mut ctx = if options.use_gpg {
-        let ctx = gpgme::create_context().unwrap();
-
-        Some(ctx)
-    } else {
-        None
-    };
-    restore_data_recursive::<W>(digest, writer, options, &mut ctx)
+    restore_data_recursive::<W>(digest, writer, options)
 }
 
 /// Store data, using input_f to get chunks of data
@@ -254,28 +240,12 @@ fn digest_to_path(digest : &[u8], chunk_type : ChunkType, options : &GlobalOptio
         ChunkType::Index => Path::new("index"),
     };
 
-    let mut path = options.dst_dir.join(i_or_c)
-        .join(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex());
-
-    if options.use_gpg {
-        path.set_extension("gpg");
-    }
-
-    path
+    options.dst_dir.join(i_or_c)
+        .join(&digest[0..1].to_hex()).join(digest[1..2].to_hex()).join(&digest.to_hex())
 }
 
 /// Accept messages on rx and writes them to chunk files
 fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOptions) {
-
-    let (mut ctx, key) = if options.use_gpg {
-        let ctx = gpgme::create_context().unwrap();
-        let key = ctx.find_key("dpc@dpc.pw").unwrap();
-
-        (Some(ctx), Some(key))
-    } else {
-        (None, None)
-    };
-
     let mut pending_data = vec!();
     loop {
         match rx.recv().unwrap() {
@@ -295,18 +265,27 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
 
                         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
 
-                        let whole_data = vec!();
+                        let mut whole_data = vec!();
 
-                            for data in pending_data.drain(..) {
-                                whole_data.append(&data);
-                                let mut plain = gpgme::Data::from_buffer(&data).unwrap();
-                                let cipher = box_::seal(&
-                                ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
-                            }
-                            if *ofs != prev_ofs {
-                                let mut plain = gpgme::Data::from_buffer(&data[prev_ofs..*ofs]).unwrap();
-                                ctx.as_mut().unwrap().encrypt(&key, gpgme::ops::EncryptFlags::empty(), &mut plain, &mut cipher).unwrap();
-                            }
+                        for data in pending_data.drain(..) {
+                            whole_data.write_all(&data).unwrap();
+                        }
+                        if *ofs != prev_ofs {
+                            whole_data.write_all(&data[prev_ofs..*ofs]).unwrap();
+                        }
+
+                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
+
+                        let pub_key = box_::PublicKey::from_slice(&options.pub_key).unwrap();
+
+                        let cipher = box_::seal(
+                            &whole_data,
+                            &nonce,
+                            &pub_key,
+                            &ephemeral_sec
+                            );
+                        chunk_file.write_all(&ephemeral_pub.0).unwrap();
+                        chunk_file.write_all(&cipher).unwrap();
                     } else {
                         pending_data.clear();
                     }
@@ -323,17 +302,17 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
     }
 }
 
-fn key_file_path(&options : &GlobalOptions) {
+fn key_file_path(options : &GlobalOptions) -> PathBuf {
     options.dst_dir.join("key")
 }
 
-fn load_pub_key_into_options(options : &GlobalOptions) {
+fn load_pub_key_into_options(options : &mut GlobalOptions) {
     let path = key_file_path(options);
 
-    let mut file = match File::open(path) {
+    let mut file = match fs::File::open(&path) {
         Ok(file) => file,
         Err(e) => {
-            printerrln!("Couldn't open {}: {}", path, e);
+            printerrln!("Couldn't open {:?}: {}", path, e);
             process::exit(-1);
         }
     };
@@ -344,25 +323,25 @@ fn load_pub_key_into_options(options : &GlobalOptions) {
 fn load_sec_key_into_options(options : &mut GlobalOptions) {
     printerrln!("Enter secret key:");
     let mut s = String::new();
-    io::stdio().read_line(&mut s);
+    io::stdin().read_line(&mut s).unwrap();
     options.sec_key = s.from_hex().unwrap();
 }
 
 fn repo_init(options : &mut GlobalOptions) {
-    fs::create_dir_all(options.dst_dir).unwrap();
+    fs::create_dir_all(&options.dst_dir).unwrap();
     let path = key_file_path(options);
 
     if path.exists() {
-        printerrln("{} exists - backup store initialized already");
+        printerrln!("{:?} exists - backup store initialized already", path);
         process::exit(-1);
     }
 
-    let mut file = File::create(path);
+    let mut file = fs::File::create(path).unwrap();
     let (pk, sk) = box_::gen_keypair();
 
-    file.write_all(pk).unwrap();
+    file.write_all(&pk.0).unwrap();
     file.flush().unwrap();
-    println!("{}", sk.to_hex());
+    println!("{}", sk.0.to_hex());
     printerrln!("Remember to write down above secret key!");
 }
 
@@ -398,6 +377,8 @@ fn main() {
     let mut options = GlobalOptions {
         verbose: false,
         dst_dir: Path::new("backup").to_owned(),
+        pub_key: vec!(),
+        sec_key: vec!(),
     };
 
     let mut subcommand = Command::Help;
@@ -409,8 +390,6 @@ fn main() {
         ap.refer(&mut options.verbose)
             .add_option(&["-v", "--verbose"], StoreTrue,
                         "Be verbose");
-        ap.refer(&mut options.use_gpg)
-            .add_option(&["--gpg"], StoreTrue, "Use gpg");
         ap.refer(&mut subcommand)
             .add_argument("command", Store,
                 r#"Command to run (either "save" or "restore")"#);
@@ -444,12 +423,13 @@ fn main() {
                 process::exit(-1);
             }
             load_pub_key_into_options(&mut options);
+            load_sec_key_into_options(&mut options);
 
             let digest = args[0].from_hex().unwrap();
             restore_data::<io::Stdout>(&digest, &mut io::stdout(), &options);
         }
         Command::Init => {
-            repo_init(&options);
+            repo_init(&mut options);
         }
     }
 }
