@@ -140,7 +140,11 @@ fn restore_data_recursive<W : Write>(
                       ctx : &mut Option<gpgme::Context>
                      ) {
         if options.use_gpg {
-            let mut cipher = gpgme::Data::load(path.to_str().unwrap()).unwrap();
+                printerrln!("Opening {:?}", path);
+            let mut file = fs::File::open(path).unwrap();
+            let mut cipher = gpgme::Data::new().unwrap();
+            io::copy(&mut file, &mut cipher).unwrap();
+            cipher.seek(io::SeekFrom::Start(0)).unwrap();
             let mut plain = gpgme::Data::new().unwrap();
             ctx.as_mut().unwrap().with_passphrase_handler(|_: gpgme::context::PassphraseRequest, out: &mut Write| {
                 printerrln!("Asking for passphrase");
