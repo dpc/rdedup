@@ -149,8 +149,8 @@ fn restore_data_recursive<W : Write>(
             file.read_to_end(&mut cipher).unwrap();
 
             let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-            let sec_key = box_::SecretKey::from_slice(&options.sec_key).unwrap();
-            let plain = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), &sec_key).unwrap();
+            let sec_key = options.sec_key.as_ref().unwrap();
+            let plain = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
             io::copy(&mut io::Cursor::new(plain), writer).unwrap();
     }
 
@@ -276,7 +276,7 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
 
                         let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
 
-                        let pub_key = box_::PublicKey::from_slice(&options.pub_key).unwrap();
+                        let pub_key = &options.pub_key.as_ref().unwrap();
 
                         let cipher = box_::seal(
                             &whole_data,
@@ -302,12 +302,16 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
     }
 }
 
-fn key_file_path(options : &GlobalOptions) -> PathBuf {
-    options.dst_dir.join("key")
+fn pub_key_file_path(options : &GlobalOptions) -> PathBuf {
+    options.dst_dir.join("pub_key")
+}
+
+fn sec_key_file_path(options : &GlobalOptions) -> PathBuf {
+    options.dst_dir.join("sec_key")
 }
 
 fn load_pub_key_into_options(options : &mut GlobalOptions) {
-    let path = key_file_path(options);
+    let path = pub_key_file_path(options);
 
     let mut file = match fs::File::open(&path) {
         Ok(file) => file,
@@ -317,19 +321,32 @@ fn load_pub_key_into_options(options : &mut GlobalOptions) {
         }
     };
 
-    file.read_to_end(&mut options.pub_key).unwrap();
+    let mut buf = vec!();
+    file.read_to_end(&mut buf).unwrap();
+    let s = std::str::from_utf8(&buf).unwrap();
+    options.pub_key = Some(box_::PublicKey::from_slice(&s.from_hex().unwrap()).unwrap());
 }
 
 fn load_sec_key_into_options(options : &mut GlobalOptions) {
-    printerrln!("Enter secret key:");
-    let mut s = String::new();
-    io::stdin().read_line(&mut s).unwrap();
-    options.sec_key = s.from_hex().unwrap();
+    let path = sec_key_file_path(options);
+
+    if path.exists() {
+        let mut file = fs::File::open(&path).unwrap();
+        let mut buf = vec!();
+        file.read_to_end(&mut buf).unwrap();
+        let s = std::str::from_utf8(&buf).unwrap();
+        options.sec_key = Some(box_::SecretKey::from_slice(&s.from_hex().unwrap()).unwrap());
+    } else {
+        printerrln!("Enter secret key:");
+        let mut s = String::new();
+        io::stdin().read_line(&mut s).unwrap();
+        options.sec_key = Some(box_::SecretKey::from_slice(&s.from_hex().unwrap()).unwrap());
+    }
 }
 
 fn repo_init(options : &mut GlobalOptions) {
     fs::create_dir_all(&options.dst_dir).unwrap();
-    let path = key_file_path(options);
+    let path = pub_key_file_path(options);
 
     if path.exists() {
         printerrln!("{:?} exists - backup store initialized already", path);
@@ -339,7 +356,7 @@ fn repo_init(options : &mut GlobalOptions) {
     let mut file = fs::File::create(path).unwrap();
     let (pk, sk) = box_::gen_keypair();
 
-    file.write_all(&pk.0).unwrap();
+    file.write_all(&pk.0.to_hex().as_bytes()).unwrap();
     file.flush().unwrap();
     println!("{}", sk.0.to_hex());
     printerrln!("Remember to write down above secret key!");
@@ -349,8 +366,8 @@ fn repo_init(options : &mut GlobalOptions) {
 struct GlobalOptions {
     verbose : bool,
     dst_dir : PathBuf,
-    pub_key : Vec<u8>,
-    sec_key : Vec<u8>,
+    pub_key : Option<box_::PublicKey>,
+    sec_key : Option<box_::SecretKey>,
 }
 
 enum Command {
@@ -377,8 +394,8 @@ fn main() {
     let mut options = GlobalOptions {
         verbose: false,
         dst_dir: Path::new("backup").to_owned(),
-        pub_key: vec!(),
-        sec_key: vec!(),
+        pub_key: None,
+        sec_key: None,
     };
 
     let mut subcommand = Command::Help;
