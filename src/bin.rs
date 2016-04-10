@@ -121,7 +121,7 @@ impl Chunker {
 
 fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
     for i in &[ChunkType::Index, ChunkType::Data] {
-        let file_path = digest_to_path(digest, *i, options);
+        let file_path = chunk_path_by_digest(digest, *i, options);
         if file_path.exists() {
             return Some(*i)
         }
@@ -156,7 +156,7 @@ fn restore_data_recursive<W : Write>(
 
     match chunk_type(digest, &options) {
         Some(ChunkType::Index) => {
-            let path = digest_to_path(digest, ChunkType::Index, options);
+            let path = chunk_path_by_digest(digest, ChunkType::Index, options);
             let mut index_data = vec!();
 
             read_file_to_writer(&path, digest, &mut index_data, options);
@@ -169,7 +169,7 @@ fn restore_data_recursive<W : Write>(
 
         },
         Some(ChunkType::Data) => {
-            let path = digest_to_path(digest, ChunkType::Data, options);
+            let path = chunk_path_by_digest(digest, ChunkType::Data, options);
 
             read_file_to_writer(&path, digest, writer, options);
         },
@@ -234,7 +234,7 @@ fn store_stdio(tx : mpsc::Sender<ChunkWriterMessage>) -> Vec<u8> {
     store_data(tx, &mut stdin, ChunkType::Data)
 }
 
-fn digest_to_path(digest : &[u8], chunk_type : ChunkType, options : &GlobalOptions) -> PathBuf {
+fn chunk_path_by_digest(digest : &[u8], chunk_type : ChunkType, options : &GlobalOptions) -> PathBuf {
     let i_or_c = match chunk_type {
         ChunkType::Data => Path::new("chunks"),
         ChunkType::Index => Path::new("index"),
@@ -258,7 +258,7 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
             } else {
                 let mut prev_ofs = 0;
                 for &(ref ofs, ref sha256) in &edges {
-                    let path = digest_to_path(&sha256, chunk_type, &options);
+                    let path = chunk_path_by_digest(&sha256, chunk_type, &options);
                     if !path.exists() {
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(path).unwrap();
@@ -300,6 +300,30 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
             }
         }
     }
+}
+
+fn store_digest_as_backup_name(digest : &[u8], name : &str, options : &GlobalOptions) {
+    let backup_dir = options.dst_dir.join("backup");
+    fs::create_dir_all(&backup_dir).unwrap();
+    let backup_path = backup_dir.join(name);
+
+    if backup_path.exists() {
+        panic!("Backup {} already exists!", name);
+    }
+
+    let mut file = fs::File::create(&backup_path).unwrap();
+
+    file.write_all(digest).unwrap();
+}
+
+fn backup_name_to_digest(name : &str, options : &GlobalOptions) -> Vec<u8> {
+    let backup_path = options.dst_dir.join("backup").join(name);
+
+    let mut file = fs::File::open(&backup_path).unwrap();
+    let mut buf = vec!();
+    file.read_to_end(&mut buf).unwrap();
+
+    buf
 }
 
 fn pub_key_file_path(options : &GlobalOptions) -> PathBuf {
@@ -366,6 +390,7 @@ fn repo_init(options : &mut GlobalOptions) {
 struct GlobalOptions {
     verbose : bool,
     dst_dir : PathBuf,
+    backup_name : String,
     pub_key : Option<box_::PublicKey>,
     sec_key : Option<box_::SecretKey>,
 }
@@ -393,6 +418,7 @@ impl FromStr for Command {
 fn main() {
     let mut options = GlobalOptions {
         verbose: false,
+        backup_name : String::new(),
         dst_dir: Path::new("backup").to_owned(),
         pub_key: None,
         sec_key: None,
@@ -421,28 +447,34 @@ fn main() {
 
     match subcommand {
         Command::Help => {
-            println!("Use save / restore argument");
+            printerrln!("Use save / restore argument");
         },
         Command::Save => {
+            if args.len() != 1 {
+                printerrln!("Backup name required");
+                process::exit(-1);
+            }
             load_pub_key_into_options(&mut options);
-            let chunk_writer_join = thread::spawn(move || chunk_writer(rx, &options));
+            let chunk_writer_join = thread::spawn({let options = options.clone(); move || chunk_writer(rx, &options)});
 
             let final_digest = store_stdio(tx.clone());
 
-            println!("Stored as {}", final_digest.to_hex());
 
             tx.send(ChunkWriterMessage::Exit).unwrap();
             chunk_writer_join.join().unwrap();
+
+            printerrln!("Storing {} as backup {}", final_digest.to_hex(), &args[0]);
+            store_digest_as_backup_name(&final_digest, &args[0], &options);
         },
         Command::Load => {
             if args.len() != 1 {
-                println!("One argument required");
+                printerrln!("Backup name required");
                 process::exit(-1);
             }
             load_pub_key_into_options(&mut options);
             load_sec_key_into_options(&mut options);
 
-            let digest = args[0].from_hex().unwrap();
+            let digest = backup_name_to_digest(&args[0], &options);
             restore_data::<io::Stdout>(&digest, &mut io::stdout(), &options);
         }
         Command::Init => {
