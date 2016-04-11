@@ -3,9 +3,6 @@ name = "rdedup"
 version = "0.1.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 
-[lib]
-path = "src/lib.rs"
-
 [[bin]]
 name = "rdedup"
 path = "src/bin.rs"
@@ -17,3 +14,4 @@ log = "*"
 rustc-serialize = "*"
 argparse = "*"
 sodiumoxide = "0.0.9"
+flate2 = "*"

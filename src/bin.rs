@@ -5,6 +5,7 @@ extern crate log;
 extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate sodiumoxide;
+extern crate flate2;
 
 use std::io::{Read, Write};
 use std::{fs, mem, thread, io, process};
@@ -31,10 +32,16 @@ macro_rules! printerrln {
     })
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ChunkType {
     Index,
     Data,
+}
+
+impl ChunkType {
+    fn should_compress(&self) -> bool {
+        *self == ChunkType::Data
+    }
 }
 
 enum ChunkWriterMessage {
@@ -130,7 +137,7 @@ fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
 }
 
 /// Load a chunk by ID, using output_f to operate on its parts
-fn restore_data_recursive<W : Write>(
+fn load_data_recursive<W : Write>(
     digest : &[u8],
     writer : &mut Write,
     options : &GlobalOptions,
@@ -138,43 +145,57 @@ fn restore_data_recursive<W : Write>(
 
     fn read_file_to_writer(path : &Path,
                            digest : &[u8],
-                      writer: &mut Write,
-                      options : &GlobalOptions,
+                           chunk_type : ChunkType,
+                           writer: &mut Write,
+                           options : &GlobalOptions,
                      ) {
             let mut file = fs::File::open(path).unwrap();
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
             file.read_exact(&mut ephemeral_pub).unwrap();
 
-            let mut cipher = vec!();
+            let mut cipher = Vec::with_capacity(16 * 1024);
             file.read_to_end(&mut cipher).unwrap();
 
             let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
             let sec_key = options.sec_key.as_ref().unwrap();
-            let plain = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
-            io::copy(&mut io::Cursor::new(plain), writer).unwrap();
+            let data = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
+
+            let data = if chunk_type.should_compress() {
+                let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
+
+                decompressor.write_all(&data).unwrap();
+                decompressor.finish().unwrap()
+            } else {
+                data
+            };
+
+            io::copy(&mut io::Cursor::new(data), writer).unwrap();
     }
 
-    match chunk_type(digest, &options) {
-        Some(ChunkType::Index) => {
-            let path = chunk_path_by_digest(digest, ChunkType::Index, options);
+    let chunk_type = chunk_type(digest, &options);
+    if chunk_type.is_none() {
+        panic!("File for {} not found", digest.to_hex());
+    }
+
+    let chunk_type = chunk_type.unwrap();
+    match chunk_type {
+        ChunkType::Index => {
+            let path = chunk_path_by_digest(digest, chunk_type, options);
             let mut index_data = vec!();
 
-            read_file_to_writer(&path, digest, &mut index_data, options);
+            read_file_to_writer(&path, digest, chunk_type, &mut index_data, options);
 
             assert!(index_data.len() % 32 == 0);
 
             let _ = index_data.chunks(32).map(|slice| {
-                restore_data_recursive::<W>(slice, writer, options)
+                load_data_recursive::<W>(slice, writer, options)
             }).count();
 
         },
-        Some(ChunkType::Data) => {
-            let path = chunk_path_by_digest(digest, ChunkType::Data, options);
+        ChunkType::Data => {
+            let path = chunk_path_by_digest(digest, chunk_type, options);
 
-            read_file_to_writer(&path, digest, writer, options);
-        },
-        None => {
-            panic!("File for {} not found", digest.to_hex());
+            read_file_to_writer(&path, digest, chunk_type, writer, options);
         },
     }
 }
@@ -184,7 +205,7 @@ fn restore_data<W : Write+Send>(
     writer : &mut Write,
     options : &GlobalOptions) {
 
-    restore_data_recursive::<W>(digest, writer, options)
+    load_data_recursive::<W>(digest, writer, options)
 }
 
 /// Store data, using input_f to get chunks of data
@@ -247,6 +268,7 @@ fn chunk_path_by_digest(digest : &[u8], chunk_type : ChunkType, options : &Globa
 /// Accept messages on rx and writes them to chunk files
 fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOptions) {
     let mut pending_data = vec!();
+
     loop {
         match rx.recv().unwrap() {
             ChunkWriterMessage::Exit => {
@@ -274,9 +296,22 @@ fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOption
                             whole_data.write_all(&data[prev_ofs..*ofs]).unwrap();
                         }
 
-                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
-
                         let pub_key = &options.pub_key.as_ref().unwrap();
+
+                        let compress = chunk_type.should_compress();
+
+                        let whole_data = if compress {
+                            let mut compressor = flate2::write::DeflateEncoder::new(
+                                Vec::with_capacity(whole_data.len()), flate2::Compression::Default
+                                );
+
+                            compressor.write_all(&whole_data).unwrap();
+                            compressor.finish().unwrap()
+                        } else {
+                            whole_data
+                        };
+
+                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
 
                         let cipher = box_::seal(
                             &whole_data,
@@ -435,7 +470,7 @@ fn main() {
                         "Be verbose");
         ap.refer(&mut subcommand)
             .add_argument("command", Store,
-                r#"Command to run (either "save" or "restore")"#);
+                r#"Command to run (either "save" or "load")"#);
         ap.refer(&mut args)
             .add_argument("arguments", List,
                 r#"Arguments for command"#);
