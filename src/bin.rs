@@ -12,8 +12,10 @@ use std::{fs, mem, thread, io, process};
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
 use std::str::FromStr;
+use std::collections::HashSet;
 
 use std::sync::mpsc;
+use std::cell::RefCell;
 
 use rollsum::Engine;
 use crypto::sha2;
@@ -136,10 +138,9 @@ fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
     None
 }
 
-/// Load a chunk by ID, using output_f to operate on its parts
-fn traverse_data_recursive(
+fn traverse_storage_recursively(
     digest : &[u8],
-    on_index_digest: &mut FnMut(&[u8],&GlobalOptions),
+    on_index: &mut FnMut(&[u8], &mut FnMut(&[u8], &GlobalOptions), &GlobalOptions),
     on_data: &mut FnMut(&[u8], &GlobalOptions),
     options : &GlobalOptions,
     ) {
@@ -152,48 +153,56 @@ fn traverse_data_recursive(
     let chunk_type = chunk_type.unwrap();
     match chunk_type {
         ChunkType::Index => {
-            let path = chunk_path_by_digest(digest, chunk_type, options);
-            let mut index_data = vec!();
-
-            read_file_to_writer(&path, digest, chunk_type, &mut index_data, options);
-
-            assert!(index_data.len() % 32 == 0);
-
-            let _ = index_data.chunks(32).map(|slice| {
-                on_index_digest(&slice, options);
-                traverse_data_recursive(slice, on_index_digest, on_data, options)
-            }).count();
-
+            on_index(digest, on_data, options);
         },
         ChunkType::Data => {
-            let path = chunk_path_by_digest(digest, chunk_type, options);
-
-            let mut data = vec!();
-            read_file_to_writer(&path, digest, chunk_type, &mut data, options);
-            on_data(&data, options);
+            on_data(digest, options);
         },
     }
 }
 
+fn repo_gc(digest : &[u8], options : &GlobalOptions) {
+    let reachable_digest = RefCell::new(HashSet::new());
+    reachable_digest.borrow_mut().insert(digest.to_owned());
+
+    traverse_storage_recursively(
+        digest,
+        &mut |digest, on_data, options| {
+            reachable_digest.borrow_mut().insert(digest.to_owned());
+            traverse_index(digest, on_data, options);
+        },
+        &mut |digest, _| {
+            reachable_digest.borrow_mut().insert(digest.to_owned());
+        },
+        options
+        );
+
+    let _ = reachable_digest.borrow().iter().map(|digest| println!("{:?}", digest)).count();
+}
+
 fn repo_du(digest : &[u8], options : &GlobalOptions) -> u64 {
     let mut bytes = 0u64;
-    traverse_data_recursive(
-    digest,
-    &mut |_ : &[u8], _ : &GlobalOptions|{},
-    &mut | data: &[u8], _ : &GlobalOptions| {
-        bytes += data.len() as u64
-    },
-    options,
-    );
+
+    traverse_storage_recursively(
+        digest,
+        &mut traverse_index,
+        &mut |digest, options| {
+            let mut data = vec!();
+            read_file_to_writer(digest, ChunkType::Data, &mut data, options);
+            bytes += data.len() as u64;
+        },
+        options
+        );
     bytes
 }
 
-fn read_file_to_writer(path : &Path,
-                       digest : &[u8],
+fn read_file_to_writer(digest : &[u8],
                        chunk_type : ChunkType,
                        writer: &mut Write,
                        options : &GlobalOptions,
                        ) {
+
+    let path = chunk_path_by_digest(digest, chunk_type, options);
     let mut file = fs::File::open(path).unwrap();
     let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
     file.read_exact(&mut ephemeral_pub).unwrap();
@@ -217,40 +226,16 @@ fn read_file_to_writer(path : &Path,
     io::copy(&mut io::Cursor::new(data), writer).unwrap();
 }
 
-/// Load a chunk by ID, using output_f to operate on its parts
-fn load_data_recursive<W : Write>(
-    digest : &[u8],
-    writer : &mut Write,
-    options : &GlobalOptions,
-    ) {
+fn traverse_index(digest : &[u8], on_data : &mut FnMut(&[u8], &GlobalOptions), options :&GlobalOptions) {
+    let mut index_data = vec!();
 
+    read_file_to_writer(digest, ChunkType::Index, &mut index_data, options);
 
-    let chunk_type = chunk_type(digest, &options);
-    if chunk_type.is_none() {
-        panic!("File for {} not found", digest.to_hex());
-    }
+    assert!(index_data.len() % 32 == 0);
 
-    let chunk_type = chunk_type.unwrap();
-    match chunk_type {
-        ChunkType::Index => {
-            let path = chunk_path_by_digest(digest, chunk_type, options);
-            let mut index_data = vec!();
-
-            read_file_to_writer(&path, digest, chunk_type, &mut index_data, options);
-
-            assert!(index_data.len() % 32 == 0);
-
-            let _ = index_data.chunks(32).map(|slice| {
-                load_data_recursive::<W>(slice, writer, options)
-            }).count();
-
-        },
-        ChunkType::Data => {
-            let path = chunk_path_by_digest(digest, chunk_type, options);
-
-            read_file_to_writer(&path, digest, chunk_type, writer, options);
-        },
-    }
+    let _ = index_data.chunks(32).map(|slice| {
+        traverse_storage_recursively(slice, &mut traverse_index, on_data, options);
+    }).count();
 }
 
 fn restore_data<W : Write+Send>(
@@ -258,7 +243,14 @@ fn restore_data<W : Write+Send>(
     writer : &mut Write,
     options : &GlobalOptions) {
 
-    load_data_recursive::<W>(digest, writer, options)
+    traverse_storage_recursively(
+        digest,
+        &mut traverse_index,
+        &mut |digest, options| {
+            read_file_to_writer(digest, ChunkType::Data, writer, options);
+        },
+        options
+        )
 }
 
 /// Store data, using input_f to get chunks of data
@@ -488,7 +480,8 @@ enum Command {
     Save,
     Load,
     Init,
-    DiskUsage,
+    DU,
+    GC,
 }
 
 impl FromStr for Command {
@@ -496,10 +489,11 @@ impl FromStr for Command {
     fn from_str(src: &str) -> Result<Command, ()> {
         match src {
             "help" => Ok(Command::Help),
-            "du" => Ok(Command::DiskUsage),
             "save" => Ok(Command::Save),
             "load" => Ok(Command::Load),
             "init" => Ok(Command::Init),
+            "du" => Ok(Command::DU),
+            "gc" => Ok(Command::GC),
             _ => Err(()),
         }
     }
@@ -570,7 +564,7 @@ fn main() {
         Command::Init => {
             repo_init(&mut options);
         }
-        Command::DiskUsage => {
+        Command::DU => {
             if args.len() != 1 {
                 printerrln!("Backup name required");
                 process::exit(-1);
@@ -581,6 +575,18 @@ fn main() {
             let digest = backup_name_to_digest(&args[0], &options);
             let size = repo_du(&digest, &options);
             println!("{}", size);
+        },
+        Command::GC => {
+            if args.len() != 1 {
+                printerrln!("Backup name required");
+                process::exit(-1);
+            }
+            load_pub_key_into_options(&mut options);
+            load_sec_key_into_options(&mut options);
+
+            let digest = backup_name_to_digest(&args[0], &options);
+            println!("Reachable digests:");
+            repo_gc(&digest, &options);
         }
     }
 }
