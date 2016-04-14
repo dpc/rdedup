@@ -137,40 +137,93 @@ fn chunk_type(digest : &[u8], options : &GlobalOptions) -> Option<ChunkType> {
 }
 
 /// Load a chunk by ID, using output_f to operate on its parts
+fn traverse_data_recursive(
+    digest : &[u8],
+    on_index_digest: &mut FnMut(&[u8],&GlobalOptions),
+    on_data: &mut FnMut(&[u8], &GlobalOptions),
+    options : &GlobalOptions,
+    ) {
+
+    let chunk_type = chunk_type(digest, &options);
+    if chunk_type.is_none() {
+        panic!("File for {} not found", digest.to_hex());
+    }
+
+    let chunk_type = chunk_type.unwrap();
+    match chunk_type {
+        ChunkType::Index => {
+            let path = chunk_path_by_digest(digest, chunk_type, options);
+            let mut index_data = vec!();
+
+            read_file_to_writer(&path, digest, chunk_type, &mut index_data, options);
+
+            assert!(index_data.len() % 32 == 0);
+
+            let _ = index_data.chunks(32).map(|slice| {
+                on_index_digest(&slice, options);
+                traverse_data_recursive(slice, on_index_digest, on_data, options)
+            }).count();
+
+        },
+        ChunkType::Data => {
+            let path = chunk_path_by_digest(digest, chunk_type, options);
+
+            let mut data = vec!();
+            read_file_to_writer(&path, digest, chunk_type, &mut data, options);
+            on_data(&data, options);
+        },
+    }
+}
+
+fn repo_du(digest : &[u8], options : &GlobalOptions) -> u64 {
+    let mut bytes = 0u64;
+    traverse_data_recursive(
+    digest,
+    &mut |_ : &[u8], _ : &GlobalOptions|{},
+    &mut | data: &[u8], _ : &GlobalOptions| {
+        bytes += data.len() as u64
+    },
+    options,
+    );
+    bytes
+}
+
+fn read_file_to_writer(path : &Path,
+                       digest : &[u8],
+                       chunk_type : ChunkType,
+                       writer: &mut Write,
+                       options : &GlobalOptions,
+                       ) {
+    let mut file = fs::File::open(path).unwrap();
+    let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
+    file.read_exact(&mut ephemeral_pub).unwrap();
+
+    let mut cipher = Vec::with_capacity(16 * 1024);
+    file.read_to_end(&mut cipher).unwrap();
+
+    let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
+    let sec_key = options.sec_key.as_ref().unwrap();
+    let data = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
+
+    let data = if chunk_type.should_compress() {
+        let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
+
+        decompressor.write_all(&data).unwrap();
+        decompressor.finish().unwrap()
+    } else {
+        data
+    };
+
+    io::copy(&mut io::Cursor::new(data), writer).unwrap();
+}
+
+/// Load a chunk by ID, using output_f to operate on its parts
 fn load_data_recursive<W : Write>(
     digest : &[u8],
     writer : &mut Write,
     options : &GlobalOptions,
     ) {
 
-    fn read_file_to_writer(path : &Path,
-                           digest : &[u8],
-                           chunk_type : ChunkType,
-                           writer: &mut Write,
-                           options : &GlobalOptions,
-                     ) {
-            let mut file = fs::File::open(path).unwrap();
-            let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
-            file.read_exact(&mut ephemeral_pub).unwrap();
-
-            let mut cipher = Vec::with_capacity(16 * 1024);
-            file.read_to_end(&mut cipher).unwrap();
-
-            let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-            let sec_key = options.sec_key.as_ref().unwrap();
-            let data = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
-
-            let data = if chunk_type.should_compress() {
-                let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
-
-                decompressor.write_all(&data).unwrap();
-                decompressor.finish().unwrap()
-            } else {
-                data
-            };
-
-            io::copy(&mut io::Cursor::new(data), writer).unwrap();
-    }
 
     let chunk_type = chunk_type(digest, &options);
     if chunk_type.is_none() {
@@ -403,7 +456,7 @@ fn load_sec_key_into_options(options : &mut GlobalOptions) {
     }
 }
 
-fn repo_init(options : &mut GlobalOptions) {
+fn repo_init(options : &GlobalOptions) {
     fs::create_dir_all(&options.dst_dir).unwrap();
     let path = pub_key_file_path(options);
 
@@ -435,6 +488,7 @@ enum Command {
     Save,
     Load,
     Init,
+    DiskUsage,
 }
 
 impl FromStr for Command {
@@ -442,6 +496,7 @@ impl FromStr for Command {
     fn from_str(src: &str) -> Result<Command, ()> {
         match src {
             "help" => Ok(Command::Help),
+            "du" => Ok(Command::DiskUsage),
             "save" => Ok(Command::Save),
             "load" => Ok(Command::Load),
             "init" => Ok(Command::Init),
@@ -514,6 +569,18 @@ fn main() {
         }
         Command::Init => {
             repo_init(&mut options);
+        }
+        Command::DiskUsage => {
+            if args.len() != 1 {
+                printerrln!("Backup name required");
+                process::exit(-1);
+            }
+            load_pub_key_into_options(&mut options);
+            load_sec_key_into_options(&mut options);
+
+            let digest = backup_name_to_digest(&args[0], &options);
+            let size = repo_du(&digest, &options);
+            println!("{}", size);
         }
     }
 }
