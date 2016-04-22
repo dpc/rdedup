@@ -198,10 +198,16 @@ fn repo_backup_add_to_reachable(digest : &[u8],
         );
 }
 
-fn repo_gc_dir(path : &Path,
-               reachable_digests : &RefCell<HashSet<Vec<u8>>>,
-               _options : &GlobalOptions) {
+fn repo_reachable(options : &GlobalOptions) -> HashSet<Vec<u8>> {
+    let reachable_digests = RefCell::new(HashSet::new());
+    for backup in repo_all_backups(&options) {
+        let digest = backup_name_to_digest(&backup, &options);
+        repo_backup_add_to_reachable(&digest, &reachable_digests, &options);
+    }
+    reachable_digests.into_inner()
+}
 
+fn repo_insert_all_digest_in_dir_into(path : &Path, reachable : &mut HashSet<Vec<u8>>) {
     for out_entry in fs::read_dir(path).unwrap() {
         let out_entry = out_entry.unwrap();
         for mid_entry in fs::read_dir(out_entry.path()).unwrap() {
@@ -210,18 +216,17 @@ fn repo_gc_dir(path : &Path,
                 let entry = entry.unwrap();
                 let name= entry.file_name().to_string_lossy().to_string();
                 let entry_digest = name.from_hex().unwrap();
-                if !reachable_digests.borrow().contains(&entry_digest) {
-                    info!("Unreachable file: {:?}", entry.path().to_str());
-                }
+                reachable.insert(entry_digest);
             }
         }
     }
 }
 
-fn repo_gc(reachable_digests : &RefCell<HashSet<Vec<u8>>>,
-            options : &GlobalOptions) {
-    repo_gc_dir(&options.dst_dir.join("index"), reachable_digests, options);
-    repo_gc_dir(&options.dst_dir.join("chunks"), reachable_digests, options);
+fn repo_list_all_digest(options : &GlobalOptions) -> HashSet<Vec<u8>> {
+    let mut digests = HashSet::new();
+    repo_insert_all_digest_in_dir_into(&options.dst_dir.join("index"), &mut digests);
+    repo_insert_all_digest_in_dir_into(&options.dst_dir.join("chunks"), &mut digests);
+    digests
 }
 
 fn repo_du(digest : &[u8], options : &GlobalOptions) -> u64 {
@@ -645,12 +650,15 @@ fn main() {
             }
             load_pub_key_into_options(&mut options);
 
-            let reachable_digests = RefCell::new(HashSet::new());
-            for backup in repo_all_backups(&options) {
-                let digest = backup_name_to_digest(&backup, &options);
-                repo_backup_add_to_reachable(&digest, &reachable_digests, &options);
+            let reachable = repo_reachable(&options);
+            let all_digest = repo_list_all_digest(&options);
+
+            for digest in all_digest.difference(&reachable) {
+                println!("Unreachable: {}", digest.to_hex());
             }
-            repo_gc(&reachable_digests, &options)
+            for digest in reachable.difference(&all_digest) {
+                println!("Missing: {}", digest.to_hex());
+            }
         }
     }
 }
