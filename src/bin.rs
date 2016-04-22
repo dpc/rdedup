@@ -6,6 +6,7 @@ extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate sodiumoxide;
 extern crate flate2;
+extern crate env_logger;
 
 use std::io::{Read, Write};
 use std::{fs, mem, thread, io, process};
@@ -42,6 +43,10 @@ enum ChunkType {
 
 impl ChunkType {
     fn should_compress(&self) -> bool {
+        *self == ChunkType::Data
+    }
+
+    fn should_encrypt(&self) -> bool {
         *self == ChunkType::Data
     }
 }
@@ -161,23 +166,62 @@ fn traverse_storage_recursively(
     }
 }
 
-fn repo_gc(digest : &[u8], options : &GlobalOptions) {
-    let reachable_digest = RefCell::new(HashSet::new());
-    reachable_digest.borrow_mut().insert(digest.to_owned());
+fn repo_all_backups(options : &GlobalOptions) -> Vec<String> {
+    let mut ret : Vec<String> = vec!();
+
+    let backup_dir = options.dst_dir.join("backup");
+    for entry in fs::read_dir(backup_dir).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name().to_string_lossy().to_string();
+        info!("Found backup: {}", name);
+        ret.push(name)
+    }
+
+    ret
+}
+
+fn repo_backup_add_to_reachable(digest : &[u8],
+                                reachable_digests : &RefCell<HashSet<Vec<u8>>>,
+                                options : &GlobalOptions) {
+    reachable_digests.borrow_mut().insert(digest.to_owned());
 
     traverse_storage_recursively(
         digest,
         &mut |digest, on_data, options| {
-            reachable_digest.borrow_mut().insert(digest.to_owned());
+            reachable_digests.borrow_mut().insert(digest.to_owned());
             traverse_index(digest, on_data, options);
         },
         &mut |digest, _| {
-            reachable_digest.borrow_mut().insert(digest.to_owned());
+            reachable_digests.borrow_mut().insert(digest.to_owned());
         },
         options
         );
+}
 
-    let _ = reachable_digest.borrow().iter().map(|digest| println!("{:?}", digest)).count();
+fn repo_gc_dir(path : &Path,
+               reachable_digests : &RefCell<HashSet<Vec<u8>>>,
+               _options : &GlobalOptions) {
+
+    for out_entry in fs::read_dir(path).unwrap() {
+        let out_entry = out_entry.unwrap();
+        for mid_entry in fs::read_dir(out_entry.path()).unwrap() {
+            let mid_entry = mid_entry.unwrap();
+            for entry in fs::read_dir(mid_entry.path()).unwrap() {
+                let entry = entry.unwrap();
+                let name= entry.file_name().to_string_lossy().to_string();
+                let entry_digest = name.from_hex().unwrap();
+                if !reachable_digests.borrow().contains(&entry_digest) {
+                    info!("Unreachable file: {:?}", entry.path().to_str());
+                }
+            }
+        }
+    }
+}
+
+fn repo_gc(reachable_digests : &RefCell<HashSet<Vec<u8>>>,
+            options : &GlobalOptions) {
+    repo_gc_dir(&options.dst_dir.join("index"), reachable_digests, options);
+    repo_gc_dir(&options.dst_dir.join("chunks"), reachable_digests, options);
 }
 
 fn repo_du(digest : &[u8], options : &GlobalOptions) -> u64 {
@@ -204,15 +248,19 @@ fn read_file_to_writer(digest : &[u8],
 
     let path = chunk_path_by_digest(digest, chunk_type, options);
     let mut file = fs::File::open(path).unwrap();
-    let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
-    file.read_exact(&mut ephemeral_pub).unwrap();
+    let mut data = Vec::with_capacity(16 * 1024);
 
-    let mut cipher = Vec::with_capacity(16 * 1024);
-    file.read_to_end(&mut cipher).unwrap();
-
-    let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-    let sec_key = options.sec_key.as_ref().unwrap();
-    let data = box_::open(&cipher, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap();
+    let data = if chunk_type.should_encrypt() {
+        let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
+        file.read_exact(&mut ephemeral_pub).unwrap();
+        file.read_to_end(&mut data).unwrap();
+        let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
+        let sec_key = options.sec_key.as_ref().unwrap();
+        box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key).unwrap()
+    } else {
+        file.read_to_end(&mut data).unwrap();
+        data
+    };
 
     let data = if chunk_type.should_compress() {
         let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
@@ -223,6 +271,13 @@ fn read_file_to_writer(digest : &[u8],
         data
     };
 
+    let mut sha256 = sha2::Sha256::new();
+    sha256.input(&data);
+    let mut sha256_digest = vec![0u8; 32];
+    sha256.result(&mut sha256_digest);
+    if sha256_digest != digest {
+        panic!("{} corrupted, data read: {}", digest.to_hex(), sha256_digest.to_hex());
+    }
     io::copy(&mut io::Cursor::new(data), writer).unwrap();
 }
 
@@ -312,70 +367,75 @@ fn chunk_path_by_digest(digest : &[u8], chunk_type : ChunkType, options : &Globa
 
 /// Accept messages on rx and writes them to chunk files
 fn chunk_writer(rx : mpsc::Receiver<ChunkWriterMessage>, options : &GlobalOptions) {
-    let mut pending_data = vec!();
+    let mut previous_parts = vec!();
 
     loop {
         match rx.recv().unwrap() {
             ChunkWriterMessage::Exit => {
-                assert!(pending_data.is_empty());
+                assert!(previous_parts.is_empty());
                 return
             }
-            ChunkWriterMessage::Data(data, edges, chunk_type) => if edges.is_empty() {
-                pending_data.push(data)
-            } else {
-                let mut prev_ofs = 0;
-                for &(ref ofs, ref sha256) in &edges {
-                    let path = chunk_path_by_digest(&sha256, chunk_type, &options);
-                    if !path.exists() {
-                        fs::create_dir_all(path.parent().unwrap()).unwrap();
-                        let mut chunk_file = fs::File::create(path).unwrap();
+            ChunkWriterMessage::Data(part, edges, chunk_type) => {
+                if edges.is_empty() {
+                    previous_parts.push(part)
+                } else {
+                    let mut prev_ofs = 0;
+                    for &(ref ofs, ref sha256) in &edges {
+                        let path = chunk_path_by_digest(&sha256, chunk_type, &options);
+                        if !path.exists() {
+                            fs::create_dir_all(path.parent().unwrap()).unwrap();
+                            let mut chunk_file = fs::File::create(path).unwrap();
 
-                        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
+                            let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
 
-                        let mut whole_data = vec!();
+                            let mut chunk_data = Vec::with_capacity(16 * 1024);
 
-                        for data in pending_data.drain(..) {
-                            whole_data.write_all(&data).unwrap();
-                        }
-                        if *ofs != prev_ofs {
-                            whole_data.write_all(&data[prev_ofs..*ofs]).unwrap();
-                        }
+                            for previous_part in previous_parts.drain(..) {
+                                chunk_data.write_all(&previous_part).unwrap();
+                            }
+                            if *ofs != prev_ofs {
+                                chunk_data.write_all(&part[prev_ofs..*ofs]).unwrap();
+                            }
 
-                        let pub_key = &options.pub_key.as_ref().unwrap();
+                            let compress = chunk_type.should_compress();
 
-                        let compress = chunk_type.should_compress();
+                            let chunk_data = if compress {
+                                let mut compressor = flate2::write::DeflateEncoder::new(
+                                    Vec::with_capacity(chunk_data.len()), flate2::Compression::Default
+                                    );
 
-                        let whole_data = if compress {
-                            let mut compressor = flate2::write::DeflateEncoder::new(
-                                Vec::with_capacity(whole_data.len()), flate2::Compression::Default
-                                );
+                                compressor.write_all(&chunk_data).unwrap();
+                                compressor.finish().unwrap()
+                            } else {
+                                chunk_data
+                            };
 
-                            compressor.write_all(&whole_data).unwrap();
-                            compressor.finish().unwrap()
+                            if chunk_type.should_encrypt() {
+                                let pub_key = &options.pub_key.as_ref().unwrap();
+                                let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
+
+                                let cipher = box_::seal(
+                                    &chunk_data,
+                                    &nonce,
+                                    &pub_key,
+                                    &ephemeral_sec
+                                    );
+                                chunk_file.write_all(&ephemeral_pub.0).unwrap();
+                                chunk_file.write_all(&cipher).unwrap();
+                            } else {
+                                chunk_file.write_all(&chunk_data).unwrap();
+                            }
                         } else {
-                            whole_data
-                        };
+                            previous_parts.clear();
+                        }
+                        debug_assert!(previous_parts.is_empty());
 
-                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
-
-                        let cipher = box_::seal(
-                            &whole_data,
-                            &nonce,
-                            &pub_key,
-                            &ephemeral_sec
-                            );
-                        chunk_file.write_all(&ephemeral_pub.0).unwrap();
-                        chunk_file.write_all(&cipher).unwrap();
-                    } else {
-                        pending_data.clear();
+                        prev_ofs = *ofs;
                     }
-                    debug_assert!(pending_data.is_empty());
-
-                    prev_ofs = *ofs;
-                }
-                if prev_ofs != data.len() {
-                    let mut data = data;
-                    pending_data.push(data.split_off(prev_ofs))
+                    if prev_ofs != part.len() {
+                        let mut part = part;
+                        previous_parts.push(part.split_off(prev_ofs))
+                    }
                 }
             }
         }
@@ -500,6 +560,8 @@ impl FromStr for Command {
 }
 
 fn main() {
+    env_logger::init().unwrap();
+
     let mut options = GlobalOptions {
         verbose: false,
         backup_name : String::new(),
@@ -577,16 +639,18 @@ fn main() {
             println!("{}", size);
         },
         Command::GC => {
-            if args.len() != 1 {
-                printerrln!("Backup name required");
+            if args.len() != 0 {
+                printerrln!("Unnecessary argument");
                 process::exit(-1);
             }
             load_pub_key_into_options(&mut options);
-            load_sec_key_into_options(&mut options);
 
-            let digest = backup_name_to_digest(&args[0], &options);
-            println!("Reachable digests:");
-            repo_gc(&digest, &options);
+            let reachable_digests = RefCell::new(HashSet::new());
+            for backup in repo_all_backups(&options) {
+                let digest = backup_name_to_digest(&backup, &options);
+                repo_backup_add_to_reachable(&digest, &reachable_digests, &options);
+            }
+            repo_gc(&reachable_digests, &options)
         }
     }
 }
