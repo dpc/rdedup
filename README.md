@@ -39,8 +39,8 @@ issue][zbackup-issue], [ddar issue][ddar-issue]) which means you have to share
 the same key on all your hosts and one compromised system compromises all your
 backups.
 
-To fill the missing piece in my master backup plan, I've decided to write the
-missing piece myself and use my beloved Rust programming language to write `rdedup`.
+To fill the missing piece in my master backup plan, I've decided to write it
+myself using my beloved Rust programming language. That's how `rdedup` started.
 
 ## How it works
 
