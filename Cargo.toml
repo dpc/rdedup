@@ -8,11 +8,8 @@ name = "rdedup"
 path = "src/bin.rs"
 
 [dependencies]
-rollsum = "0.2.0"
-rust-crypto = "^0.2"
+rdedup-lib = { path = "lib" }
 log = "*"
 rustc-serialize = "*"
 argparse = "*"
-sodiumoxide = "0.0.10"
-flate2 = "*"
 env_logger = "*"
