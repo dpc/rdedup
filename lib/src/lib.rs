@@ -119,7 +119,7 @@ impl Chunker {
     }
 
     pub fn finish(&mut self) -> Vec<Edge> {
-        if self.bytes_chunk != 0 {
+        if self.bytes_chunk != 0 || self.bytes_total == 0 {
             self.edge_found(0);
         }
         mem::replace(&mut self.edges, vec!())
