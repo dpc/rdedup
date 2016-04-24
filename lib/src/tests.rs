@@ -61,7 +61,7 @@ fn random_sanity() {
     let mut stored = vec!();
 
     let (repo, sk) = lib::Repo::init(&rand_tmp_dir()).unwrap();
-    for _ in 0..10 {
+    for _ in 0..50 {
         let data = rand_data(rand::thread_rng().gen_range(0, 1024 * 1024));
 
         let mut sha = sha2::Sha256::new();

@@ -28,6 +28,15 @@ mod error;
 
 use error::{Result, Error};
 
+macro_rules! printerrln {
+    ($($arg:tt)*) => ({
+        use std::io::prelude::*;
+        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}\n", format_args!($($arg)*)) {
+            panic!("Failed to write to stderr.\nOriginal error output: {}\nSecondary error writing to stderr: {}", format!($($arg)*), e);
+        }
+    })
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ChunkType {
     Index,
@@ -46,7 +55,7 @@ impl ChunkType {
 
 enum ChunkWriterMessage {
     // ChunkType in every Data is somewhat redundant...
-    Data(Vec<u8>, Vec<Edge>, ChunkType),
+    Data(Vec<u8>, Vec<Edge>, ChunkType, ChunkType),
     Exit,
 }
 
@@ -125,13 +134,22 @@ impl Chunker {
         mem::replace(&mut self.edges, vec!())
     }
 }
+fn quick_sha256(data : &[u8]) -> Vec<u8> {
+
+    let mut sha256 = sha2::Sha256::new();
+    sha256.input(&data);
+    let mut sha256_digest = vec![0u8; 32];
+    sha256.result(&mut sha256_digest);
+
+    return sha256_digest
+}
 
 /// Store data, using input_f to get chunks of data
 ///
 /// Return final digest
 fn chunk_and_send_to_writer<R : Read>(tx : &mpsc::Sender<ChunkWriterMessage>,
                       mut reader : &mut R,
-                      chunk_type : ChunkType,
+                      data_type : ChunkType,
                       ) -> Result<Vec<u8>> {
     let mut chunker = Chunker::new();
 
@@ -150,17 +168,22 @@ fn chunk_and_send_to_writer<R : Read>(tx : &mpsc::Sender<ChunkWriterMessage>,
         for &(_, ref sum) in &edges {
             index.append(&mut sum.clone());
         }
-        tx.send(ChunkWriterMessage::Data(buf, edges, chunk_type)).unwrap();
+        tx.send(ChunkWriterMessage::Data(buf, edges, ChunkType::Data, data_type)).unwrap();
     }
     let edges = chunker.finish();
 
     for &(_, ref sum) in &edges {
         index.append(&mut sum.clone());
     }
-    tx.send(ChunkWriterMessage::Data(vec!(), edges, chunk_type)).unwrap();
+    tx.send(ChunkWriterMessage::Data(vec!(), edges, ChunkType::Data, data_type)).unwrap();
 
     if index.len() > 32 {
-        chunk_and_send_to_writer(tx, &mut io::Cursor::new(index), ChunkType::Index)
+        let digest = try!(chunk_and_send_to_writer(tx, &mut io::Cursor::new(index), ChunkType::Index));
+        assert!(digest.len() == 32);
+        let index_digest = quick_sha256(&digest);
+        printerrln!("{} -> {}", index_digest.to_hex(), digest.to_hex());
+        tx.send(ChunkWriterMessage::Data(digest.clone(), vec![(digest.len(), index_digest.clone())], ChunkType::Index, ChunkType::Index)).unwrap();
+        Ok(index_digest)
     } else {
         Ok(index)
     }
@@ -185,6 +208,53 @@ impl SecretKey {
     }
 }
 
+// Can be feed Index data, will
+// write translated data to `writer`.
+struct IndexTranslator<'a> {
+    repo : &'a Repo,
+    digest : Vec<u8>,
+    writer : &'a mut io::Write,
+    data_type : ChunkType,
+    sec_key : Option<&'a box_::SecretKey>,
+}
+
+impl<'a> IndexTranslator<'a> {
+    fn new(repo : &'a Repo, writer : &'a mut io::Write, data_type : ChunkType, sec_key : Option<&'a box_::SecretKey>) -> Self {
+        IndexTranslator {
+            repo: repo,
+            writer : writer,
+            digest : vec!(),
+            data_type : data_type,
+            sec_key : sec_key,
+        }
+    }
+}
+
+impl<'a> io::Write for IndexTranslator<'a> {
+    fn write(&mut self, mut bytes : &[u8]) -> io::Result<usize> {
+        let total_len = bytes.len();
+        loop {
+            let has_already = self.digest.len();
+            if (has_already + bytes.len()) < 32 {
+                self.digest.extend_from_slice(bytes);
+                return Ok(total_len);
+            }
+
+            let needs = 32 - has_already;
+            self.digest.extend_from_slice(&bytes[..needs]);
+            bytes = &bytes[needs..];
+            printerrln!("Translated part of index: {}; dt: {:?}", self.digest.to_hex(), self.data_type);
+            try!(self.repo.read_recursively(&self.digest, self.writer, self.data_type, self.sec_key)
+                 .map_err(|err| match err {
+                     Error::Io(io_err) => io_err,
+                     _ => io::Error::new(io::ErrorKind::Other, "Error while traversing index data"),
+                 }));
+            self.digest.clear();
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
 #[derive(Clone, Debug)]
 pub struct Repo {
     path : PathBuf,
@@ -250,7 +320,7 @@ impl Repo {
                     assert!(previous_parts.is_empty());
                     return
                 }
-                ChunkWriterMessage::Data(part, edges, chunk_type) => {
+                ChunkWriterMessage::Data(part, edges, chunk_type, data_type) => {
                     if edges.is_empty() {
                         previous_parts.push(part)
                     } else {
@@ -272,9 +342,9 @@ impl Repo {
                                     chunk_data.write_all(&part[prev_ofs..*ofs]).unwrap();
                                 }
 
-                                let compress = chunk_type.should_compress();
+                                printerrln!("Writing {}; data_type: {:?}", sha256.to_hex(), data_type);
 
-                                let chunk_data = if compress {
+                                let chunk_data = if data_type.should_compress() {
                                     let mut compressor = flate2::write::DeflateEncoder::new(
                                         Vec::with_capacity(chunk_data.len()), flate2::Compression::Default
                                         );
@@ -285,7 +355,7 @@ impl Repo {
                                     chunk_data
                                 };
 
-                                if chunk_type.should_encrypt() {
+                                if data_type.should_encrypt() {
                                     let pub_key = &self.pub_key;
                                     let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
 
@@ -333,12 +403,11 @@ impl Repo {
     pub fn read<W : Write>(&self, name : &str, writer: &mut W, sec_key : &SecretKey) -> Result<()> {
         let digest = try!(self.name_to_digest(name));
 
-        self.traverse_recursively(
+        self.read_recursively(
             &digest,
-            &mut Self::traverse_index,
-            &mut |repo, digest| {
-                repo.read_chunk_into(digest, ChunkType::Data, writer, Some(&sec_key.0))
-            },
+            writer,
+            ChunkType::Data,
+            Some(&sec_key.0)
             )
     }
 
@@ -370,13 +439,14 @@ impl Repo {
         Ok(())
     }
 
-
+/*
     pub fn du(&self, name : &str, sec_key : &SecretKey) -> Result<u64> {
 
         let digest = try!(self.name_to_digest(name));
 
         self.du_by_digest(&digest, sec_key)
     }
+
 
     pub fn du_by_digest(&self, digest : &[u8], sec_key : &SecretKey) -> Result<u64> {
         let mut bytes = 0u64;
@@ -395,6 +465,8 @@ impl Repo {
         Ok(bytes)
     }
 
+    */
+    /*
     fn traverse_recursively(
         &self,
         digest : &[u8],
@@ -414,10 +486,43 @@ impl Repo {
         }
         Ok(())
     }
+    */
 
+
+    fn read_recursively(
+        &self,
+        digest : &[u8],
+        writer : &mut io::Write,
+        data_type : ChunkType,
+        sec_key : Option<&box_::SecretKey>
+        ) -> Result<()> {
+
+        let chunk_type = try!(self.chunk_type(digest));
+
+        match chunk_type {
+            ChunkType::Index => {
+                let mut index_data = vec!();
+                printerrln!("RR I: {}", digest.to_hex());
+                try!(self.read_chunk_into(digest, ChunkType::Index, ChunkType::Index, &mut index_data, sec_key));
+
+                assert!(index_data.len() == 32);
+
+                let mut translator = IndexTranslator::new(self, writer, data_type, sec_key);
+                try!(self.read_recursively(&index_data, &mut translator, ChunkType::Index,  None))
+            },
+            ChunkType::Data => {
+                printerrln!("RR D: {}", digest.to_hex());
+                try!(self.read_chunk_into(digest, ChunkType::Data, data_type, writer, sec_key))
+            },
+        }
+        Ok(())
+    }
+
+/*
     fn traverse_index(&self, digest : &[u8], on_data : &mut FnMut(&Repo, &[u8]) -> Result<()>) -> Result<()> {
         let mut index_data = vec!();
 
+        assert!(self.chunk_type(digest) == ChunkType::Index);
         try!(self.read_chunk_into(digest, ChunkType::Index, &mut index_data, None));
 
         assert!(index_data.len() % 32 == 0);
@@ -428,7 +533,8 @@ impl Repo {
 
         Ok(())
     }
-
+*/
+    /*
     fn reachable_recursively_insert(&self,
                                digest : &[u8],
                                reachable_digests : &RefCell<HashSet<Vec<u8>>>,
@@ -447,9 +553,10 @@ impl Repo {
             },
             )
     }
+    */
 
     /// List all backups
-    fn list_names(&self) -> Result<Vec<String>> {
+    pub fn list_names(&self) -> Result<Vec<String>> {
         let mut ret : Vec<String> = vec!();
 
         let backup_dir = self.path.join("backup");
@@ -484,7 +591,7 @@ impl Repo {
         Ok(digests)
     }
 
-
+/*
     /// Return all reachable chunks
     pub fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         let reachable_digests = RefCell::new(HashSet::new());
@@ -496,7 +603,7 @@ impl Repo {
         Ok(reachable_digests.into_inner())
     }
 
-
+*/
     fn chunk_type(&self, digest : &[u8]) -> Result<ChunkType> {
         for i in &[ChunkType::Index, ChunkType::Data] {
             let file_path = self.chunk_path_by_digest(digest, *i);
@@ -518,11 +625,29 @@ impl Repo {
             .join(digest[1..2].to_hex())
             .join(&digest.to_hex())
     }
+/*
+    fn read_into(&self,
+                        digest : &[u8],
+                        writer: &mut Write,
+                        sec_key : Option<&box_::SecretKey>,
+                        ) -> Result<()> {
 
+        let chunk_type = try!(self.chunk_type(digest));
+
+        match chunk_type {
+            ChunkType::Data => read_chunk_into(digest, writer, sec_key),
+            ChunkType::Index => {
+                let translator = IndexTranslator::new(self, writer);
+                try!(read_chunk_into(digest, translator, sec_key))
+            }
+        }
+    }
+    */
 
     fn read_chunk_into(&self,
                         digest : &[u8],
                         chunk_type : ChunkType,
+                        data_type : ChunkType,
                         writer: &mut Write,
                         sec_key : Option<&box_::SecretKey>,
                         ) -> Result<()> {
@@ -530,7 +655,7 @@ impl Repo {
         let mut file = try!(fs::File::open(path));
         let mut data = Vec::with_capacity(16 * 1024);
 
-        let data = if chunk_type.should_encrypt() {
+        let data = if data_type.should_encrypt() {
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
             try!(file.read_exact(&mut ephemeral_pub));
             try!(file.read_to_end(&mut data));
@@ -543,7 +668,7 @@ impl Repo {
             data
         };
 
-        let data = if chunk_type.should_compress() {
+        let data = if data_type.should_compress() {
             let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
 
             try!(decompressor.write_all(&data));
@@ -552,13 +677,15 @@ impl Repo {
             data
         };
 
-        let mut sha256 = sha2::Sha256::new();
-        sha256.input(&data);
-        let mut sha256_digest = vec![0u8; 32];
-        sha256.result(&mut sha256_digest);
-        if sha256_digest != digest {
-            panic!("{} corrupted, data read: {}", digest.to_hex(), sha256_digest.to_hex());
-        }
+//        if chunk_type == ChunkType::Data {
+            let mut sha256 = sha2::Sha256::new();
+            sha256.input(&data);
+            let mut sha256_digest = vec![0u8; 32];
+            sha256.result(&mut sha256_digest);
+            if sha256_digest != digest {
+                panic!("{} corrupted, data read: {}", digest.to_hex(), sha256_digest.to_hex());
+            }
+ //       }
         try!(io::copy(&mut io::Cursor::new(data), writer));
         Ok(())
     }
