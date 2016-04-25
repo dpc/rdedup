@@ -214,29 +214,37 @@ impl Write for CounterWriter {
     fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
-// Can be feed Index data, will
-// write translated data to `writer`.
+type OnDataF<'a> = Box<FnMut(&'a Repo, &[u8], DataType, Option<&'a box_::SecretKey>) -> Result<()> + 'a>;
+
+// Can be feed Index data, will call
+// on_data for every data digest
 struct IndexTranslator<'a> {
     repo : &'a Repo,
     digest : Vec<u8>,
-    writer : &'a mut Write,
     data_type : DataType,
     sec_key : Option<&'a box_::SecretKey>,
+    on_data : OnDataF<'a>,
 }
 
-impl<'a> IndexTranslator<'a> {
-    fn new(repo : &'a Repo, writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
+impl<'a> IndexTranslator<'a>{
+    fn new(
+        repo : &'a Repo,
+        data_type : DataType,
+        on_data : OnDataF<'a>,
+        sec_key : Option<&'a box_::SecretKey>
+        ) -> Self {
         IndexTranslator {
             repo: repo,
-            writer : writer,
             digest : vec!(),
             data_type : data_type,
             sec_key : sec_key,
+            on_data : on_data,
         }
     }
 }
 
-impl<'a> Write for IndexTranslator<'a> {
+impl<'a> Write for IndexTranslator<'a>
+{
     fn write(&mut self, mut bytes : &[u8]) -> Result<usize> {
         let total_len = bytes.len();
         loop {
@@ -249,12 +257,43 @@ impl<'a> Write for IndexTranslator<'a> {
             let needs = 32 - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
-            try!(self.repo.read_recursively(&self.digest, self.writer, self.data_type, self.sec_key));
+            try!((self.on_data)(self.repo, &self.digest, self.data_type, self.sec_key));
             self.digest.clear();
         }
     }
 
     fn flush(&mut self) -> Result<()> { Ok(()) }
+}
+
+// Can be feed Index data, will
+// write translated data to `writer`.
+struct IndexTranslatorWriter<'a> {
+    translator : IndexTranslator<'a>
+}
+
+impl<'a> IndexTranslatorWriter<'a> {
+    fn new(repo : &'a Repo, writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
+        let on_data = move |repo : &Repo, digest : &[u8], data_type : DataType, sec_key : Option<&box_::SecretKey>| {
+            repo.read_recursively(digest, writer, data_type, sec_key)
+        };
+        IndexTranslatorWriter {
+            translator: IndexTranslator::new(
+                            repo,
+                            data_type,
+                            Box::new(on_data),
+                            sec_key)
+        }
+    }
+}
+
+impl<'a> Write for IndexTranslatorWriter<'a> {
+    fn write(&mut self,  bytes : &[u8]) -> Result<usize> {
+        self.translator.write(bytes)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.translator.flush()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -484,7 +523,7 @@ impl Repo {
 
                 assert!(index_data.len() == 32);
 
-                let mut translator = IndexTranslator::new(self, writer, data_type, sec_key);
+                let mut translator = IndexTranslatorWriter::new(self, writer, data_type, sec_key);
                 try!(self.read_recursively(&index_data, &mut translator, DataType::Index,  None))
             },
             DataType::Data => {
@@ -493,22 +532,27 @@ impl Repo {
         }
         Ok(())
     }
-/*
+
     fn reachable_recursively_insert(&self,
                                digest : &[u8],
-                               reachable_digests : &RefCell<HashSet<Vec<u8>>>,
+                               reachable_digests : &mut HashSet<Vec<u8>>,
                                ) -> Result<()> {
-        reachable_digests.borrow_mut().insert(digest.to_owned());
+        reachable_digests.insert(digest.to_owned());
 
-        let mut writer = ChunkAccessRecorder::new(&mut reachable_digests);
+        let mut writer = IndexTranslator::new(self,
+                            DataType::Data,
+                            Box::new(|_repo : &Repo, digest : &[u8], _data_type : DataType, _sec_key : Option<&box_::SecretKey>| {
+                                reachable_digests.insert(digest.to_owned()); Ok(())
+                            }),
+                            None);
+
         self.read_recursively(
             &digest,
-            writer,
+            &mut writer,
             DataType::Data,
             None,
             )
     }
-    */
 
     /// List all backups
     pub fn list_names(&self) -> Result<Vec<String>> {
@@ -546,18 +590,16 @@ impl Repo {
         Ok(digests)
     }
 
-    /*
     /// Return all reachable chunks
     pub fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
-        let reachable_digests = RefCell::new(HashSet::new());
+        let mut reachable_digests = HashSet::new();
         let all_names = try!(self.list_names());
         for name in &all_names {
             let digest = try!(self.name_to_digest(&name));
-            try!(self.reachable_recursively_insert(&digest, &reachable_digests));
+            try!(self.reachable_recursively_insert(&digest, &mut reachable_digests));
         }
-        Ok(reachable_digests.into_inner())
+        Ok(reachable_digests)
     }
-    */
 
     fn chunk_type(&self, digest : &[u8]) -> Result<DataType> {
         for i in &[DataType::Index, DataType::Data] {
