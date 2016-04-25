@@ -271,6 +271,44 @@ struct IndexTranslatorWriter<'a> {
     translator : IndexTranslator<'a>
 }
 
+trait Traverser {
+    fn on_index(&mut self, repo : &Repo, digest : &[u8]) -> Result<()>;
+    fn on_data(&mut self, repo : &Repo, digest : &[u8]) -> Result<()>;
+}
+
+struct TraverseReader<'a> {
+    writer : &'a mut Write,
+    data_type : DataType,
+    sec_key : Option<&'a box_::SecretKey>,
+}
+
+impl<'a> TraverseReader<'a> {
+    fn new(writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
+        TraverseReader {
+            writer : writer,
+            data_type : data_type,
+            sec_key : sec_key,
+        }
+    }
+}
+
+impl<'a> Traverser for TraverseReader<'a> {
+    fn on_index(&mut self, repo : &Repo, digest : &[u8]) -> Result<()> {
+        let mut index_data = vec!();
+        try!(repo.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
+
+        assert!(index_data.len() == 32);
+
+        let mut translator = IndexTranslatorWriter::new(repo, self.writer, self.data_type, self.sec_key);
+        let mut sub_traverser = TraverseReader::new(&mut translator, DataType::Index, None);
+        repo.traverse_with(&index_data, &mut sub_traverser)
+    }
+
+    fn on_data(&mut self, repo : &Repo, digest : &[u8]) -> Result<()> {
+        repo.read_chunk_into(digest, DataType::Data, self.data_type, self.writer, self.sec_key)
+    }
+}
+
 impl<'a> IndexTranslatorWriter<'a> {
     fn new(repo : &'a Repo, writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
         let on_data = move |repo : &Repo, digest : &[u8], data_type : DataType, sec_key : Option<&box_::SecretKey>| {
@@ -506,6 +544,21 @@ impl Repo {
         Ok(counter.count)
     }
 
+    fn traverse_with(
+        &self,
+        digest : &[u8],
+        traverser : &mut Traverser,
+        ) -> Result<()> {
+
+        let chunk_type = try!(self.chunk_type(digest));
+
+        match chunk_type {
+            DataType::Index => traverser.on_index(self, digest),
+            DataType::Data => traverser.on_data(self, digest),
+        }
+    }
+
+/*
     fn read_recursively(
         &self,
         digest : &[u8],
@@ -524,13 +577,24 @@ impl Repo {
                 assert!(index_data.len() == 32);
 
                 let mut translator = IndexTranslatorWriter::new(self, writer, data_type, sec_key);
-                try!(self.read_recursively(&index_data, &mut translator, DataType::Index,  None))
+                try!(self.read_recursively(&index_data, &mut translator, DataType::Index, None))
             },
             DataType::Data => {
                 try!(self.read_chunk_into(digest, DataType::Data, data_type, writer, sec_key))
             },
         }
         Ok(())
+    }*/
+    fn read_recursively(
+        &self,
+        digest : &[u8],
+        writer : &mut Write,
+        data_type : DataType,
+        sec_key : Option<&box_::SecretKey>
+        ) -> Result<()> {
+
+        let mut traverser = TraverseReader::new(writer, data_type, sec_key);
+        self.traverse_with(digest, &mut traverser)
     }
 
     fn reachable_recursively_insert(&self,
