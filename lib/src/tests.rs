@@ -19,7 +19,7 @@ fn rand_tmp_dir() -> path::PathBuf {
 }
 
 fn rand_data(len : usize) -> Vec<u8> {
-    rand::thread_rng()
+    rand::weak_rng()
         .gen_iter()
         .take(len)
         .collect::<Vec<u8>>()
@@ -62,21 +62,19 @@ fn random_sanity() {
 
     let (repo, sk) = lib::Repo::init(&rand_tmp_dir()).unwrap();
     for _ in 0..50 {
-        let data = rand_data(rand::thread_rng().gen_range(0, 1024 * 1024));
+        let data = rand_data(rand::weak_rng().gen_range(0, 1024 * 1024));
 
         let mut sha = sha2::Sha256::new();
         sha.input(&data);
         let name = sha.result_str();
         let mut digest = vec![0u8; 32];
         sha.result(&mut digest);
-        println!("Writing {}", name);
         repo.write(&name, &mut io::Cursor::new(data)).unwrap();
         stored.push((name, digest));
     }
 
     for &(ref name, ref digest) in &stored {
         let mut data = vec!();
-        println!("Reading {}", name);
         repo.read(&name, &mut data, &sk).unwrap();
 
         let mut sha = sha2::Sha256::new();
