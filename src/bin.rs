@@ -44,6 +44,7 @@ enum Command {
     Init,
     DU,
     GC,
+    RM,
 }
 
 impl FromStr for Command {
@@ -56,6 +57,7 @@ impl FromStr for Command {
             "init" => Ok(Command::Init),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
+            "rm" => Ok(Command::RM),
             _ => Err(()),
         }
     }
@@ -99,7 +101,7 @@ fn main() {
             let repo = Repo::open(dir_path).unwrap();
             repo.write(&args[0], &mut io::stdin()).unwrap();
         },
-        Command::Read=> {
+        Command::Read => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
@@ -107,12 +109,20 @@ fn main() {
             let repo = Repo::open(dir_path).unwrap();
             let sec_key = read_sec_key();
             repo.read(&args[0], &mut io::stdout(), &sec_key).unwrap();
-        }
+        },
+        Command::RM => {
+            if args.len() != 1 {
+                printerrln!("Name required");
+                process::exit(-1);
+            }
+            let repo = Repo::open(dir_path).unwrap();
+            repo.rm(&args[0]).unwrap();
+        },
         Command::Init => {
             let (_, sec_key) = Repo::init(dir_path).unwrap();
                 printerrln!("Write down the secret key:");
                 println!("{}", sec_key.to_string());
-        }
+        },
         Command::DU => {
             if args.len() != 1 {
                 printerrln!("Backup name required");
@@ -133,12 +143,12 @@ fn main() {
             let repo = Repo::open(&dir_path).unwrap();
 
             let reachable = repo.list_reachable_chunks().unwrap();
-            let all = repo.list_stored_chunks().unwrap();
+            let stored = repo.list_stored_chunks().unwrap();
 
-            for digest in all.difference(&reachable) {
+            for digest in stored.difference(&reachable) {
                 println!("Unreachable: {}", digest.to_hex());
             }
-            for digest in reachable.difference(&all) {
+            for digest in reachable.difference(&stored) {
                 println!("Missing: {}", digest.to_hex());
             }
         }

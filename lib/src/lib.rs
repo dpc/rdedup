@@ -271,9 +271,9 @@ struct IndexTranslatorWriter<'a> {
     translator : IndexTranslator<'a>
 }
 
-trait Traverser {
-    fn on_index(&mut self, repo : &Repo, digest : &[u8]) -> Result<()>;
-    fn on_data(&mut self, repo : &Repo, digest : &[u8]) -> Result<()>;
+trait Traverser<'a> {
+    fn on_index(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()>;
+    fn on_data(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()>;
 }
 
 struct TraverseReader<'a> {
@@ -292,8 +292,8 @@ impl<'a> TraverseReader<'a> {
     }
 }
 
-impl<'a> Traverser for TraverseReader<'a> {
-    fn on_index(&mut self, repo : &Repo, digest : &[u8]) -> Result<()> {
+impl<'a> Traverser<'a> for TraverseReader<'a> {
+    fn on_index(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()> {
         let mut index_data = vec!();
         try!(repo.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
 
@@ -304,8 +304,65 @@ impl<'a> Traverser for TraverseReader<'a> {
         repo.traverse_with(&index_data, &mut sub_traverser)
     }
 
-    fn on_data(&mut self, repo : &Repo, digest : &[u8]) -> Result<()> {
+    fn on_data(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()> {
         repo.read_chunk_into(digest, DataType::Data, self.data_type, self.writer, self.sec_key)
+    }
+}
+
+struct ReachabilityTraverser<'a> {
+    reachable : &'a mut HashSet<Vec<u8>>,
+    writer : Option<&'a mut Write>,
+    data_type : DataType,
+    sec_key : Option<&'a box_::SecretKey>,
+}
+
+impl<'a> ReachabilityTraverser<'a> {
+    fn new(reachable: &'a mut HashSet<Vec<u8>>,
+           writer : Option<&'a mut Write>,
+           data_type : DataType,
+           sec_key : Option<&'a box_::SecretKey>) -> Self {
+        ReachabilityTraverser{
+            reachable: reachable,
+            writer : writer,
+            data_type : data_type,
+            sec_key : sec_key,
+        }
+    }
+}
+
+impl<'a> Traverser<'a> for ReachabilityTraverser<'a> {
+    fn on_index(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()> {
+        trace!("Traversing index: {}", digest.to_hex());
+        self.reachable.insert(digest.to_owned());
+        let mut index_data = vec!();
+        try!(repo.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
+
+        assert!(index_data.len() == 32);
+
+        self.reachable.insert(index_data.clone());
+        let mut translator = self.writer.take().map(|writer| {
+            IndexTranslatorWriter::new(
+                repo,
+                writer,
+                self.data_type,
+                self.sec_key)
+        });
+        let mut sub_traverser = ReachabilityTraverser::new(
+            self.reachable,
+            translator.as_mut().map(|write| write as &mut io::Write),
+            DataType::Index,
+            None);
+        repo.traverse_with(&index_data, &mut sub_traverser)
+    }
+
+    fn on_data(&mut self, repo : &'a Repo, digest : &[u8]) -> Result<()> {
+        trace!("Traversing data: {}", digest.to_hex());
+        self.reachable.insert(digest.to_owned());
+        self.writer.take().map_or(Ok(()), |writer|
+                        repo.read_chunk_into(
+                            digest, DataType::Data, self.data_type,
+                            writer, self.sec_key
+                            ))
     }
 }
 
@@ -340,11 +397,20 @@ pub struct Repo {
     pub_key : box_::PublicKey,
 }
 
+const DATA_SUBDIR : &'static str = "chunk";
+const NAME_SUBDIR : &'static str = "name";
+const INDEX_SUBDIR : &'static str ="index";
+
 impl Repo {
     pub fn init(repo_path : &Path) -> Result<(Repo, SecretKey)> {
+        info!("Init repo {}", repo_path.to_string_lossy());
         if repo_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists, "repo already exists"));
         }
+
+        try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
 
         try!(fs::create_dir_all(&repo_path));
         let pubkey_path = pub_key_file_path(&repo_path);
@@ -363,7 +429,7 @@ impl Repo {
     }
 
     pub fn open(repo_path : &Path) -> Result<Repo> {
-
+        info!("Open repo {}", repo_path.to_string_lossy());
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound, "repo not found"));
         }
@@ -473,6 +539,7 @@ impl Repo {
     }
 
     pub fn write<R : Read>(&self, name : &str, reader : &mut R) -> Result<()> {
+        info!("Write name {}", name);
         let (tx, rx) = mpsc::channel();
         let self_clone = self.clone();
         let chunk_writer_join = thread::spawn(move || self_clone.chunk_writer(rx));
@@ -482,10 +549,11 @@ impl Repo {
         tx.send(ChunkWriterMessage::Exit).unwrap();
         chunk_writer_join.join().unwrap();
 
-        self.store_digest_as_backup_name(&final_digest, name)
+        self.store_digest_as_name(&final_digest, name)
     }
 
     pub fn read<W : Write>(&self, name : &str, writer: &mut W, sec_key : &SecretKey) -> Result<()> {
+        info!("Read name {}", name);
         let digest = try!(self.name_to_digest(name));
 
         self.read_recursively(
@@ -497,34 +565,37 @@ impl Repo {
     }
 
     pub fn name_to_digest(&self, name : &str) -> Result<Vec<u8>> {
-        let backup_path = self.path.join("backup").join(name);
-        if !backup_path.exists() {
+        debug!("Resolving name {}", name);
+        let name_path = self.name_path(name);
+        if !name_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound, "name file not found"));
         }
 
-        let mut file = try!(fs::File::open(&backup_path));
+        let mut file = try!(fs::File::open(&name_path));
         let mut buf = vec!();
         try!(file.read_to_end(&mut buf));
 
+        debug!("Name {} is {}", name, buf.to_hex());
         Ok(buf)
     }
 
-    fn store_digest_as_backup_name(&self, digest : &[u8], name : &str) -> Result<()> {
-        let backup_dir = self.path.join("backup");
-        try!(fs::create_dir_all(&backup_dir));
-        let backup_path = backup_dir.join(name);
+    fn store_digest_as_name(&self, digest : &[u8], name : &str) -> Result<()> {
+        let name_dir = self.name_dir_path();
+        try!(fs::create_dir_all(&name_dir));
+        let name_path = self.name_path(name);
 
-        if backup_path.exists() {
+        if name_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists, "name already exists"));
         }
 
-        let mut file = try!(fs::File::create(&backup_path));
+        let mut file = try!(fs::File::create(&name_path));
 
         try!(file.write_all(digest));
         Ok(())
     }
 
     pub fn du(&self, name : &str, sec_key : &SecretKey) -> Result<u64> {
+        info!("DU name {}", name);
 
         let digest = try!(self.name_to_digest(name));
 
@@ -544,10 +615,10 @@ impl Repo {
         Ok(counter.count)
     }
 
-    fn traverse_with(
-        &self,
+    fn traverse_with<'a>(
+        &'a self,
         digest : &[u8],
-        traverser : &mut Traverser,
+        traverser : &mut Traverser<'a>,
         ) -> Result<()> {
 
         let chunk_type = try!(self.chunk_type(digest));
@@ -558,33 +629,6 @@ impl Repo {
         }
     }
 
-/*
-    fn read_recursively(
-        &self,
-        digest : &[u8],
-        writer : &mut Write,
-        data_type : DataType,
-        sec_key : Option<&box_::SecretKey>
-        ) -> Result<()> {
-
-        let chunk_type = try!(self.chunk_type(digest));
-
-        match chunk_type {
-            DataType::Index => {
-                let mut index_data = vec!();
-                try!(self.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, sec_key));
-
-                assert!(index_data.len() == 32);
-
-                let mut translator = IndexTranslatorWriter::new(self, writer, data_type, sec_key);
-                try!(self.read_recursively(&index_data, &mut translator, DataType::Index, None))
-            },
-            DataType::Data => {
-                try!(self.read_chunk_into(digest, DataType::Data, data_type, writer, sec_key))
-            },
-        }
-        Ok(())
-    }*/
     fn read_recursively(
         &self,
         digest : &[u8],
@@ -603,27 +647,21 @@ impl Repo {
                                ) -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut writer = IndexTranslator::new(self,
-                            DataType::Data,
-                            Box::new(|_repo : &Repo, digest : &[u8], _data_type : DataType, _sec_key : Option<&box_::SecretKey>| {
-                                reachable_digests.insert(digest.to_owned()); Ok(())
-                            }),
-                            None);
-
-        self.read_recursively(
-            &digest,
-            &mut writer,
-            DataType::Data,
+        let mut traverser = ReachabilityTraverser::new(
+            reachable_digests,
             None,
-            )
+            DataType::Data,
+            None);
+        self.traverse_with(digest, &mut traverser)
     }
 
-    /// List all backups
+    /// List all names
     pub fn list_names(&self) -> Result<Vec<String>> {
+        info!("List repo");
         let mut ret : Vec<String> = vec!();
 
-        let backup_dir = self.path.join("backup");
-        for entry in try!(fs::read_dir(backup_dir)) {
+        let name_dir = self.name_dir_path();
+        for entry in try!(fs::read_dir(name_dir)) {
             let entry = try!(entry);
             let name = entry.file_name().to_string_lossy().to_string();
             ret.push(name)
@@ -633,14 +671,19 @@ impl Repo {
     }
 
     pub fn list_stored_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+        info!("List stored chunks");
         fn insert_all_digest(path : &Path, reachable : &mut HashSet<Vec<u8>>) {
+            trace!("Looking in {}", path.to_string_lossy());
             for out_entry in fs::read_dir(path).unwrap() {
                 let out_entry = out_entry.unwrap();
+                trace!("Looking in {}", out_entry.path().to_string_lossy());
                 for mid_entry in fs::read_dir(out_entry.path()).unwrap() {
                     let mid_entry = mid_entry.unwrap();
+                    trace!("Looking in {}", mid_entry.path().to_string_lossy());
                     for entry in fs::read_dir(mid_entry.path()).unwrap() {
                         let entry = entry.unwrap();
-                        let name= entry.file_name().to_string_lossy().to_string();
+                        trace!("Looking in {}", entry.path().to_string_lossy());
+                        let name = entry.file_name().to_string_lossy().to_string();
                         let entry_digest = name.from_hex().unwrap();
                         reachable.insert(entry_digest);
                     }
@@ -649,13 +692,14 @@ impl Repo {
         }
 
         let mut digests = HashSet::new();
-        insert_all_digest(&self.path.join("index"), &mut digests);
-        insert_all_digest(&self.path.join("chunks"), &mut digests);
+        insert_all_digest(&self.index_dir_path(), &mut digests);
+        insert_all_digest(&self.chunk_dir_path(), &mut digests);
         Ok(digests)
     }
 
     /// Return all reachable chunks
     pub fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+        info!("List reachable chunks");
         let mut reachable_digests = HashSet::new();
         let all_names = try!(self.list_names());
         for name in &all_names {
@@ -677,8 +721,8 @@ impl Repo {
 
     fn chunk_path_by_digest(&self, digest : &[u8], chunk_type : DataType) -> PathBuf {
         let i_or_c = match chunk_type {
-            DataType::Data => Path::new("chunks"),
-            DataType::Index => Path::new("index"),
+            DataType::Data => Path::new(DATA_SUBDIR),
+            DataType::Index => Path::new(INDEX_SUBDIR),
         };
 
         self.path.join(i_or_c)
@@ -731,8 +775,29 @@ impl Repo {
         try!(io::copy(&mut io::Cursor::new(data), writer));
         Ok(())
     }
-}
 
+    fn name_dir_path(&self) -> PathBuf {
+        self.path.join(NAME_SUBDIR)
+    }
+
+    fn index_dir_path(&self) -> PathBuf {
+        self.path.join(INDEX_SUBDIR)
+    }
+
+    fn chunk_dir_path(&self) -> PathBuf {
+        self.path.join(DATA_SUBDIR)
+    }
+
+    fn name_path(&self, name : &str) -> PathBuf {
+        self.name_dir_path().join(name)
+    }
+
+    /// Remove a stored name from repo
+    pub fn rm(&self, name : &str) -> Result<()> {
+        info!("Remove name {}", name);
+        fs::remove_file(self.name_path(name))
+    }
+}
 
 #[cfg(test)]
 mod tests;

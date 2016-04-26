@@ -58,10 +58,10 @@ fn byte_size() {
 
 #[test]
 fn random_sanity() {
-    let mut stored = vec!();
+    let mut names = vec!();
 
     let (repo, sk) = lib::Repo::init(&rand_tmp_dir()).unwrap();
-    for _ in 0..50 {
+    for _ in 0..20 {
         let data = rand_data(rand::weak_rng().gen_range(0, 1024 * 1024));
 
         let mut sha = sha2::Sha256::new();
@@ -70,10 +70,10 @@ fn random_sanity() {
         let mut digest = vec![0u8; 32];
         sha.result(&mut digest);
         repo.write(&name, &mut io::Cursor::new(data)).unwrap();
-        stored.push((name, digest));
+        names.push((name, digest));
     }
 
-    for &(ref name, ref digest) in &stored {
+    for &(ref name, ref digest) in &names {
         let mut data = vec!();
         repo.read(&name, &mut data, &sk).unwrap();
 
@@ -83,4 +83,21 @@ fn random_sanity() {
         sha.result(&mut read_digest);
         assert_eq!(digest, &read_digest);
     }
+
+    let reachable = repo.list_reachable_chunks().unwrap();
+    let stored = repo.list_stored_chunks().unwrap();
+
+    for digest in reachable.iter() {
+        assert!(stored.contains(digest));
+    }
+    for digest in stored.iter() {
+        assert!(stored.contains(digest));
+    }
+
+    repo.rm(&names[0].0).unwrap();
+    let reachable_after_rm = repo.list_reachable_chunks().unwrap();
+    let stored_after_rm = repo.list_stored_chunks().unwrap();
+
+    assert_eq!(stored_after_rm.len(), stored.len());
+    assert!(reachable_after_rm.len() < reachable.len());
 }
