@@ -463,6 +463,60 @@ impl Repo {
         })
     }
 
+    /// Remove a stored name from repo
+    pub fn rm(&self, name : &str) -> Result<()> {
+        info!("Remove name {}", name);
+        fs::remove_file(self.name_path(name))
+    }
+
+
+    pub fn write<R : Read>(&self, name : &str, reader : &mut R) -> Result<()> {
+        info!("Write name {}", name);
+        let (tx, rx) = mpsc::channel();
+        let self_clone = self.clone();
+        let chunk_writer_join = thread::spawn(move || self_clone.chunk_writer(rx));
+
+        let final_digest = try!(chunk_and_send_to_writer(&tx, reader, DataType::Data));
+
+        tx.send(ChunkWriterMessage::Exit).unwrap();
+        chunk_writer_join.join().unwrap();
+
+        self.store_digest_as_name(&final_digest, name)
+    }
+
+    pub fn read<W : Write>(&self, name : &str, writer: &mut W, sec_key : &SecretKey) -> Result<()> {
+        info!("Read name {}", name);
+        let digest = try!(self.name_to_digest(name));
+
+        self.read_recursively(
+            &digest,
+            writer,
+            DataType::Data,
+            Some(&sec_key.0)
+            )
+    }
+
+    pub fn du(&self, name : &str, sec_key : &SecretKey) -> Result<u64> {
+        info!("DU name {}", name);
+
+        let digest = try!(self.name_to_digest(name));
+
+        self.du_by_digest(&digest, sec_key)
+    }
+
+    pub fn du_by_digest(&self, digest : &[u8], sec_key : &SecretKey) -> Result<u64> {
+        let mut counter = CounterWriter::new();
+        try!(self.read_recursively(
+            &digest,
+            &mut counter,
+            DataType::Data,
+            Some(&sec_key.0)
+            ));
+
+        Ok(counter.count)
+    }
+
+
     /// Accept messages on rx and writes them to chunk files
     fn chunk_writer(&self, rx : mpsc::Receiver<ChunkWriterMessage>) {
         let mut previous_parts = vec!();
@@ -538,32 +592,6 @@ impl Repo {
         }
     }
 
-    pub fn write<R : Read>(&self, name : &str, reader : &mut R) -> Result<()> {
-        info!("Write name {}", name);
-        let (tx, rx) = mpsc::channel();
-        let self_clone = self.clone();
-        let chunk_writer_join = thread::spawn(move || self_clone.chunk_writer(rx));
-
-        let final_digest = try!(chunk_and_send_to_writer(&tx, reader, DataType::Data));
-
-        tx.send(ChunkWriterMessage::Exit).unwrap();
-        chunk_writer_join.join().unwrap();
-
-        self.store_digest_as_name(&final_digest, name)
-    }
-
-    pub fn read<W : Write>(&self, name : &str, writer: &mut W, sec_key : &SecretKey) -> Result<()> {
-        info!("Read name {}", name);
-        let digest = try!(self.name_to_digest(name));
-
-        self.read_recursively(
-            &digest,
-            writer,
-            DataType::Data,
-            Some(&sec_key.0)
-            )
-    }
-
     pub fn name_to_digest(&self, name : &str) -> Result<Vec<u8>> {
         debug!("Resolving name {}", name);
         let name_path = self.name_path(name);
@@ -593,28 +621,6 @@ impl Repo {
         try!(file.write_all(digest));
         Ok(())
     }
-
-    pub fn du(&self, name : &str, sec_key : &SecretKey) -> Result<u64> {
-        info!("DU name {}", name);
-
-        let digest = try!(self.name_to_digest(name));
-
-        self.du_by_digest(&digest, sec_key)
-    }
-
-
-    pub fn du_by_digest(&self, digest : &[u8], sec_key : &SecretKey) -> Result<u64> {
-        let mut counter = CounterWriter::new();
-        try!(self.read_recursively(
-            &digest,
-            &mut counter,
-            DataType::Data,
-            Some(&sec_key.0)
-            ));
-
-        Ok(counter.count)
-    }
-
     fn traverse_with<'a>(
         &'a self,
         digest : &[u8],
@@ -790,12 +796,6 @@ impl Repo {
 
     fn name_path(&self, name : &str) -> PathBuf {
         self.name_dir_path().join(name)
-    }
-
-    /// Remove a stored name from repo
-    pub fn rm(&self, name : &str) -> Result<()> {
-        info!("Remove name {}", name);
-        fs::remove_file(self.name_path(name))
     }
 }
 
