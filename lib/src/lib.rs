@@ -276,6 +276,7 @@ trait Traverser<'a> {
     fn on_data(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()>;
 }
 
+// Traverser that reads the data into a given writer
 struct TraverseReader<'a> {
     writer : &'a mut Write,
     data_type : DataType,
@@ -309,20 +310,18 @@ impl<'a> Traverser<'a> for TraverseReader<'a> {
     }
 }
 
-struct ReachabilityTraverser<'a> {
-    reachable : &'a mut HashSet<Vec<u8>>,
+// Traverser that only touches and does not read the underlying data
+struct TraverserSkimmer<'a> {
     writer : Option<&'a mut Write>,
     data_type : DataType,
     sec_key : Option<&'a box_::SecretKey>,
 }
 
-impl<'a> ReachabilityTraverser<'a> {
-    fn new(reachable: &'a mut HashSet<Vec<u8>>,
-           writer : Option<&'a mut Write>,
+impl<'a> TraverserSkimmer<'a> {
+    fn new( writer : Option<&'a mut Write>,
            data_type : DataType,
            sec_key : Option<&'a box_::SecretKey>) -> Self {
-        ReachabilityTraverser{
-            reachable: reachable,
+        TraverserSkimmer{
             writer : writer,
             data_type : data_type,
             sec_key : sec_key,
@@ -330,16 +329,14 @@ impl<'a> ReachabilityTraverser<'a> {
     }
 }
 
-impl<'a> Traverser<'a> for ReachabilityTraverser<'a> {
+impl<'a> Traverser<'a> for TraverserSkimmer<'a> {
     fn on_index(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
         trace!("Traversing index: {}", digest.to_hex());
-        self.reachable.insert(digest.to_owned());
         let mut index_data = vec!();
         try!(accessor.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
 
         assert!(index_data.len() == 32);
 
-        self.reachable.insert(index_data.clone());
         let mut translator = self.writer.take().map(|writer| {
             IndexTranslatorWriter::new(
                 accessor,
@@ -347,8 +344,7 @@ impl<'a> Traverser<'a> for ReachabilityTraverser<'a> {
                 self.data_type,
                 self.sec_key)
         });
-        let mut sub_traverser = ReachabilityTraverser::new(
-            self.reachable,
+        let mut sub_traverser = TraverserSkimmer::new(
             translator.as_mut().map(|write| write as &mut io::Write),
             DataType::Index,
             None);
@@ -357,12 +353,14 @@ impl<'a> Traverser<'a> for ReachabilityTraverser<'a> {
 
     fn on_data(&mut self, accessor: &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
         trace!("Traversing data: {}", digest.to_hex());
-        self.reachable.insert(digest.to_owned());
-        self.writer.take().map_or(Ok(()), |writer|
-                        accessor.read_chunk_into(
-                            digest, DataType::Data, self.data_type,
-                            writer, self.sec_key
-                            ))
+        if let Some(writer) = self.writer.take() {
+            accessor.read_chunk_into(
+                digest, DataType::Data, self.data_type,
+                writer, self.sec_key
+                )
+        } else {
+            accessor.touch(digest)
+        }
     }
 }
 
@@ -393,6 +391,7 @@ impl<'a> Write for IndexTranslatorWriter<'a> {
 
 trait ChunkAccessor {
     fn repo(&self) -> &Repo;
+
     fn read_chunk_into(
         &self,
         digest : &[u8],
@@ -402,20 +401,9 @@ trait ChunkAccessor {
         sec_key : Option<&box_::SecretKey>,
         ) -> Result<()>;
 
-    /*
-    fn traverse_with<'a>(
-        &'a self,
-        digest : &[u8],
-        traverser : &mut Traverser<'a>,
-        ) -> Result<()> {
 
-        let chunk_type = try!(self.repo().chunk_type(digest));
+    fn touch(&self, _digest : &[u8]) -> Result<()> { Ok(()) }
 
-        match chunk_type {
-            DataType::Index => traverser.on_index(&self, digest),
-            DataType::Data => traverser.on_data(&self, digest),
-        }
-    }*/
     fn traverse_with<'a>(
         &'a self,
         digest : &[u8],
@@ -750,8 +738,7 @@ impl Repo {
                                ) -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut traverser = ReachabilityTraverser::new(
-            reachable_digests,
+        let mut traverser = TraverserSkimmer::new(
             None,
             DataType::Data,
             None);
