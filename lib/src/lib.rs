@@ -279,67 +279,24 @@ impl<'a> Write for IndexTranslator<'a>
     fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
-trait Traverser<'a> {
-    fn on_index(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()>;
-    fn on_data(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()>;
-}
-
-// Traverser that reads the data into a given writer
-struct TraverseReader<'a> {
-    writer : &'a mut Write,
-    data_type : DataType,
-    sec_key : Option<&'a box_::SecretKey>,
-}
-
-impl<'a> TraverseReader<'a> {
-    fn new(writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
-        TraverseReader {
-            writer : writer,
-            data_type : data_type,
-            sec_key : sec_key,
-        }
-    }
-}
-
-impl<'a> Traverser<'a> for TraverseReader<'a> {
-    fn on_index(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
-        let mut index_data = vec!();
-        try!(accessor.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
-
-        assert!(index_data.len() == 32);
-
-        let mut translator = IndexTranslator::new(
-            accessor, Some(self.writer), self.data_type, self.sec_key
-            );
-        let mut sub_traverser = TraverseReader::new(&mut translator, DataType::Index, None);
-        accessor.traverse_with(&index_data, &mut sub_traverser)
-    }
-
-    fn on_data(&mut self, accessor: &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
-        accessor.read_chunk_into(digest, DataType::Data, self.data_type, self.writer, self.sec_key)
-    }
-}
-
 // Traverser that only touches and does not read the underlying data
-struct TraverserSkimmer<'a> {
+struct Traverser<'a> {
     writer : Option<&'a mut Write>,
     data_type : DataType,
     sec_key : Option<&'a box_::SecretKey>,
 }
 
-impl<'a> TraverserSkimmer<'a> {
+impl<'a> Traverser<'a> {
     fn new(writer : Option<&'a mut Write>,
            data_type : DataType,
            sec_key : Option<&'a box_::SecretKey>) -> Self {
-        TraverserSkimmer{
+        Traverser{
             writer : writer,
             data_type : data_type,
             sec_key : sec_key,
         }
     }
-}
 
-impl<'a> Traverser<'a> for TraverserSkimmer<'a> {
     fn on_index(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec!();
@@ -353,35 +310,18 @@ impl<'a> Traverser<'a> for TraverserSkimmer<'a> {
 
         assert!(index_data.len() == 32);
 
-        if let Some(writer) = self.writer.take() {
-            info!("Here");
-            let mut translator = IndexTranslator::new(
-                accessor,
-                Some(writer),
-                self.data_type,
-                self.sec_key
-                );
+        let mut translator = IndexTranslator::new(
+            accessor,
+            self.writer.take(),
+            self.data_type,
+            self.sec_key
+            );
 
-            let mut sub_traverser = TraverserSkimmer::new(
-                Some(&mut translator),
-                DataType::Index,
-                None);
-            accessor.traverse_with(&index_data, &mut sub_traverser)
-        } else {
-            info!("There");
-            let mut translator = IndexTranslator::new(
-                accessor,
-                None,
-                self.data_type,
-                self.sec_key
-                );
-
-            let mut sub_traverser = TraverseReader::new(
-                &mut translator,
-                DataType::Index,
-                None);
-            accessor.traverse_with(&index_data, &mut sub_traverser)
-        }
+        let mut sub_traverser = Traverser::new(
+            Some(&mut translator),
+            DataType::Index,
+            None);
+        accessor.traverse_with(&index_data, &mut sub_traverser)
     }
 
     fn on_data(&mut self, accessor: &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
@@ -795,7 +735,7 @@ impl Repo {
         sec_key : Option<&box_::SecretKey>
         ) -> Result<()> {
 
-        let mut traverser = TraverseReader::new(writer, data_type, sec_key);
+        let mut traverser = Traverser::new(Some(writer), data_type, sec_key);
         self.chunk_accessor().traverse_with(digest, &mut traverser)
     }
 
@@ -805,7 +745,7 @@ impl Repo {
                                ) -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut traverser = TraverserSkimmer::new(
+        let mut traverser = Traverser::new(
             None,
             DataType::Data,
             None);
