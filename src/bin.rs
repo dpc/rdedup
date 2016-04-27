@@ -39,12 +39,14 @@ fn read_sec_key() -> lib::SecretKey {
 
 enum Command {
     Help,
-    Write,
-    Read,
+    Store,
+    Load,
     Init,
     DU,
     GC,
-    RM,
+    Missing,
+    Remove,
+    List,
 }
 
 impl FromStr for Command {
@@ -52,12 +54,17 @@ impl FromStr for Command {
     fn from_str(src: &str) -> Result<Command, ()> {
         match src {
             "help" => Ok(Command::Help),
-            "write" => Ok(Command::Write),
-            "read" => Ok(Command::Read),
+            "store" => Ok(Command::Store),
+            "load" => Ok(Command::Load),
             "init" => Ok(Command::Init),
+            "rm" => Ok(Command::Remove),
+            "delete" => Ok(Command::Remove),
+            "del" => Ok(Command::Remove),
+            "ls" => Ok(Command::List),
+            "list" => Ok(Command::List),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
-            "rm" => Ok(Command::RM),
+            "missing" => Ok(Command::Missing),
             _ => Err(()),
         }
     }
@@ -93,7 +100,7 @@ fn main() {
         Command::Help => {
             printerrln!("TODO: List of implemented commands");
         },
-        Command::Write => {
+        Command::Load => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
@@ -101,7 +108,7 @@ fn main() {
             let repo = Repo::open(dir_path).unwrap();
             repo.write(&args[0], &mut io::stdin()).unwrap();
         },
-        Command::Read => {
+        Command::Store => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
@@ -110,7 +117,7 @@ fn main() {
             let sec_key = read_sec_key();
             repo.read(&args[0], &mut io::stdout(), &sec_key).unwrap();
         },
-        Command::RM => {
+        Command::Remove => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
@@ -146,10 +153,35 @@ fn main() {
             let stored = repo.list_stored_chunks().unwrap();
 
             for digest in stored.difference(&reachable) {
-                println!("Unreachable: {}", digest.to_hex());
+                println!("{}", digest.to_hex());
             }
+        }
+        Command::Missing => {
+            if args.len() != 0 {
+                printerrln!("Unnecessary argument");
+                process::exit(-1);
+            }
+
+            let repo = Repo::open(&dir_path).unwrap();
+
+            let reachable = repo.list_reachable_chunks().unwrap();
+            let stored = repo.list_stored_chunks().unwrap();
+
             for digest in reachable.difference(&stored) {
-                println!("Missing: {}", digest.to_hex());
+                println!("{}", digest.to_hex());
+            }
+        }
+        Command::List => {
+            if args.len() != 0 {
+                printerrln!("Unnecessary argument");
+                process::exit(-1);
+            }
+
+            let repo = Repo::open(&dir_path).unwrap();
+
+
+            for name in repo.list_names().unwrap() {
+                println!("{}", name);
             }
         }
     }
