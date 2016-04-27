@@ -15,6 +15,7 @@ use std::{fs, mem, thread, io};
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
 use std::collections::HashSet;
+use std::cell::RefCell;
 
 use std::sync::mpsc;
 
@@ -214,23 +215,21 @@ impl Write for CounterWriter {
     fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
-type OnDataF<'a> = Box<FnMut(&'a ChunkAccessor, &[u8], DataType, Option<&'a box_::SecretKey>) -> Result<()> + 'a>;
-
 // Can be feed Index data, will call
 // on_data for every data digest
 struct IndexTranslator<'a> {
     accessor : &'a ChunkAccessor,
     digest : Vec<u8>,
+    writer : Option<&'a mut Write>,
     data_type : DataType,
     sec_key : Option<&'a box_::SecretKey>,
-    on_data : OnDataF<'a>,
 }
 
 impl<'a> IndexTranslator<'a>{
     fn new(
         accessor : &'a ChunkAccessor,
+        writer : Option<&'a mut Write>,
         data_type : DataType,
-        on_data : OnDataF<'a>,
         sec_key : Option<&'a box_::SecretKey>
         ) -> Self {
         IndexTranslator {
@@ -238,7 +237,7 @@ impl<'a> IndexTranslator<'a>{
             digest : vec!(),
             data_type : data_type,
             sec_key : sec_key,
-            on_data : on_data,
+            writer : writer,
         }
     }
 }
@@ -257,18 +256,27 @@ impl<'a> Write for IndexTranslator<'a>
             let needs = 32 - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
-            try!((self.on_data)(self.accessor, &self.digest, self.data_type, self.sec_key));
-            self.digest.clear();
+            let &mut IndexTranslator {
+                ref accessor,
+                ref mut digest,
+                data_type,
+                sec_key,
+                ref mut writer,
+            } = self;
+            if let &mut Some(ref mut writer) = writer {
+            try!(
+                accessor.repo().read_recursively(
+                    &digest, *writer, data_type, sec_key
+                    )
+                );
+            } else {
+                try!(accessor.touch(&digest))
+            }
+            digest.clear();
         }
     }
 
     fn flush(&mut self) -> Result<()> { Ok(()) }
-}
-
-// Can be feed Index data, will
-// write translated data to `writer`.
-struct IndexTranslatorWriter<'a> {
-    translator : IndexTranslator<'a>
 }
 
 trait Traverser<'a> {
@@ -300,7 +308,9 @@ impl<'a> Traverser<'a> for TraverseReader<'a> {
 
         assert!(index_data.len() == 32);
 
-        let mut translator = IndexTranslatorWriter::new(accessor, self.writer, self.data_type, self.sec_key);
+        let mut translator = IndexTranslator::new(
+            accessor, Some(self.writer), self.data_type, self.sec_key
+            );
         let mut sub_traverser = TraverseReader::new(&mut translator, DataType::Index, None);
         accessor.traverse_with(&index_data, &mut sub_traverser)
     }
@@ -318,7 +328,7 @@ struct TraverserSkimmer<'a> {
 }
 
 impl<'a> TraverserSkimmer<'a> {
-    fn new( writer : Option<&'a mut Write>,
+    fn new(writer : Option<&'a mut Write>,
            data_type : DataType,
            sec_key : Option<&'a box_::SecretKey>) -> Self {
         TraverserSkimmer{
@@ -333,22 +343,45 @@ impl<'a> Traverser<'a> for TraverserSkimmer<'a> {
     fn on_index(&mut self, accessor : &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec!();
-        try!(accessor.read_chunk_into(digest, DataType::Index, DataType::Index, &mut index_data, self.sec_key));
+        try!(accessor.read_chunk_into(
+                digest,
+                DataType::Index,
+                DataType::Index,
+                &mut index_data,
+                self.sec_key
+                ));
 
         assert!(index_data.len() == 32);
 
-        let mut translator = self.writer.take().map(|writer| {
-            IndexTranslatorWriter::new(
+        if let Some(writer) = self.writer.take() {
+            info!("Here");
+            let mut translator = IndexTranslator::new(
                 accessor,
-                writer,
+                Some(writer),
                 self.data_type,
-                self.sec_key)
-        });
-        let mut sub_traverser = TraverserSkimmer::new(
-            translator.as_mut().map(|write| write as &mut io::Write),
-            DataType::Index,
-            None);
-        accessor.traverse_with(&index_data, &mut sub_traverser)
+                self.sec_key
+                );
+
+            let mut sub_traverser = TraverserSkimmer::new(
+                Some(&mut translator),
+                DataType::Index,
+                None);
+            accessor.traverse_with(&index_data, &mut sub_traverser)
+        } else {
+            info!("There");
+            let mut translator = IndexTranslator::new(
+                accessor,
+                None,
+                self.data_type,
+                self.sec_key
+                );
+
+            let mut sub_traverser = TraverseReader::new(
+                &mut translator,
+                DataType::Index,
+                None);
+            accessor.traverse_with(&index_data, &mut sub_traverser)
+        }
     }
 
     fn on_data(&mut self, accessor: &'a ChunkAccessor, digest : &[u8]) -> Result<()> {
@@ -364,30 +397,6 @@ impl<'a> Traverser<'a> for TraverserSkimmer<'a> {
     }
 }
 
-impl<'a> IndexTranslatorWriter<'a> {
-    fn new(accessor : &'a ChunkAccessor, writer : &'a mut Write, data_type : DataType, sec_key : Option<&'a box_::SecretKey>) -> Self {
-        let on_data = move |accessor: &ChunkAccessor, digest : &[u8], data_type : DataType, sec_key : Option<&box_::SecretKey>| {
-            accessor.repo().read_recursively(digest, writer, data_type, sec_key)
-        };
-        IndexTranslatorWriter {
-            translator: IndexTranslator::new(
-                            accessor,
-                            data_type,
-                            Box::new(on_data),
-                            sec_key)
-        }
-    }
-}
-
-impl<'a> Write for IndexTranslatorWriter<'a> {
-    fn write(&mut self,  bytes : &[u8]) -> Result<usize> {
-        self.translator.write(bytes)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.translator.flush()
-    }
-}
 
 trait ChunkAccessor {
     fn repo(&self) -> &Repo;
@@ -485,6 +494,59 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         Ok(())
     }
 }
+
+struct RecordingChunkAccessor<'a> {
+    raw : DefaultChunkAccessor<'a>,
+    accessed : RefCell<&'a mut HashSet<Vec<u8>>>,
+}
+
+impl<'a> RecordingChunkAccessor<'a> {
+    fn new(repo : &'a Repo, accessed : &'a mut HashSet<Vec<u8>>,
+) -> Self {
+        RecordingChunkAccessor {
+            raw : DefaultChunkAccessor::new(repo),
+            accessed : RefCell::new(accessed),
+        }
+    }
+}
+
+impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
+    fn repo(&self) -> &Repo {
+        self.raw.repo()
+    }
+
+    fn traverse_with<'b>(
+        &'b self,
+        digest : &[u8],
+        traverser : &mut Traverser<'b>,
+        ) -> Result<()> {
+
+        let chunk_type = try!(self.repo().chunk_type(digest));
+
+        let s = &*self as &'b ChunkAccessor;
+        match chunk_type {
+            DataType::Index => traverser.on_index(s, digest),
+            DataType::Data => traverser.on_data(s, digest),
+        }
+    }
+
+    fn touch(&self, digest : &[u8]) -> Result<()> {
+        self.accessed.borrow_mut().insert(digest.to_owned());
+        Ok(())
+    }
+
+    fn read_chunk_into(&self,
+                       digest : &[u8],
+                       chunk_type : DataType,
+                       data_type : DataType,
+                       writer: &mut Write,
+                       sec_key : Option<&box_::SecretKey>,
+                       ) -> Result<()> {
+        try!(self.touch(digest));
+        self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
+    }
+}
+
 
 #[derive(Clone, Debug)]
 pub struct Repo {
@@ -615,6 +677,11 @@ impl Repo {
         DefaultChunkAccessor::new(self)
     }
 
+    fn recording_chunk_accessor<'a>(&'a self, accessed : &'a mut HashSet<Vec<u8>>) -> RecordingChunkAccessor<'a> {
+        RecordingChunkAccessor::new(self, accessed)
+    }
+
+
     /// Accept messages on rx and writes them to chunk files
     fn chunk_writer(&self, rx : mpsc::Receiver<ChunkWriterMessage>) {
         let mut previous_parts = vec!();
@@ -742,7 +809,7 @@ impl Repo {
             None,
             DataType::Data,
             None);
-        self.chunk_accessor().traverse_with(digest, &mut traverser)
+        self.recording_chunk_accessor(reachable_digests).traverse_with(digest, &mut traverser)
     }
 
     /// List all names
