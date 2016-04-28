@@ -18,11 +18,11 @@ path = "src/lib.rs"
 [dependencies]
 rollsum = "0.2.0"
 rust-crypto = "0.2"
-log = "*"
-rustc-serialize = "*"
-argparse = "*"
+log = "0.3.6"
+rustc-serialize = "0.3.19"
+argparse = "0.2.1"
 sodiumoxide = "0.0.10"
-flate2 = "*"
+flate2 = "0.2.13"
 
 [dev-dependencies]
-rand = "*"
+rand = "0.3.14"
