@@ -1,2 +1,5 @@
 target
 Cargo.lock
+testdata
+tags
+backup/
