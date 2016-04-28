@@ -23,18 +23,11 @@ macro_rules! printerrln {
 }
 
 
-fn read_sec_key() -> lib::SecretKey {
-    loop {
-        printerrln!("Enter secret key:");
-        let mut s = String::new();
-        io::stdin().read_line(&mut s).unwrap();
-        match lib::SecretKey::from_str(&s) {
-            Some(sk) => return sk,
-            None => {
-                printerrln!("Invalid!");
-            }
-        }
-    }
+fn read_passphrase() -> String {
+    printerrln!("Enter passphrase:");
+    let mut s = String::new();
+    io::stdin().read_line(&mut s).unwrap();
+    s
 }
 
 enum Command {
@@ -45,6 +38,7 @@ enum Command {
     DU,
     GC,
     Missing,
+    Unreachable,
     Remove,
     List,
 }
@@ -64,6 +58,7 @@ impl FromStr for Command {
             "list" => Ok(Command::List),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
+            "unreachable" => Ok(Command::Unreachable),
             "missing" => Ok(Command::Missing),
             _ => Err(()),
         }
@@ -100,7 +95,7 @@ fn main() {
         Command::Help => {
             printerrln!("TODO: List of implemented commands");
         },
-        Command::Load => {
+        Command::Store => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
@@ -108,14 +103,14 @@ fn main() {
             let repo = Repo::open(dir_path).unwrap();
             repo.write(&args[0], &mut io::stdin()).unwrap();
         },
-        Command::Store => {
+        Command::Load => {
             if args.len() != 1 {
                 printerrln!("Name required");
                 process::exit(-1);
             }
             let repo = Repo::open(dir_path).unwrap();
-            let sec_key = read_sec_key();
-            repo.read(&args[0], &mut io::stdout(), &sec_key).unwrap();
+            let pass = read_passphrase();
+            repo.read(&args[0], &mut io::stdout(), &pass).unwrap();
         },
         Command::Remove => {
             if args.len() != 1 {
@@ -126,9 +121,8 @@ fn main() {
             repo.rm(&args[0]).unwrap();
         },
         Command::Init => {
-            let (_, sec_key) = Repo::init(dir_path).unwrap();
-                printerrln!("Write down the secret key:");
-                println!("{}", sec_key.to_string());
+            let pass = read_passphrase();
+            Repo::init(dir_path, &pass).unwrap();
         },
         Command::DU => {
             if args.len() != 1 {
@@ -136,12 +130,12 @@ fn main() {
                 process::exit(-1);
             }
             let repo = Repo::open(dir_path).unwrap();
-            let sec_key = read_sec_key();
+            let pass = read_passphrase();
 
-            let size = repo.du(&args[0], &sec_key).unwrap();
+            let size = repo.du(&args[0], &pass).unwrap();
             println!("{}", size);
         },
-        Command::GC => {
+        Command::Unreachable => {
             if args.len() != 0 {
                 printerrln!("Unnecessary argument");
                 process::exit(-1);
@@ -155,7 +149,18 @@ fn main() {
             for digest in stored.difference(&reachable) {
                 println!("{}", digest.to_hex());
             }
-        }
+        },
+        Command::GC => {
+            if args.len() != 0 {
+                printerrln!("Unnecessary argument");
+                process::exit(-1);
+            }
+
+            let repo = Repo::open(&dir_path).unwrap();
+
+            let removed = repo.gc().unwrap();
+            println!("Removed {} chunks", removed);
+        },
         Command::Missing => {
             if args.len() != 0 {
                 printerrln!("Unnecessary argument");

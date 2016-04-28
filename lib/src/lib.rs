@@ -23,7 +23,7 @@ use rollsum::Engine;
 use crypto::sha2;
 use crypto::digest::Digest;
 
-use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::{box_,pwhash, secretbox};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum DataType {
@@ -133,6 +133,22 @@ fn quick_sha256(data : &[u8]) -> Vec<u8> {
     return sha256_digest
 }
 
+fn derive_key(passphrase : &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
+    let mut derived_key = secretbox::Key([0; secretbox::KEYBYTES]);
+    {
+        let secretbox::Key(ref mut kb) = derived_key;
+        try!(pwhash::derive_key(kb, passphrase.as_bytes(), salt,
+        pwhash::OPSLIMIT_INTERACTIVE,
+        pwhash::MEMLIMIT_INTERACTIVE)
+             .map_err(|_| io::Error::new(
+                     io::ErrorKind::InvalidData, "can't derive encryption key from passphrase"
+                     ))
+            );
+    }
+
+    Ok(derived_key)
+}
+
 /// Store data, using input_f to get chunks of data
 ///
 /// Return final digest
@@ -182,18 +198,8 @@ fn pub_key_file_path(path : &Path) -> PathBuf {
     path.join("pub_key")
 }
 
-pub struct SecretKey(box_::SecretKey);
-
-impl SecretKey {
-    pub fn from_str(s : &str) -> Option<Self> {
-        s.from_hex().ok()
-            .and_then(|bytes| box_::SecretKey::from_slice(&bytes))
-            .map(|sk| SecretKey(sk))
-    }
-
-    pub fn to_string(&self) -> String {
-        (self.0).0.to_hex()
-    }
+fn sec_key_file_path(path : &Path) -> PathBuf {
+    path.join("sec_key")
 }
 
 struct CounterWriter {
@@ -499,7 +505,7 @@ const NAME_SUBDIR : &'static str = "name";
 const INDEX_SUBDIR : &'static str ="index";
 
 impl Repo {
-    pub fn init(repo_path : &Path) -> Result<(Repo, SecretKey)> {
+    pub fn init(repo_path : &Path, passphrase : &str) -> Result<Repo> {
         info!("Init repo {}", repo_path.to_string_lossy());
         if repo_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists, "repo already exists"));
@@ -510,19 +516,38 @@ impl Repo {
         try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
 
         try!(fs::create_dir_all(&repo_path));
-        let pubkey_path = pub_key_file_path(&repo_path);
-
-        let mut pubkey_file = try!(fs::File::create(pubkey_path));
         let (pk, sk) = box_::gen_keypair();
+        {
+            let pubkey_path = pub_key_file_path(&repo_path);
 
-        try!((&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes()));
-        try!(pubkey_file.flush());
+            let mut pubkey_file = try!(fs::File::create(pubkey_path));
+
+
+            try!((&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes()));
+            try!(pubkey_file.flush());
+        }
+        {
+            let salt = pwhash::gen_salt();
+            let nonce = secretbox::gen_nonce();
+
+            let derived_key = try!(derive_key(passphrase, &salt));
+
+            let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
+
+            let seckey_path = sec_key_file_path(&repo_path);
+            let mut seckey_file = try!(fs::File::create(seckey_path));
+            let mut writer = &mut seckey_file as &mut Write;
+            try!(writer.write_all(&encrypted_seckey.to_hex().as_bytes()));
+            try!(writer.write_all(&nonce.0.to_hex().as_bytes()));
+            try!(writer.write_all(&salt.0.to_hex().as_bytes()));
+            try!(writer.flush());
+        }
 
         let repo = Repo {
             path : repo_path.to_owned(),
             pub_key : pk,
         };
-        Ok((repo, SecretKey(sk)))
+        Ok(repo)
     }
 
     pub fn open(repo_path : &Path) -> Result<Repo> {
@@ -581,36 +606,101 @@ impl Repo {
         self.store_digest_as_name(&final_digest, name)
     }
 
-    pub fn read<W : Write>(&self, name : &str, writer: &mut W, sec_key : &SecretKey) -> Result<()> {
+    pub fn read<W : Write>(&self, name : &str, writer: &mut W, passphrase : &str) -> Result<()> {
         info!("Read name {}", name);
         let digest = try!(self.name_to_digest(name));
+
+        let sec_key = try!(self.load_sec_key(passphrase));
 
         self.read_recursively(
             &digest,
             writer,
             DataType::Data,
-            Some(&sec_key.0)
+            Some(&sec_key)
             )
     }
 
-    pub fn du(&self, name : &str, sec_key : &SecretKey) -> Result<u64> {
+    pub fn du(&self, name : &str, passphrase : &str) -> Result<u64> {
         info!("DU name {}", name);
 
         let digest = try!(self.name_to_digest(name));
 
-        self.du_by_digest(&digest, sec_key)
+        self.du_by_digest(&digest, passphrase)
     }
 
-    pub fn du_by_digest(&self, digest : &[u8], sec_key : &SecretKey) -> Result<u64> {
+    pub fn du_by_digest(&self, digest : &[u8], passphrase : &str) -> Result<u64> {
+
+        let sec_key = try!(self.load_sec_key(passphrase));
+
         let mut counter = CounterWriter::new();
         try!(self.read_recursively(
             &digest,
             &mut counter,
             DataType::Data,
-            Some(&sec_key.0)
+            Some(&sec_key)
             ));
 
         Ok(counter.count)
+    }
+
+    fn read_hex_file(&self, path : &Path) -> Result<Vec<u8>> {
+        let mut file = try!(fs::File::open(&path));
+
+        let mut buf = vec!();
+        try!(file.read_to_end(&mut buf));
+
+        let str_ = try!(
+            std::str::from_utf8(&buf)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8"))
+            );
+        let bytes = try!(
+            str_.from_hex()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex"))
+            );
+        Ok(bytes)
+    }
+
+    fn load_sec_key(&self, passphrase : &str) -> Result<box_::SecretKey> {
+        let seckey_path = sec_key_file_path(&self.path);
+        if !seckey_path.exists() {
+            return Err(Error::new(io::ErrorKind::NotFound, "seckey file not found"));
+        }
+
+
+        let secfile_bytes = try!(self.read_hex_file(&seckey_path));
+
+        const TOTAL_SECKEY_FILE_LEN : usize =
+            pwhash::SALTBYTES +
+            secretbox::NONCEBYTES +
+            secretbox::MACBYTES +
+            box_::SECRETKEYBYTES
+            ;
+        if secfile_bytes.len() != TOTAL_SECKEY_FILE_LEN {
+            return Err(Error::new(io::ErrorKind::InvalidData, "seckey file is not of correct length"));
+        }
+
+        let (sealed_key, rest) = secfile_bytes.split_at(box_::SECRETKEYBYTES + secretbox::MACBYTES);
+        let (nonce, rest) = rest.split_at(secretbox::NONCEBYTES);
+        let (salt, rest) = rest.split_at(pwhash::SALTBYTES);
+        assert!(rest.len() == 0);
+
+        let salt = pwhash::Salt::from_slice(salt).unwrap();
+        let nonce = secretbox::Nonce::from_slice(nonce).unwrap();
+
+        let derived_key = try!(derive_key(passphrase, &salt));
+
+        let plain_seckey = try!(
+            secretbox::open(sealed_key, &nonce, &derived_key)
+            .map_err(|_| io::Error::new(
+                    io::ErrorKind::InvalidData, "can't decrypt key using given passphrase"
+                    ))
+            );
+        let sec_key = try!(
+            box_::SecretKey::from_slice(&plain_seckey)
+            .ok_or(io::Error::new(io::ErrorKind::InvalidData, "encrypted seckey data invalid: can't convert to seckey"))
+            );
+
+        Ok(sec_key)
     }
 
     fn chunk_accessor<'a>(&'a self) -> DefaultChunkAccessor<'a> {
@@ -828,6 +918,24 @@ impl Repo {
             .join(&digest.to_hex())
     }
 
+    fn rm_chunk_by_digest(&self, digest : &[u8]) -> Result<()> {
+        let chunk_type = try!(self.chunk_type(digest));
+        let path = self.chunk_path_by_digest(digest, chunk_type);
+
+        fs::remove_file(path)
+    }
+
+    pub fn gc(&self) -> Result<usize> {
+        let reachable = self.list_reachable_chunks().unwrap();
+        let stored = self.list_stored_chunks().unwrap();
+
+        let mut removed = 0;
+        for digest in stored.difference(&reachable) {
+            try!(self.rm_chunk_by_digest(digest));
+            removed += 1
+        }
+        Ok(removed)
+    }
 
     fn name_dir_path(&self) -> PathBuf {
         self.path.join(NAME_SUBDIR)
