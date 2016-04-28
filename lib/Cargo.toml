@@ -2,6 +2,14 @@
 name = "rdedup-lib"
 version = "0.0.1"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+description = "Data deduplication with compression and public key encryption. - library"
+keywords = ["mio", "aio", "io", "coroutine", "async"]
+license = "MPL-2.0"
+documentation = "https://dpc.github.io/rdedup-lib/"
+homepage = "https://github.com/dpc/rdedup"
+repository = "https://github.com/dpc/rdedup"
+readme = "README.md"
+
 
 [lib]
 name = "rdedup_lib"
