@@ -9,7 +9,7 @@ extern crate flate2;
 #[cfg(test)]
 extern crate rand;
 
-use std::io::{Read, Write, Result, Error};
+use std::io::{BufRead, Read, Write, Result, Error};
 
 use std::{fs, mem, thread, io};
 use std::path::{Path, PathBuf};
@@ -24,6 +24,9 @@ use crypto::sha2;
 use crypto::digest::Digest;
 
 use sodiumoxide::crypto::{box_,pwhash, secretbox};
+
+const REPO_VERSION_LOWEST : u32 = 0;
+const REPO_VERSION_CURRENT : u32 = 0;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum DataType {
@@ -200,6 +203,10 @@ fn pub_key_file_path(path : &Path) -> PathBuf {
 
 fn sec_key_file_path(path : &Path) -> PathBuf {
     path.join("sec_key")
+}
+
+fn version_file_path(path : &Path) -> PathBuf {
+    path.join("version")
 }
 
 struct CounterWriter {
@@ -542,6 +549,12 @@ impl Repo {
             try!(writer.write_all(&salt.0.to_hex().as_bytes()));
             try!(writer.flush());
         }
+        {
+            let version_path = version_file_path(&repo_path);
+            let mut seckey_file = try!(fs::File::create(version_path));
+            let mut writer = &mut seckey_file as &mut Write;
+            try!(write!(writer, "{}", REPO_VERSION_CURRENT));
+        }
 
         let repo = Repo {
             path : repo_path.to_owned(),
@@ -559,6 +572,36 @@ impl Repo {
         let pubkey_path = pub_key_file_path(&repo_path);
         if !pubkey_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound, "pubkey file not found"));
+        }
+
+        {
+            let version_path = version_file_path(&repo_path);
+            let mut file = try!(fs::File::open(&version_path));
+
+            let mut reader = io::BufReader::new(&mut file);
+            let mut version = String::new();
+            try!(reader.read_line(&mut version));
+            let version = version.trim();
+            let version_int = try!(
+                version.parse::<u32>()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("can't parse version file; unsupported repo format version: {}", version)))
+                );
+
+            if version_int > REPO_VERSION_CURRENT {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("repo version {} higher than supported {}; update?",
+                            version, REPO_VERSION_CURRENT)
+                    ))
+            }
+
+            if version_int < REPO_VERSION_LOWEST {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("repo version {} lower than lowest supported {}; restore using older version?",
+                            version, REPO_VERSION_LOWEST)
+                    ))
+            }
         }
 
         let mut file = try!(fs::File::open(&pubkey_path));
