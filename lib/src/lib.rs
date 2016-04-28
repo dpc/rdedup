@@ -770,8 +770,8 @@ impl Repo {
                         previous_parts.push(part)
                     } else {
                         let mut prev_ofs = 0;
-                        for &(ref ofs, ref sha256) in &edges {
-                            let path = self.chunk_path_by_digest(&sha256, chunk_type);
+                        for &(ofs, ref sha256) in &edges {
+                            let path = self.chunk_path_by_digest(sha256, chunk_type);
                             if !path.exists() {
                                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                                 let mut chunk_file = fs::File::create(path).unwrap();
@@ -783,8 +783,8 @@ impl Repo {
                                 for previous_part in previous_parts.drain(..) {
                                     chunk_data.write_all(&previous_part).unwrap();
                                 }
-                                if *ofs != prev_ofs {
-                                    chunk_data.write_all(&part[prev_ofs..*ofs]).unwrap();
+                                if ofs != prev_ofs {
+                                    chunk_data.write_all(&part[prev_ofs..ofs]).unwrap();
                                 }
 
                                 let chunk_data = if data_type.should_compress() {
@@ -818,7 +818,7 @@ impl Repo {
                             }
                             debug_assert!(previous_parts.is_empty());
 
-                            prev_ofs = *ofs;
+                            prev_ofs = ofs;
                         }
                         if prev_ofs != part.len() {
                             let mut part = part;
