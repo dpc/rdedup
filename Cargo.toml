@@ -9,14 +9,14 @@ documentation = "https://dpc.github.io/rdedup-lib/"
 homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
-
+exclude = ["lib/**/*"]
 
 [[bin]]
 name = "rdedup"
 path = "src/bin.rs"
 
 [dependencies]
-rdedup-lib = "0.0.1"
+rdedup-lib = { version = "0.0.1", path = "lib" }
 log = "0.3.6"
 rustc-serialize = "0.3.19"
 argparse = "0.2.1"
