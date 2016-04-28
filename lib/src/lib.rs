@@ -89,7 +89,7 @@ impl Chunker {
         self.edges.push((input_ofs, sha256));
 
         self.chunks_total += 1;
-        self.bytes_chunk += 0;
+        self.bytes_chunk = 0;
 
         self.sha256.reset();
         self.roll = rollsum::Bup::new();
