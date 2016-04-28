@@ -119,6 +119,7 @@ impl Chunker {
     }
 
     pub fn finish(&mut self) -> Vec<Edge> {
+        // What is this meant to be doing?
         if self.bytes_chunk != 0 || self.bytes_total == 0 {
             self.edge_found(0);
         }
