@@ -6,6 +6,7 @@ rust:
 script:
   - make all
   - make travistest
+  - cd lib; make travistest
 
 env:
   matrix:
