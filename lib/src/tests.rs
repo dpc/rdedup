@@ -9,18 +9,17 @@ use serialize::hex::ToHex;
 use crypto::sha2;
 use crypto::digest::Digest;
 
-const PASS : &'static str = "FOO";
+const PASS: &'static str = "FOO";
 
 fn rand_tmp_dir() -> path::PathBuf {
     // TODO: Use $TMP or something?
-    path::PathBuf::from("/tmp")
-        .join(rand::thread_rng()
-              .gen_ascii_chars()
-              .take(20)
-              .collect::<String>())
+    path::PathBuf::from("/tmp").join(rand::thread_rng()
+                                         .gen_ascii_chars()
+                                         .take(20)
+                                         .collect::<String>())
 }
 
-fn rand_data(len : usize) -> Vec<u8> {
+fn rand_data(len: usize) -> Vec<u8> {
     rand::weak_rng()
         .gen_iter()
         .take(len)
@@ -45,22 +44,22 @@ fn zero_size() {
 fn byte_size() {
     let repo = lib::Repo::init(&rand_tmp_dir(), PASS).unwrap();
     // TODO: Make inclusive
-    for b in 0u8 .. 255 {
-        let data = vec!(b);
+    for b in 0u8..255 {
+        let data = vec![b];
         let name = data.to_hex();
         repo.write(&name, &mut io::Cursor::new(&data)).unwrap();
     }
     for b in 0u8..255 {
         let mut data = Vec::new();
-        let name = vec!(b).to_hex();
+        let name = vec![b].to_hex();
         repo.read(&name, &mut data, PASS).unwrap();
-        assert_eq!(data, vec!(b));
+        assert_eq!(data, vec![b]);
     }
 }
 
 #[test]
 fn random_sanity() {
-    let mut names = vec!();
+    let mut names = vec![];
 
     let repo = lib::Repo::init(&rand_tmp_dir(), PASS).unwrap();
     for _ in 0..20 {
@@ -76,7 +75,7 @@ fn random_sanity() {
     }
 
     for &(ref name, ref digest) in &names {
-        let mut data = vec!();
+        let mut data = vec![];
         repo.read(&name, &mut data, PASS).unwrap();
 
         let mut sha = sha2::Sha256::new();
