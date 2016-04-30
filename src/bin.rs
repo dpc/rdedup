@@ -17,7 +17,11 @@ macro_rules! printerrln {
     ($($arg:tt)*) => ({
         use std::io::prelude::*;
         if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}\n", format_args!($($arg)*)) {
-            panic!("Failed to write to stderr.\nOriginal error output: {}\nSecondary error writing to stderr: {}", format!($($arg)*), e);
+            panic!(concat!(
+                    "Failed to write to stderr.\n",
+                    "Original error output: {}\n",
+                    "Secondary error writing to stderr: {}"),
+                    format!($($arg)*), e);
         }
     })
 }
@@ -67,35 +71,33 @@ impl FromStr for Command {
 }
 
 struct Options {
-    dir_str : String,
-    args : Vec<String>,
-    command : Command,
-    usage : String,
+    dir_str: String,
+    args: Vec<String>,
+    command: Command,
+    usage: String,
 }
 
 impl Options {
     fn new() -> Self {
         let mut dir_str = env::var("RDEDUP_DIR").unwrap_or("".to_owned());
-        let mut args = vec!();
+        let mut args = vec![];
         let mut command = Command::Help;
-        let mut usage = vec!();
+        let mut usage = vec![];
 
         {
             let mut ap = argparse::ArgumentParser::new();
             use argparse::*;
             ap.set_description("rdedup");
             ap.refer(&mut dir_str)
-                .add_option(&["-d", "--dir"], Store,
-                            "destination dir");
+              .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut command)
-                .add_argument("command", Store,
-                              r#"command to run"#);
+              .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
-                .add_argument("arguments", List,
-                              r#"arguments for command"#);
+              .add_argument("arguments", List, r#"arguments for command"#);
 
             ap.add_option(&["-V", "--version"],
-                          Print(env!("CARGO_PKG_VERSION").to_string()), "show version");
+                          Print(env!("CARGO_PKG_VERSION").to_string()),
+                          "show version");
 
             ap.stop_on_first_argument(true);
             ap.parse_args_or_exit();
@@ -103,11 +105,11 @@ impl Options {
             ap.print_help("rdedup", &mut usage).unwrap();
         }
 
-        Options{
-            dir_str : dir_str,
+        Options {
+            dir_str: dir_str,
             command: command,
             args: args,
-            usage : String::from_utf8_lossy(&usage).to_string(),
+            usage: String::from_utf8_lossy(&usage).to_string(),
         }
     }
 
@@ -150,35 +152,35 @@ impl Options {
     }
 }
 
-fn run(options : &Options) -> io::Result<()> {
+fn run(options: &Options) -> io::Result<()> {
     match options.check_command() {
         Command::Help => {
             options.print_usage();
-        },
+        }
         Command::Store => {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
             try!(repo.write(&name, &mut io::stdin()));
-        },
+        }
         Command::Load => {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
             let pass = read_passphrase();
             try!(repo.read(&name, &mut io::stdout(), &pass));
-        },
+        }
         Command::Remove => {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
             try!(repo.rm(&name));
-        },
+        }
         Command::Init => {
             let dir = options.check_dir();
             let pass = read_passphrase();
             try!(Repo::init(&dir, &pass));
-        },
+        }
         Command::DU => {
             let name = options.check_name();
             let dir = options.check_dir();
@@ -187,7 +189,7 @@ fn run(options : &Options) -> io::Result<()> {
 
             let size = try!(repo.du(&name, &pass));
             println!("{}", size);
-        },
+        }
         Command::Unreachable => {
             options.check_no_arguments();
             let dir = options.check_dir();
@@ -199,7 +201,7 @@ fn run(options : &Options) -> io::Result<()> {
             for digest in stored.difference(&reachable) {
                 println!("{}", digest.to_hex());
             }
-        },
+        }
         Command::GC => {
             options.check_no_arguments();
             let dir = options.check_dir();
@@ -208,7 +210,7 @@ fn run(options : &Options) -> io::Result<()> {
 
             let removed = try!(repo.gc());
             println!("Removed {} chunks", removed);
-        },
+        }
         Command::Missing => {
             options.check_no_arguments();
             let dir = options.check_dir();
