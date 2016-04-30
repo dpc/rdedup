@@ -143,8 +143,8 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
         try!(pwhash::derive_key(kb,
                                 passphrase.as_bytes(),
                                 salt,
-                                pwhash::OPSLIMIT_INTERACTIVE,
-                                pwhash::MEMLIMIT_INTERACTIVE)
+                                pwhash::OPSLIMIT_SENSITIVE,
+                                pwhash::MEMLIMIT_SENSITIVE)
                  .map_err(|_| {
                      io::Error::new(io::ErrorKind::InvalidData,
                                     "can't derive encryption key from passphrase")
