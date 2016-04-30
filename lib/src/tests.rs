@@ -44,12 +44,13 @@ fn zero_size() {
 fn byte_size() {
     let repo = lib::Repo::init(&rand_tmp_dir(), PASS).unwrap();
     // TODO: Make inclusive
-    for b in 0u8..255 {
+    let tests = [0u8, 1, 13, 255];
+    for &b in &tests {
         let data = vec![b];
         let name = data.to_hex();
         repo.write(&name, &mut io::Cursor::new(&data)).unwrap();
     }
-    for b in 0u8..255 {
+    for &b in &tests {
         let mut data = Vec::new();
         let name = vec![b].to_hex();
         repo.read(&name, &mut data, PASS).unwrap();
