@@ -421,7 +421,10 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
             try!(
                 box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key.unwrap())
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "can't decrypt chunk file"))
+                .map_err(|_| io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("can't decrypt chunk file: {}", digest.to_hex())
+                        ))
                 )
         } else {
             try!(file.read_to_end(&mut data));
@@ -516,7 +519,10 @@ impl Repo {
     pub fn init(repo_path : &Path, passphrase : &str) -> Result<Repo> {
         info!("Init repo {}", repo_path.to_string_lossy());
         if repo_path.exists() {
-            return Err(Error::new(io::ErrorKind::AlreadyExists, "repo already exists"));
+            return Err(Error::new(
+                    io::ErrorKind::AlreadyExists, format!("repo already exists: {}",
+                    repo_path.to_string_lossy())
+                    ));
         }
 
         try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
@@ -567,12 +573,18 @@ impl Repo {
     pub fn open(repo_path : &Path) -> Result<Repo> {
         info!("Open repo {}", repo_path.to_string_lossy());
         if !repo_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound, "repo not found"));
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("repo not found: {}",
+                                          repo_path.to_string_lossy())
+                                  ));
         }
 
         let pubkey_path = pub_key_file_path(&repo_path);
         if !pubkey_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound, "pubkey file not found"));
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("pubkey file not found: {}",
+                                          pubkey_path.to_string_lossy())
+                                  ));
         }
 
         {
@@ -585,7 +597,9 @@ impl Repo {
             let version = version.trim();
             let version_int = try!(
                 version.parse::<u32>()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("can't parse version file; unsupported repo format version: {}", version)))
+                .map_err(|_| io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("can't parse version file; unsupported repo format version: {}", version)))
                 );
 
             if version_int > REPO_VERSION_CURRENT {
@@ -707,7 +721,10 @@ impl Repo {
     fn load_sec_key(&self, passphrase : &str) -> Result<box_::SecretKey> {
         let seckey_path = sec_key_file_path(&self.path);
         if !seckey_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound, "seckey file not found"));
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("seckey file not found: {}",
+                                          seckey_path.to_string_lossy())
+                                          ));
         }
 
 
@@ -947,7 +964,7 @@ impl Repo {
                 return Ok(*i)
             }
         }
-        Err(Error::new(io::ErrorKind::NotFound, "chunk file not found"))
+        Err(Error::new(io::ErrorKind::NotFound, format!("chunk file missing: {}", digest.to_hex())))
     }
 
     fn chunk_path_by_digest(&self, digest : &[u8], chunk_type : DataType) -> PathBuf {
