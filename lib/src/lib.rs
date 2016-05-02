@@ -283,7 +283,8 @@ impl<'a> Write for IndexTranslator<'a> {
                                        sec_key,
                                        ref mut writer } = self;
             if let &mut Some(ref mut writer) = writer {
-                try!(accessor.repo().read_recursively_with(*accessor, &digest, *writer, data_type, sec_key));
+                let mut traverser = Traverser::new(Some(writer), data_type, sec_key);
+                try!(traverser.read_recursively(*accessor, &digest));
             } else {
                 try!(accessor.touch(&digest))
             }
@@ -342,6 +343,14 @@ impl<'a> Traverser<'a> {
         } else {
             accessor.touch(digest)
         }
+    }
+
+    fn read_recursively(&mut self,
+                        accessor: &'a ChunkAccessor,
+                        digest: &[u8],
+                        ) -> Result<()> {
+
+        accessor.traverse_with(digest, self)
     }
 }
 
@@ -654,7 +663,8 @@ impl Repo {
         let sec_key = try!(self.load_sec_key(passphrase));
 
         let accessor = self.chunk_accessor();
-        self.read_recursively_with(&accessor, &digest, writer, DataType::Data, Some(&sec_key))
+        let mut traverser = Traverser::new(Some(writer), DataType::Data, Some(&sec_key));
+        traverser.read_recursively(&accessor, &digest)
     }
 
     pub fn du(&self, name: &str, passphrase: &str) -> Result<u64> {
@@ -670,8 +680,11 @@ impl Repo {
         let sec_key = try!(self.load_sec_key(passphrase));
 
         let mut counter = CounterWriter::new();
-        let accessor = self.chunk_accessor();
-        try!(self.read_recursively_with(&accessor, &digest, &mut counter, DataType::Data, Some(&sec_key)));
+        {
+            let accessor = self.chunk_accessor();
+            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&sec_key));
+            try!(traverser.read_recursively(&accessor, &digest));
+        }
 
         Ok(counter.count)
     }
@@ -858,17 +871,6 @@ impl Repo {
         Ok(())
     }
 
-    fn read_recursively_with(&self,
-                        accessor: &ChunkAccessor,
-                        digest: &[u8],
-                        writer: &mut Write,
-                        data_type: DataType,
-                        sec_key: Option<&box_::SecretKey>)
-                        -> Result<()> {
-
-        let mut traverser = Traverser::new(Some(writer), data_type, sec_key);
-        accessor.traverse_with(digest, &mut traverser)
-    }
 
     fn reachable_recursively_insert(&self,
                                     digest: &[u8],
