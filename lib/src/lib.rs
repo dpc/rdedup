@@ -283,7 +283,7 @@ impl<'a> Write for IndexTranslator<'a> {
                                        sec_key,
                                        ref mut writer } = self;
             if let &mut Some(ref mut writer) = writer {
-                try!(accessor.repo().read_recursively(&digest, *writer, data_type, sec_key));
+                try!(accessor.repo().read_recursively_with(*accessor, &digest, *writer, data_type, sec_key));
             } else {
                 try!(accessor.touch(&digest))
             }
@@ -653,7 +653,8 @@ impl Repo {
 
         let sec_key = try!(self.load_sec_key(passphrase));
 
-        self.read_recursively(&digest, writer, DataType::Data, Some(&sec_key))
+        let accessor = self.chunk_accessor();
+        self.read_recursively_with(&accessor, &digest, writer, DataType::Data, Some(&sec_key))
     }
 
     pub fn du(&self, name: &str, passphrase: &str) -> Result<u64> {
@@ -669,7 +670,8 @@ impl Repo {
         let sec_key = try!(self.load_sec_key(passphrase));
 
         let mut counter = CounterWriter::new();
-        try!(self.read_recursively(&digest, &mut counter, DataType::Data, Some(&sec_key)));
+        let accessor = self.chunk_accessor();
+        try!(self.read_recursively_with(&accessor, &digest, &mut counter, DataType::Data, Some(&sec_key)));
 
         Ok(counter.count)
     }
@@ -856,7 +858,8 @@ impl Repo {
         Ok(())
     }
 
-    fn read_recursively(&self,
+    fn read_recursively_with(&self,
+                        accessor: &ChunkAccessor,
                         digest: &[u8],
                         writer: &mut Write,
                         data_type: DataType,
@@ -864,7 +867,7 @@ impl Repo {
                         -> Result<()> {
 
         let mut traverser = Traverser::new(Some(writer), data_type, sec_key);
-        self.chunk_accessor().traverse_with(digest, &mut traverser)
+        accessor.traverse_with(digest, &mut traverser)
     }
 
     fn reachable_recursively_insert(&self,
