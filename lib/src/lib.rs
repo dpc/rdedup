@@ -44,9 +44,15 @@ impl DataType {
     }
 }
 
-enum ChunkWriterMessage {
+enum ChunkAssemblerMessage {
     // DataType in every Data is somewhat redundant...
     Data(Vec<u8>, Vec<Edge>, DataType, DataType),
+    Exit,
+}
+
+enum ChunkMessage {
+    // TODO: Make struct: data, sha, chunk_type, data_type
+    Data(Vec<u8>, Vec<u8>, DataType, DataType),
     Exit,
 }
 
@@ -157,7 +163,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 /// Store data, using input_f to get chunks of data
 ///
 /// Return final digest
-fn chunk_and_send_to_writer<R: Read>(tx: &mpsc::SyncSender<ChunkWriterMessage>,
+fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
                                      mut reader: &mut R,
                                      data_type: DataType)
                                      -> Result<Vec<u8>> {
@@ -178,22 +184,22 @@ fn chunk_and_send_to_writer<R: Read>(tx: &mpsc::SyncSender<ChunkWriterMessage>,
         for &(_, ref sum) in &edges {
             index.append(&mut sum.clone());
         }
-        tx.send(ChunkWriterMessage::Data(buf, edges, DataType::Data, data_type)).unwrap();
+        tx.send(ChunkAssemblerMessage::Data(buf, edges, DataType::Data, data_type)).unwrap();
     }
     let edges = chunker.finish();
 
     for &(_, ref sum) in &edges {
         index.append(&mut sum.clone());
     }
-    tx.send(ChunkWriterMessage::Data(vec![], edges, DataType::Data, data_type)).unwrap();
+    tx.send(ChunkAssemblerMessage::Data(vec![], edges, DataType::Data, data_type)).unwrap();
 
     if index.len() > 32 {
-        let digest = try!(chunk_and_send_to_writer(tx,
+        let digest = try!(chunk_and_send_to_assembler(tx,
                                                    &mut io::Cursor::new(index),
                                                    DataType::Index));
         assert!(digest.len() == 32);
         let index_digest = quick_sha256(&digest);
-        tx.send(ChunkWriterMessage::Data(digest.clone(),
+        tx.send(ChunkAssemblerMessage::Data(digest.clone(),
                                          vec![(digest.len(), index_digest.clone())],
                                          DataType::Index,
                                          DataType::Index))
@@ -651,14 +657,38 @@ impl Repo {
 
     pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<()> {
         info!("Write name {}", name);
-        let (tx, rx) = mpsc::sync_channel(1024);
-        let self_clone = self.clone();
-        let chunk_writer_join = thread::spawn(move || self_clone.chunk_writer(rx));
+        let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(1024);
+        let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(1024);
+        let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(1024);
+        let (tx_to_writer, writer_rx) = mpsc::sync_channel(1024);
 
-        let final_digest = try!(chunk_and_send_to_writer(&tx, reader, DataType::Data));
+        let mut joins = vec!();
+        joins.push(thread::spawn({
+            let self_clone = self.clone();
+            move || self_clone.chunk_assembler(assembler_rx, tx_to_compressor)
+        }));
 
-        tx.send(ChunkWriterMessage::Exit).unwrap();
-        chunk_writer_join.join().unwrap();
+        joins.push(thread::spawn({
+            let self_clone = self.clone();
+            move || self_clone.chunk_compressor(compressor_rx, tx_to_encrypter)
+        }));
+
+        joins.push(thread::spawn({
+            let self_clone = self.clone();
+            move || self_clone.chunk_encrypter(encrypter_rx, tx_to_writer)
+        }));
+
+        joins.push(thread::spawn({
+            let self_clone = self.clone();
+            move || self_clone.chunk_writer(writer_rx)
+        }));
+
+        let final_digest = try!(chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data));
+
+        tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
+        for join in joins.drain(..) {
+            join.join().unwrap();
+        }
 
         self.store_digest_as_name(&final_digest, name)
     }
@@ -761,23 +791,17 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed)
     }
 
-
-    fn chunk_writer_handle_data_with_edges(&self,
-                                           part: Vec<u8>,
-                                           edges: Vec<Edge>,
-                                           chunk_type: DataType,
-                                           data_type: DataType,
-                                           previous_parts: &mut Vec<Vec<u8>>) {
+    fn chunk_assembler_handle_data_with_edges(&self,
+                                              tx : &mut mpsc::SyncSender<ChunkMessage>,
+                                              part: Vec<u8>,
+                                              mut edges: Vec<Edge>,
+                                              chunk_type: DataType,
+                                              data_type: DataType,
+                                              previous_parts: &mut Vec<Vec<u8>>) {
         let mut prev_ofs = 0;
-        for &(ofs, ref sha256) in &edges {
-            let path = self.chunk_path_by_digest(sha256, chunk_type);
-            let tmp_path = path.with_extension("tmp");
+        for (ofs, sha256) in edges.drain(..) {
+            let path = self.chunk_path_by_digest(&sha256, chunk_type);
             if !path.exists() {
-                fs::create_dir_all(path.parent().unwrap()).unwrap();
-                let mut chunk_file = fs::File::create(&tmp_path).unwrap();
-
-                let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-
                 let mut chunk_data = Vec::with_capacity(16 * 1024);
 
                 for previous_part in previous_parts.drain(..) {
@@ -786,31 +810,8 @@ impl Repo {
                 if ofs != prev_ofs {
                     chunk_data.write_all(&part[prev_ofs..ofs]).unwrap();
                 }
+                tx.send(ChunkMessage::Data(chunk_data, sha256, chunk_type, data_type)).unwrap();
 
-                let chunk_data = if data_type.should_compress() {
-                    let mut compressor =
-                        flate2::write::DeflateEncoder::new(Vec::with_capacity(chunk_data.len()),
-                                                           flate2::Compression::Default);
-
-                    compressor.write_all(&chunk_data).unwrap();
-                    compressor.finish().unwrap()
-                } else {
-                    chunk_data
-                };
-
-                if data_type.should_encrypt() {
-                    let pub_key = &self.pub_key;
-                    let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
-
-                    let cipher = box_::seal(&chunk_data, &nonce, &pub_key, &ephemeral_sec);
-                    chunk_file.write_all(&ephemeral_pub.0).unwrap();
-                    chunk_file.write_all(&cipher).unwrap();
-                } else {
-                    chunk_file.write_all(&chunk_data).unwrap();
-                }
-                chunk_file.sync_data().unwrap();
-                drop(chunk_file);
-                fs::rename(&tmp_path, &path).unwrap();
             } else {
                 previous_parts.clear();
             }
@@ -824,25 +825,113 @@ impl Repo {
         }
     }
 
-    /// Accept messages on rx and writes them to chunk files
-    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkWriterMessage>) {
+    fn chunk_assembler(&self,
+                       rx: mpsc::Receiver<ChunkAssemblerMessage>,
+                       mut tx: mpsc::SyncSender<ChunkMessage>
+                       ) {
         let mut previous_parts = vec![];
 
         loop {
             match rx.recv().unwrap() {
-                ChunkWriterMessage::Exit => {
+                ChunkAssemblerMessage::Exit => {
+                    tx.send(ChunkMessage::Exit).unwrap();
                     assert!(previous_parts.is_empty());
                     return;
                 }
-                ChunkWriterMessage::Data(part, edges, chunk_type, data_type) => {
+                ChunkAssemblerMessage::Data(part, edges, chunk_type, data_type) => {
                     if edges.is_empty() {
                         previous_parts.push(part)
                     } else {
-                        self.chunk_writer_handle_data_with_edges(part,
-                                                                 edges,
-                                                                 chunk_type,
-                                                                 data_type,
-                                                                 &mut previous_parts)
+                        self.chunk_assembler_handle_data_with_edges(
+                            &mut tx,
+                            part,
+                            edges,
+                            chunk_type,
+                            data_type,
+                            &mut previous_parts)
+                    }
+                }
+            }
+        }
+    }
+
+    fn chunk_compressor(&self,
+                       rx: mpsc::Receiver<ChunkMessage>,
+                       tx: mpsc::SyncSender<ChunkMessage>
+                       ) {
+        loop {
+            match rx.recv().unwrap() {
+                ChunkMessage::Exit => {
+                    tx.send(ChunkMessage::Exit).unwrap();
+                    return;
+                }
+                ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
+                    let tx_data = if data_type.should_compress() {
+                        let mut compressor =
+                            flate2::write::DeflateEncoder::new(Vec::with_capacity(data.len()),
+                            flate2::Compression::Default);
+
+                        compressor.write_all(&data).unwrap();
+                        compressor.finish().unwrap()
+                    } else {
+                        data
+                    };
+                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type)).unwrap();
+                }
+            }
+        }
+    }
+
+
+    fn chunk_encrypter(&self,
+                       rx: mpsc::Receiver<ChunkMessage>,
+                       tx: mpsc::SyncSender<ChunkMessage>
+                       ) {
+        loop {
+            match rx.recv().unwrap() {
+                ChunkMessage::Exit => {
+                    tx.send(ChunkMessage::Exit).unwrap();
+                    return;
+                }
+                ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
+                    let tx_data = if data_type.should_encrypt() {
+                        let mut encrypted = Vec::with_capacity(16 * 1024);
+                        let pub_key = &self.pub_key;
+                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
+
+                        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
+                        let cipher = box_::seal(&data, &nonce, &pub_key, &ephemeral_sec);
+                        encrypted.write_all(&ephemeral_pub.0).unwrap();
+                        encrypted.write_all(&cipher).unwrap();
+                        encrypted
+                    } else {
+                        data
+                    };
+
+                   tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type)).unwrap();
+                }
+            }
+        }
+    }
+
+    fn chunk_writer(&self,
+                       rx: mpsc::Receiver<ChunkMessage>,
+                       ) {
+        loop {
+            match rx.recv().unwrap() {
+                ChunkMessage::Exit => {
+                    return;
+                }
+                ChunkMessage::Data(data, sha256, chunk_type, _) => {
+                    let path = self.chunk_path_by_digest(&sha256, chunk_type);
+                    if !path.exists() {
+                        let tmp_path = path.with_extension("tmp");
+                        fs::create_dir_all(path.parent().unwrap()).unwrap();
+                        let mut chunk_file = fs::File::create(&tmp_path).unwrap();
+                        chunk_file.write_all(&data).unwrap();
+                        chunk_file.sync_data().unwrap();
+                        drop(chunk_file);
+                        fs::rename(&tmp_path, &path).unwrap();
                     }
                 }
             }
