@@ -168,7 +168,8 @@ fn run(options: &Options) -> io::Result<()> {
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
             let pass = read_passphrase();
-            try!(repo.read(&name, &mut io::stdout(), &pass));
+            let seckey = try!(repo.get_seckey(&pass));
+            try!(repo.read(&name, &mut io::stdout(), &seckey));
         }
         Command::Remove => {
             let name = options.check_name();
@@ -186,8 +187,9 @@ fn run(options: &Options) -> io::Result<()> {
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
             let pass = read_passphrase();
+            let seckey = try!(repo.get_seckey(&pass));
 
-            let size = try!(repo.du(&name, &pass));
+            let size = try!(repo.du(&name, &seckey));
             println!("{}", size);
         }
         Command::Unreachable => {

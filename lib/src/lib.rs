@@ -506,6 +506,8 @@ pub struct Repo {
     pub_key: box_::PublicKey,
 }
 
+pub struct SecretKey(box_::SecretKey);
+
 const DATA_SUBDIR: &'static str = "chunk";
 const NAME_SUBDIR: &'static str = "name";
 const INDEX_SUBDIR: &'static str = "index";
@@ -561,6 +563,11 @@ impl Repo {
             pub_key: pk,
         };
         Ok(repo)
+    }
+
+    pub fn get_seckey(&self, passphrase : &str) -> Result<SecretKey> {
+        let sec_key = try!(self.load_sec_key(passphrase));
+        Ok(SecretKey(sec_key))
     }
 
     pub fn open(repo_path: &Path) -> Result<Repo> {
@@ -656,33 +663,30 @@ impl Repo {
         self.store_digest_as_name(&final_digest, name)
     }
 
-    pub fn read<W: Write>(&self, name: &str, writer: &mut W, passphrase: &str) -> Result<()> {
+    pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
         info!("Read name {}", name);
         let digest = try!(self.name_to_digest(name));
 
-        let sec_key = try!(self.load_sec_key(passphrase));
 
         let accessor = self.chunk_accessor();
-        let mut traverser = Traverser::new(Some(writer), DataType::Data, Some(&sec_key));
+        let mut traverser = Traverser::new(Some(writer), DataType::Data, Some(&seckey.0));
         traverser.read_recursively(&accessor, &digest)
     }
 
-    pub fn du(&self, name: &str, passphrase: &str) -> Result<u64> {
+    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<u64> {
         info!("DU name {}", name);
 
         let digest = try!(self.name_to_digest(name));
 
-        self.du_by_digest(&digest, passphrase)
+        self.du_by_digest(&digest, seckey)
     }
 
-    pub fn du_by_digest(&self, digest: &[u8], passphrase: &str) -> Result<u64> {
-
-        let sec_key = try!(self.load_sec_key(passphrase));
+    pub fn du_by_digest(&self, digest: &[u8], seckey: &SecretKey) -> Result<u64> {
 
         let mut counter = CounterWriter::new();
         {
             let accessor = self.chunk_accessor();
-            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&sec_key));
+            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
             try!(traverser.read_recursively(&accessor, &digest));
         }
 
