@@ -808,7 +808,7 @@ impl Repo {
                 } else {
                     chunk_file.write_all(&chunk_data).unwrap();
                 }
-                chunk_file.sync_data();
+                chunk_file.sync_data().unwrap();
                 drop(chunk_file);
                 fs::rename(&tmp_path, &path).unwrap();
             } else {
