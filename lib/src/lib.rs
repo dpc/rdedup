@@ -771,9 +771,10 @@ impl Repo {
         let mut prev_ofs = 0;
         for &(ofs, ref sha256) in &edges {
             let path = self.chunk_path_by_digest(sha256, chunk_type);
+            let tmp_path = path.with_extension("tmp");
             if !path.exists() {
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
-                let mut chunk_file = fs::File::create(path).unwrap();
+                let mut chunk_file = fs::File::create(&tmp_path).unwrap();
 
                 let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
 
@@ -807,6 +808,9 @@ impl Repo {
                 } else {
                     chunk_file.write_all(&chunk_data).unwrap();
                 }
+                chunk_file.sync_data();
+                drop(chunk_file);
+                fs::rename(&tmp_path, &path).unwrap();
             } else {
                 previous_parts.clear();
             }
