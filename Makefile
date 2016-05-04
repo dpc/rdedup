@@ -38,13 +38,13 @@ bench:
 
 .PHONY: travistest
 travistest:
-	for i in `seq 10`; do cargo test $(CARGO_FLAGS) || exit 1 ; done
+	for i in `seq 10`; do make test || exit 1 ; done
 
 .PHONY: longtest
 longtest:
 	@echo "Running longtest. Press Ctrl+C to stop at any time"
 	@sleep 2
-	@i=0; while i=$$((i + 1)) && echo "Iteration $$i" && cargo test $(CARGO_FLAGS) ; do :; done
+	@i=0; while i=$$((i + 1)) && echo "Iteration $$i" && make test ; do :; done
 
 .PHONY: $(EXAMPLES)
 $(EXAMPLES):
