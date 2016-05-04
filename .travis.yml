@@ -6,7 +6,7 @@ rust:
 script:
   - make all
   - make travistest
-  - cd lib; make travistest
+  - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
 
 env:
   matrix:
