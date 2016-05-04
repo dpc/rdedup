@@ -157,7 +157,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 /// Store data, using input_f to get chunks of data
 ///
 /// Return final digest
-fn chunk_and_send_to_writer<R: Read>(tx: &mpsc::Sender<ChunkWriterMessage>,
+fn chunk_and_send_to_writer<R: Read>(tx: &mpsc::SyncSender<ChunkWriterMessage>,
                                      mut reader: &mut R,
                                      data_type: DataType)
                                      -> Result<Vec<u8>> {
@@ -651,7 +651,7 @@ impl Repo {
 
     pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<()> {
         info!("Write name {}", name);
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(1024);
         let self_clone = self.clone();
         let chunk_writer_join = thread::spawn(move || self_clone.chunk_writer(rx));
 
