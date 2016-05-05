@@ -1,4 +1,4 @@
-# rdedup
+# rdedup - data deduplication with compression and public key encryption
 
 <p align="center">
   <a href="https://travis-ci.org/dpc/rdedup">
@@ -16,14 +16,15 @@
 
 ## Introduction
 
-**Warning: alpha/prototype quality software ahead**
+**Warning: beta quality software ahead**
 
 `rdedup` is a tool providing data deduplication with compression and public key
-encryption written in Rust programming language. It's useful for backups.
+encryption written in Rust programming language. The primary use case is storing
+deduplicated and encrypted backups.
 
 ### My use case
 
-I use [rdup][rdup] to make backups, and also use [syncthing][syncthing] to
+I use [rdup][rdup] to create backup archive, and [syncthing][syncthing] to
 duplicate my backups over a lot of systems. Some of them are more trusted
 (desktops with disk-level encryption, firewalls, stored in the vault etc.), and
 some not so much (semi-personal laptops, phones etc.)
@@ -31,63 +32,66 @@ some not so much (semi-personal laptops, phones etc.)
 As my backups tend to contain a lot of shared data (even backups taken on
 different systems), it makes perfect sense to deduplicate them.
 
-However I'm paranoid and I don't want one of my hosts being physically or
+However I don't want one of my hosts being physically or
 remotely compromised, give access to data inside all my backups from all my
 systems.  Existing deduplication software like [ddar][ddar] or
 [zbackup][zbackup] provide encryption, but only symmetrical ([zbackup
 issue][zbackup-issue], [ddar issue][ddar-issue]) which means you have to share
-the same key on all your hosts and one compromised system compromises all your
-backups.
+the same key on all your hosts and one compromised system gives access to all your
+backup data.
 
 To fill the missing piece in my master backup plan, I've decided to write it
-myself using my beloved Rust programming language. That's how `rdedup` started.
+myself using my beloved Rust programming language.
 
 ## How it works
 
 `rdedup` works very much like [zbackup][zbackup] and other deduplication software
 with a little twist:
 
-* Thanks to public key cryptography, making backups.
-* Everything should be synchronization friendly. Even simple Dropbox/Syncthing
-  should work fine for data replication.
+* Thanks to public key cryptography, secure passpharse is required only
+  when restoring data, while adding and deduplicating new data does not.
+* Everything is synchronization friendly. Dropbox, Syncthing and similar
+  should work fine for data synchronization.
 
-`rdedup` uses a special format to use a given directory as a deduplication
-storage.
+When storing data, `rdedup` will split it into smaller pieces - *chunks* - using
+rolling sum, and store each *chunk* under unique id (sha256 *digest*) in a
+special format directory: *repo*. Then the whole backup will be described as
+*index*: a list of *digests*.
 
-When saving data, `rdedup` will split it into smaller pieces (*chunks*) using
-rolling sum algorithm, and store each chunk under unique name (sha256 digest).
-Then the whole backup will be described as *index*: a list of chunk ids.
+*Index* will be stored internally just like the data itself. Recursively, this
+reduces each backup to one unique *digest*, which is saved under given *name*.
 
-Index will be stored internally just like the data itself. Recursively, this reduces
-each backup to one unique id, which is written to *name* file.
+When restoring data, `rdedup` will read the *index*, then restore the data, reading
+each *chunk* listed in it.
 
-When restoring data, `rdedup` will read the index, then restore the data, reading
-the chunks listed in index.
+Thanks to rolling sum chunking scheme, when saving frequently similar data, a
+lot of common *chunks* will be reused, saving space.
 
-Thanks to this chunking scheme, when saving frequently similar data, a lot of
-common chunks will be reused, saving space.
+What makes `rdedup` unique, is that every time new *repo* directory is created,
+a pair of keys (public and secret) is generated. Public key is saved in the
+storage directory in plain text, while secret key is encrypted with key
+derived from a passphrase.
 
-What makes `rdedup` unique, is that every time new storage directory is created, a pair
-of keys (public and secret) is being generated. Public key is saved in the
-storage directory itself in plain text, while secret key is protected with passphrase.
+Every time `rdedup` saves a new chunk file, it's data is encrypted using public
+key so it can only be decrypted using the corresponding secret key. This way
+new data can always be added, with full deduplication, while only restring
+data requires providing the passphrase to unlock the private key.
 
-Every `rdedup` saves a new chunk of data it's encrypted with public key so it can
-only be decrypted using the corresponding secret key. This way new backups can
-be created, with full deduplication, while only accessing the data requires the
-private key.
+Nice little detail: `rdedup` supports removing old *names* and no longer
+needed chunks (garbage collection) without passphrase. Only the data chunks
+are encrypted, making operations like garbage collection save even on untrusted
+machines.
 
-The nice part is: removing old data does not require entering passphrase. Only
-the data itself is encrypted, making operations like garbage collecting old
-chunks possible on untrusted machines.
+### Technical Details
 
-### Details
-
-* [bup][bup] method is used to split files into chunks
-* sha256 is used to identify chunks
+* [bup][bup] methods of splitting files into chunks is used
+* sha256 sum of chunk data is used as digest id
 * [libsodium][libsodium]'s [sealed boxes][libsodium-sealed-boxes-doc] are used for encryption/decryption:
   * ephemeral keys are used for sealing
   * chunk digest is used as nonce
-
+* private key is encrypted using [libsodium][libsodium] `crypto secretbox`
+  using random nonce, and key derived from passphrase using password hashing
+  and random salt
 
 ## Installation
 
@@ -103,31 +107,18 @@ If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` for R
 
 ## Usage
 
+See `rdedup -h` for help.
 
-### Init
+Supported commands:
 
-```
-rdedup init
-```
+* `rdedup init` - create a *repo* directory with keypair used for encryption.
+* `rdedup ls` - list all stored names.
+* `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
+* `rdedup store <name>` - store data read from standard input under given *name*.
+* `rdedup load <name>` - load data stored under given *name* and write it on standard output
+* `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
+* `rdedup gc` - remove any no longer reachable data
 
-will create a `backup` subdirectory in current directory and generate a keypair
-used for encryption.
-
-### Store
-
-```
-rdedup store <name>
-```
-
-will save any data given on standard input under given *name*.
-
-### Load
-
-```
-rdedup load <name>
-```
-
-will write on standard output data previously stored under given *name*
 
 In combination with [rdup][rdup] this can be used to store and restore your backup like this:
 
@@ -135,31 +126,6 @@ In combination with [rdup][rdup] this can be used to store and restore your back
 rdup -x /dev/null "$HOME" | rdedup store home
 rdedup load home | rdup-up "$HOME.restored"
 ```
-
-### List
-
-```
-rdedup ls
-```
-
-will list names of all the stored data
-
-### Remove
-
-```
-rdedup rm <name>
-```
-
-will remove the given *name*. This by itself does not remove the data.
-
-### GC
-
-```
-rdedup rm <name>
-```
-
-will remove the given *name*. This by itself does not remove the data.
-
 
 [bup]: https://github.com/bup/bup/
 [rdup]: https://github.com/miekg/rdup
