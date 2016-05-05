@@ -113,7 +113,6 @@ Supported commands:
 
 * `rdedup init` - create a *repo* directory with keypair used for encryption.
 * `rdedup ls` - list all stored names.
-* `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
 * `rdedup store <name>` - store data read from standard input under given *name*.
 * `rdedup load <name>` - load data stored under given *name* and write it on standard output
 * `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
