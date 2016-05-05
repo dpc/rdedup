@@ -126,6 +126,10 @@ rdup -x /dev/null "$HOME" | rdedup store home
 rdedup load home | rdup-up "$HOME.restored"
 ```
 
+Rdedup is data agnostic, so formats like `tar`, `cpio` and other will work,
+but to get benefits of deduplication, archive format should not be compressed
+or encrypted already.
+
 [bup]: https://github.com/bup/bup/
 [rdup]: https://github.com/miekg/rdup
 [syncthing]: https://syncthing.net
