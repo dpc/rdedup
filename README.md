@@ -74,12 +74,12 @@ derived from a passphrase.
 
 Every time `rdedup` saves a new chunk file, it's data is encrypted using public
 key so it can only be decrypted using the corresponding secret key. This way
-new data can always be added, with full deduplication, while only restring
+new data can always be added, with full deduplication, while only restoring
 data requires providing the passphrase to unlock the private key.
 
 Nice little detail: `rdedup` supports removing old *names* and no longer
 needed chunks (garbage collection) without passphrase. Only the data chunks
-are encrypted, making operations like garbage collection save even on untrusted
+are encrypted, making operations like garbage collection safe even on untrusted
 machines.
 
 ### Technical Details
