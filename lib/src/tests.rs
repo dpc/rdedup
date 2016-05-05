@@ -138,8 +138,8 @@ fn random_sanity() {
 
     let repo = lib::Repo::init(&rand_tmp_dir(), PASS).unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
-    for i in 0..20 {
-        let mut data = ExampleDataGen::new(rand::weak_rng().gen_range(0, 100 * 1024));
+    for i in 0..10 {
+        let mut data = ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
         let name = format!("{:x}", i);
         repo.write(&name, &mut data).unwrap();
         names.push((name, data.finish()));
