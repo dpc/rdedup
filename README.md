@@ -105,6 +105,8 @@ If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` for R
 
 [rustup]: https://www.rustup.rs/
 
+In case of troubles, check [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+or report a new one!
 ## Usage
 
 See `rdedup -h` for help.
