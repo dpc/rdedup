@@ -8,6 +8,7 @@ extern crate sodiumoxide;
 extern crate flate2;
 #[cfg(test)]
 extern crate rand;
+extern crate fs2;
 
 use std::io::{BufRead, Read, Write, Result, Error};
 
@@ -16,6 +17,8 @@ use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
 use std::collections::HashSet;
 use std::cell::RefCell;
+
+use fs2::FileExt;
 
 use std::sync::mpsc;
 
@@ -211,16 +214,20 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
 }
 
 
+fn lock_file_path(path: &Path) -> PathBuf {
+    path.join(LOCK_FILE)
+}
+
 fn pub_key_file_path(path: &Path) -> PathBuf {
-    path.join("pub_key")
+    path.join(PUBKEY_FILE)
 }
 
 fn sec_key_file_path(path: &Path) -> PathBuf {
-    path.join("sec_key")
+    path.join(SECKEY_FILE)
 }
 
 fn version_file_path(path: &Path) -> PathBuf {
-    path.join("version")
+    path.join(VERSION_FILE)
 }
 
 struct CounterWriter {
@@ -515,6 +522,10 @@ pub struct Repo {
 pub struct SecretKey(box_::SecretKey);
 
 const DATA_SUBDIR: &'static str = "chunk";
+const LOCK_FILE : &'static str = ".lock";
+const PUBKEY_FILE : &'static str = "pub_key";
+const SECKEY_FILE : &'static str = "sec_key";
+const VERSION_FILE : &'static str = "version";
 const NAME_SUBDIR: &'static str = "name";
 const INDEX_SUBDIR: &'static str = "index";
 
@@ -570,6 +581,7 @@ impl Repo {
         };
         Ok(repo)
     }
+
 
     pub fn get_seckey(&self, passphrase : &str) -> Result<SecretKey> {
         let sec_key = try!(self.load_sec_key(passphrase));
@@ -651,16 +663,37 @@ impl Repo {
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         info!("Remove name {}", name);
+        let _lock = try!(self.lock_write());
         fs::remove_file(self.name_path(name))
     }
 
+    fn lock_write(&self) -> Result<fs::File> {
+        let lock_path = lock_file_path(&self.path);
+
+        let file = try!(fs::File::create(&lock_path));
+        try!(file.lock_exclusive());
+
+        Ok(file)
+    }
+
+    fn lock_read(&self) -> Result<fs::File> {
+        let lock_path = lock_file_path(&self.path);
+
+        let file = try!(fs::File::create(&lock_path));
+        try!(file.lock_shared());
+
+        Ok(file)
+    }
 
     pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<()> {
         info!("Write name {}", name);
+        let _lock = try!(self.lock_write());
+
         let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(1024);
         let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(1024);
         let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(1024);
         let (tx_to_writer, writer_rx) = mpsc::sync_channel(1024);
+
 
         let mut joins = vec!();
         joins.push(thread::spawn({
@@ -697,6 +730,7 @@ impl Repo {
         info!("Read name {}", name);
         let digest = try!(self.name_to_digest(name));
 
+        let _lock = try!(self.lock_read());
 
         let accessor = self.chunk_accessor();
         let mut traverser = Traverser::new(Some(writer), DataType::Data, Some(&seckey.0));
@@ -705,13 +739,9 @@ impl Repo {
 
     pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<u64> {
         info!("DU name {}", name);
+        let _lock = try!(self.lock_read());
 
         let digest = try!(self.name_to_digest(name));
-
-        self.du_by_digest(&digest, seckey)
-    }
-
-    pub fn du_by_digest(&self, digest: &[u8], seckey: &SecretKey) -> Result<u64> {
 
         let mut counter = CounterWriter::new();
         {
@@ -722,6 +752,22 @@ impl Repo {
 
         Ok(counter.count)
     }
+
+    /*
+    pub fn du_by_digest(&self, digest: &[u8], seckey: &SecretKey) -> Result<u64> {
+
+        let _lock = try!(self.lock_read());
+
+        let mut counter = CounterWriter::new();
+        {
+            let accessor = self.chunk_accessor();
+            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            try!(traverser.read_recursively(&accessor, &digest));
+        }
+
+        Ok(counter.count)
+    }
+    */
 
     fn read_hex_file(&self, path: &Path) -> Result<Vec<u8>> {
         let mut file = try!(fs::File::open(&path));
@@ -938,7 +984,7 @@ impl Repo {
         }
     }
 
-    pub fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
+    fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
         debug!("Resolving name {}", name);
         let name_path = self.name_path(name);
         if !name_path.exists() {
@@ -980,8 +1026,7 @@ impl Repo {
     }
 
     /// List all names
-    pub fn list_names(&self) -> Result<Vec<String>> {
-        info!("List repo");
+    pub fn list_names_nolock(&self) -> Result<Vec<String>> {
         let mut ret: Vec<String> = vec![];
 
         let name_dir = self.name_dir_path();
@@ -994,7 +1039,15 @@ impl Repo {
         Ok(ret)
     }
 
-    pub fn list_stored_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+    /// List all names
+    pub fn list_names(&self) -> Result<Vec<String>> {
+        info!("List repo");
+        let _lock = try!(self.lock_read());
+
+        self.list_names_nolock()
+    }
+
+    fn list_stored_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         info!("List stored chunks");
         fn insert_all_digest(path: &Path, reachable: &mut HashSet<Vec<u8>>) {
             trace!("Looking in {}", path.to_string_lossy());
@@ -1022,10 +1075,11 @@ impl Repo {
     }
 
     /// Return all reachable chunks
-    pub fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+    fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+
         info!("List reachable chunks");
         let mut reachable_digests = HashSet::new();
-        let all_names = try!(self.list_names());
+        let all_names = try!(self.list_names_nolock());
         for name in &all_names {
             let digest = try!(self.name_to_digest(&name));
             try!(self.reachable_recursively_insert(&digest, &mut reachable_digests));
@@ -1065,6 +1119,9 @@ impl Repo {
     }
 
     pub fn gc(&self) -> Result<usize> {
+
+        let _lock = try!(self.lock_write());
+
         let reachable = self.list_reachable_chunks().unwrap();
         let stored = self.list_stored_chunks().unwrap();
 
@@ -1073,6 +1130,7 @@ impl Repo {
             try!(self.rm_chunk_by_digest(digest));
             removed += 1
         }
+
         Ok(removed)
     }
 

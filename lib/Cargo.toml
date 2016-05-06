@@ -22,6 +22,7 @@ rustc-serialize = "0.3.19"
 argparse = "0.2.1"
 sodiumoxide = "0.0.10"
 flate2 = "0.2.13"
+fs2 = "0.2.4"
 
 [dev-dependencies]
 rand = "0.3.14"

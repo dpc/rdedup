@@ -8,7 +8,6 @@ extern crate rdedup_lib as lib;
 use std::io::{Read, Write};
 use std::{io, process, env};
 use std::path;
-use serialize::hex::ToHex;
 use std::str::FromStr;
 
 use lib::Repo;
@@ -42,8 +41,6 @@ enum Command {
     Init,
     DU,
     GC,
-    Missing,
-    Unreachable,
     Remove,
     List,
 }
@@ -63,8 +60,6 @@ impl FromStr for Command {
             "list" => Ok(Command::List),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
-            "unreachable" => Ok(Command::Unreachable),
-            "missing" => Ok(Command::Missing),
             _ => Err(()),
         }
     }
@@ -192,18 +187,6 @@ fn run(options: &Options) -> io::Result<()> {
             let size = try!(repo.du(&name, &seckey));
             println!("{}", size);
         }
-        Command::Unreachable => {
-            options.check_no_arguments();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
-
-            let reachable = try!(repo.list_reachable_chunks());
-            let stored = try!(repo.list_stored_chunks());
-
-            for digest in stored.difference(&reachable) {
-                println!("{}", digest.to_hex());
-            }
-        }
         Command::GC => {
             options.check_no_arguments();
             let dir = options.check_dir();
@@ -212,19 +195,6 @@ fn run(options: &Options) -> io::Result<()> {
 
             let removed = try!(repo.gc());
             println!("Removed {} chunks", removed);
-        }
-        Command::Missing => {
-            options.check_no_arguments();
-            let dir = options.check_dir();
-
-            let repo = try!(Repo::open(&dir));
-
-            let reachable = try!(repo.list_reachable_chunks());
-            let stored = try!(repo.list_stored_chunks());
-
-            for digest in reachable.difference(&stored) {
-                println!("{}", digest.to_hex());
-            }
         }
         Command::List => {
             options.check_no_arguments();
