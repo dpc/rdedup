@@ -9,6 +9,8 @@ script:
   - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
 
 env:
+  global:
+    - RUST_BACKTRACE=1
   matrix:
     -
     - RELEASE=true
