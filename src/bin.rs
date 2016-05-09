@@ -12,6 +12,7 @@ use std::str::FromStr;
 
 use lib::Repo;
 
+
 macro_rules! printerrln {
     ($($arg:tt)*) => ({
         use std::io::prelude::*;
@@ -49,18 +50,18 @@ impl FromStr for Command {
     type Err = ();
     fn from_str(src: &str) -> Result<Command, ()> {
         match src {
-            "help" => Ok(Command::Help),
-            "store" => Ok(Command::Store),
-            "load" => Ok(Command::Load),
-            "init" => Ok(Command::Init),
-            "rm" => Ok(Command::Remove),
-            "delete" => Ok(Command::Remove),
-            "del" => Ok(Command::Remove),
-            "ls" => Ok(Command::List),
-            "list" => Ok(Command::List),
-            "du" => Ok(Command::DU),
-            "gc" => Ok(Command::GC),
-            _ => Err(()),
+            "help"   => Ok(Command::Help),
+            "store"  => Ok(Command::Store),
+            "load"   => Ok(Command::Load),
+            "init"   => Ok(Command::Init),
+            "rm"     |
+            "delete" |
+            "del"    => Ok(Command::Remove),
+            "ls"     |
+            "list"   => Ok(Command::List),
+            "du"     => Ok(Command::DU),
+            "gc"     => Ok(Command::GC),
+            _        => Err(()),
         }
     }
 }
@@ -109,7 +110,7 @@ impl Options {
     }
 
     fn check_no_arguments(&self) {
-        if self.args.len() > 0 {
+        if !self.args.is_empty() {
             printerrln!("Unnecessary argument: {}", self.args[0]);
             process::exit(-1);
         }
