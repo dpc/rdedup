@@ -142,3 +142,9 @@ or encrypted already.
 [libsodium-sealed-boxes-doc]: https://download.libsodium.org/doc/public-key_cryptography/sealed_boxes.html
 [libsodium]: https://github.com/jedisct1/libsodium
 
+# License
+
+`rdedup` and `rdedup-lib` are licensed under `CopyFair Software Lincense`.
+Since it's an experimental license you might want to know that it means you can
+do whatever with the software, but if you're using it for commercial purposes,
+you need to pay it's author a small reciprocity fee.
