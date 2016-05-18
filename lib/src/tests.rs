@@ -115,7 +115,6 @@ fn zero_size() {
 fn byte_size() {
     let repo = lib::Repo::init(&rand_tmp_dir(), PASS).unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
-    // TODO: Make inclusive
     let tests = [0u8, 1, 13, 255];
     for &b in &tests {
         let data = vec![b];
@@ -177,7 +176,7 @@ fn random_sanity() {
             assert!(stored.contains(digest));
         }
         for digest in stored.iter() {
-            assert!(stored.contains(digest));
+            assert!(reachable.contains(digest));
         }
 
         repo.rm(&name).unwrap();

@@ -541,7 +541,6 @@ impl Repo {
         try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
         try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
 
-        try!(fs::create_dir_all(&repo_path));
         let (pk, sk) = box_::gen_keypair();
         {
             let pubkey_path = pub_key_file_path(&repo_path);
@@ -584,6 +583,7 @@ impl Repo {
 
 
     pub fn get_seckey(&self, passphrase : &str) -> Result<SecretKey> {
+        let _lock = try!(self.lock_read());
         let sec_key = try!(self.load_sec_key(passphrase));
         Ok(SecretKey(sec_key))
     }
@@ -1026,7 +1026,7 @@ impl Repo {
     }
 
     /// List all names
-    pub fn list_names_nolock(&self) -> Result<Vec<String>> {
+    fn list_names_nolock(&self) -> Result<Vec<String>> {
         let mut ret: Vec<String> = vec![];
 
         let name_dir = self.name_dir_path();
