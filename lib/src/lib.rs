@@ -75,7 +75,7 @@ struct Chunker {
 impl Chunker {
     pub fn new() -> Self {
         Chunker {
-            roll: rollsum::Bup::new(),
+            roll: rollsum::Bup::new_with_chunk_bits(18),
             sha256: sha2::Sha256::new(),
             bytes_total: 0,
             bytes_chunk: 0,
