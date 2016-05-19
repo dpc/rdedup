@@ -537,6 +537,9 @@ impl Repo {
                                   format!("repo already exists: {}", repo_path.to_string_lossy())));
         }
 
+        // Workaround https://github.com/rust-lang/rust/issues/33707
+        let _ = fs::create_dir_all(&repo_path.join(repo_path));
+
         try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
         try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
         try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
