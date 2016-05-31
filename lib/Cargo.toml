@@ -15,7 +15,7 @@ name = "rdedup_lib"
 path = "src/lib.rs"
 
 [dependencies]
-rollsum = "0.2.0"
+rollsum = "0.2.1"
 rust-crypto = "0.2"
 log = "0.3.6"
 rustc-serialize = "0.3.19"
