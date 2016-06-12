@@ -16,7 +16,7 @@ name = "rdedup"
 path = "src/bin.rs"
 
 [dependencies]
-rdedup-lib = { version = "0.1.0", path = "lib" }
+rdedup-lib = { version = "0.1.1", path = "lib" }
 log = "0.3.6"
 rustc-serialize = "0.3.19"
 argparse = "0.2.1"
