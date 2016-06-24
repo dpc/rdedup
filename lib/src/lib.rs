@@ -72,10 +72,12 @@ struct Chunker {
     edges: Vec<Edge>,
 }
 
+const ROLLSUM_BUP_CHUNK_BITS : u32 = 19;
+
 impl Chunker {
     pub fn new() -> Self {
         Chunker {
-            roll: rollsum::Bup::new_with_chunk_bits(18),
+            roll: rollsum::Bup::new_with_chunk_bits(ROLLSUM_BUP_CHUNK_BITS),
             sha256: sha2::Sha256::new(),
             bytes_total: 0,
             bytes_chunk: 0,
@@ -100,7 +102,7 @@ impl Chunker {
         self.bytes_chunk = 0;
 
         self.sha256.reset();
-        self.roll = rollsum::Bup::new();
+        self.roll = rollsum::Bup::new_with_chunk_bits(ROLLSUM_BUP_CHUNK_BITS);
     }
 
     pub fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
