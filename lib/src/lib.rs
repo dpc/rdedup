@@ -72,7 +72,7 @@ struct Chunker {
     edges: Vec<Edge>,
 }
 
-const ROLLSUM_BUP_CHUNK_BITS : u32 = 19;
+const ROLLSUM_BUP_CHUNK_BITS : u32 = 17;
 
 impl Chunker {
     pub fn new() -> Self {
