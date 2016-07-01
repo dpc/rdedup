@@ -4,6 +4,7 @@ extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate env_logger;
 extern crate rdedup_lib as lib;
+extern crate rpassword;
 
 use std::io::{Read, Write};
 use std::{io, process, env};
@@ -16,7 +17,20 @@ use lib::Repo;
 macro_rules! printerrln {
     ($($arg:tt)*) => ({
         use std::io::prelude::*;
-        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}\n", format_args!($($arg)*)) {
+        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}", format_args!($($arg)*)) {
+            panic!(concat!(
+                    "Failed to write to stderr.\n",
+                    "Original error output: {}\n",
+                    "Secondary error writing to stderr: {}"),
+                    format!($($arg)*), e);
+        }
+    })
+}
+
+macro_rules! printerr {
+    ($($arg:tt)*) => ({
+        use std::io::prelude::*;
+        if let Err(e) = write!(&mut ::std::io::stderr(), "{}", format_args!($($arg)*)) {
             panic!(concat!(
                     "Failed to write to stderr.\n",
                     "Original error output: {}\n",
@@ -27,11 +41,14 @@ macro_rules! printerrln {
 }
 
 
-fn read_passphrase() -> String {
-    printerrln!("Enter passphrase:");
-    let mut s = String::new();
-    io::stdin().read_line(&mut s).unwrap();
-    s
+fn read_passphrase(o : &Options) -> String {
+    printerrln!("Warning: Use `--add-newline` option if you generated repo with rdedup version <= 0.2");
+    printerr!("Enter passphrase: ");
+    if o.add_newline {
+        rpassword::read_password().unwrap() + "\n"
+    } else {
+        rpassword::read_password().unwrap()
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -70,6 +87,7 @@ struct Options {
     dir_str: String,
     args: Vec<String>,
     command: Command,
+    add_newline: bool,
     usage: String,
 }
 
@@ -79,6 +97,7 @@ impl Options {
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
+        let mut add_newline = false;
 
         {
             let mut ap = argparse::ArgumentParser::new();
@@ -86,6 +105,8 @@ impl Options {
             ap.set_description("rdedup");
             ap.refer(&mut dir_str)
               .add_option(&["-d", "--dir"], Store, "destination dir");
+            ap.refer(&mut add_newline)
+              .add_option(&["-n", "--add-newline"], StoreTrue, "add newline to the password");
             ap.refer(&mut command)
               .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
@@ -105,6 +126,7 @@ impl Options {
             dir_str: dir_str,
             command: command,
             args: args,
+            add_newline: add_newline,
             usage: String::from_utf8_lossy(&usage).to_string(),
         }
     }
@@ -163,7 +185,7 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            let pass = read_passphrase();
+            let pass = read_passphrase(&options);
             let seckey = try!(repo.get_seckey(&pass));
             try!(repo.read(&name, &mut io::stdout(), &seckey));
         }
@@ -175,14 +197,14 @@ fn run(options: &Options) -> io::Result<()> {
         }
         Command::Init => {
             let dir = options.check_dir();
-            let pass = read_passphrase();
+            let pass = read_passphrase(&options);
             try!(Repo::init(&dir, &pass));
         }
         Command::DU => {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            let pass = read_passphrase();
+            let pass = read_passphrase(&options);
             let seckey = try!(repo.get_seckey(&pass));
 
             let size = try!(repo.du(&name, &seckey));
