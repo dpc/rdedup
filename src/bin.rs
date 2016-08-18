@@ -6,7 +6,6 @@ extern crate env_logger;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
 
-use std::io::{Read, Write};
 use std::{io, process, env};
 use std::path;
 use std::str::FromStr;

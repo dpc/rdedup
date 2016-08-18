@@ -20,9 +20,9 @@ rust-crypto = "0.2"
 log = "0.3.6"
 rustc-serialize = "0.3.19"
 argparse = "0.2.1"
-sodiumoxide = "0.0.10"
-flate2 = "0.2.13"
-fs2 = "0.2.4"
+sodiumoxide = "0.0.12"
+flate2 = "0.2.14"
+fs2 = "0.2.5"
 
 [dev-dependencies]
 rand = "0.3.14"
