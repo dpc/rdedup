@@ -141,3 +141,7 @@ or encrypted already.
 [ddar-issue]: https://github.com/basak/ddar/issues/10
 [libsodium-sealed-boxes-doc]: https://download.libsodium.org/doc/public-key_cryptography/sealed_boxes.html
 [libsodium]: https://github.com/jedisct1/libsodium
+
+# License
+
+MPL-2
