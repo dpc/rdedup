@@ -72,7 +72,7 @@ a pair of keys (public and secret) is generated. Public key is saved in the
 storage directory in plain text, while secret key is encrypted with key
 derived from a passphrase.
 
-Every time `rdedup` saves a new chunk file, it's data is encrypted using public
+Every time `rdedup` saves a new chunk file, its data is encrypted using public
 key so it can only be decrypted using the corresponding secret key. This way
 new data can always be added, with full deduplication, while only restoring
 data requires providing the passphrase to unlock the private key.
