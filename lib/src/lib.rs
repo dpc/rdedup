@@ -62,6 +62,7 @@ enum ChunkMessage {
 /// Edge: offset in the input and sha256 sum of the chunk
 type Edge = (usize, Vec<u8>);
 
+/// Finds edges using rolling sum
 struct Chunker {
     roll: rollsum::Bup,
     sha256: sha2::Sha256,
@@ -86,7 +87,7 @@ impl Chunker {
         }
     }
 
-    pub fn edge_found(&mut self, input_ofs: usize) {
+    fn edge_found(&mut self, input_ofs: usize) {
         debug!("found edge at {}; sum: {:x}",
                self.bytes_total,
                self.roll.digest());
@@ -129,7 +130,7 @@ impl Chunker {
     }
 
     pub fn finish(&mut self) -> Vec<Edge> {
-        // What is this meant to be doing?
+        // Process the final chunk
         if self.bytes_chunk != 0 || self.bytes_total == 0 {
             self.edge_found(0);
         }
@@ -137,6 +138,7 @@ impl Chunker {
     }
 }
 
+/// Convenient function to callculate sha256 for one continous data block
 fn quick_sha256(data: &[u8]) -> Vec<u8> {
 
     let mut sha256 = sha2::Sha256::new();
@@ -147,6 +149,7 @@ fn quick_sha256(data: &[u8]) -> Vec<u8> {
     return sha256_digest;
 }
 
+/// Derive secret key from passphrase and salt
 fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     let mut derived_key = secretbox::Key([0; secretbox::KEYBYTES]);
     {
@@ -232,6 +235,7 @@ fn version_file_path(path: &Path) -> PathBuf {
     path.join(VERSION_FILE)
 }
 
+/// Writer that counts how many bytes were written to it
 struct CounterWriter {
     count: u64,
 }
@@ -253,8 +257,12 @@ impl Write for CounterWriter {
     }
 }
 
-// Can be feed Index data, will call
-// on_data for every data digest
+/// Translates index stream into data stream
+///
+/// This type implements `io::Write` and interprets what's writen to it as a stream of digests.
+///
+/// For every digest written to it, it will access the corresponding chunk and write it into
+/// `writer` that it wraps.
 struct IndexTranslator<'a> {
     accessor: &'a ChunkAccessor,
     digest: Vec<u8>,
@@ -312,7 +320,7 @@ impl<'a> Write for IndexTranslator<'a> {
     }
 }
 
-// Traverser that only touches and does not read the underlying data
+/// Traverser that only touches and does not read the underlying data
 struct Traverser<'a> {
     writer: Option<&'a mut Write>,
     data_type: DataType,
@@ -370,9 +378,11 @@ impl<'a> Traverser<'a> {
 }
 
 
+/// Abstraction over accessing chunks stored in the repository
 trait ChunkAccessor {
     fn repo(&self) -> &Repo;
 
+    /// Read a chunk identified by `digest` into `writer`
     fn read_chunk_into(&self,
                        digest: &[u8],
                        chunk_type: DataType,
@@ -389,6 +399,7 @@ trait ChunkAccessor {
     fn traverse_with<'a>(&'a self, digest: &[u8], traverser: &mut Traverser<'a>) -> Result<()>;
 }
 
+/// `ChunkAccessor` that just reads the chunks as requested, without doing anything
 struct DefaultChunkAccessor<'a> {
     repo: &'a Repo,
 }
@@ -467,6 +478,10 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
     }
 }
 
+/// `ChunkAccessor` that records which chunks
+/// were accessed
+///
+/// This is useful for chunk garbage-collection
 struct RecordingChunkAccessor<'a> {
     raw: DefaultChunkAccessor<'a>,
     accessed: RefCell<&'a mut HashSet<Vec<u8>>>,
@@ -515,12 +530,16 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
 }
 
 
+/// Rdedup repository
 #[derive(Clone, Debug)]
 pub struct Repo {
+    /// Path of the repository
     path: PathBuf,
+    /// Public key associated with the repository
     pub_key: box_::PublicKey,
 }
 
+/// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
 const DATA_SUBDIR: &'static str = "chunk";
