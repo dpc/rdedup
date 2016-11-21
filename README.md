@@ -16,11 +16,18 @@
 
 ## Introduction
 
-**Warning: beta quality software ahead**
 
 `rdedup` is a tool providing data deduplication with compression and public key
 encryption written in Rust programming language. The primary use case is storing
 deduplicated and encrypted backups.
+
+**Warning: beta quality software ahead** - I use rdedup personally for a long while
+and it works well and noone reported any problems. I would really appreciate feedback
+from people using `rdedup`.
+
+I consider `rdedup` feature-complete for my needs. That means: I will accept patches
+with fixes and new features, but I don't actively add new ones myself. I'm open for
+sharing or handing over it's development. Feel free to contact me.
 
 ### My use case
 
