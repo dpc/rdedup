@@ -306,7 +306,7 @@ impl<'a> Write for IndexTranslator<'a> {
                                        sec_key,
                                        ref mut writer } = self;
             if let &mut Some(ref mut writer) = writer {
-                let mut traverser = Traverser::new(Some(writer), data_type, sec_key);
+                let mut traverser = ReadContext::new(Some(writer), data_type, sec_key);
                 try!(traverser.read_recursively(*accessor, &digest));
             } else {
                 try!(accessor.touch(&digest))
@@ -320,19 +320,25 @@ impl<'a> Write for IndexTranslator<'a> {
     }
 }
 
-/// Traverser that only touches and does not read the underlying data
-struct Traverser<'a> {
+/// Read Context
+///
+/// Information neccessary to complete given operation of reading given data in the repository.
+struct ReadContext<'a> {
+    /// Writer to write the data to; `None` will discard the data
     writer: Option<&'a mut Write>,
-    data_type: DataType,
+    /// Secret key to access the data - `None` is used for operations
+    /// that don't decrypt anything
     sec_key: Option<&'a box_::SecretKey>,
+    /// The type of the data to be read
+    data_type: DataType,
 }
 
-impl<'a> Traverser<'a> {
+impl<'a> ReadContext<'a> {
     fn new(writer: Option<&'a mut Write>,
            data_type: DataType,
            sec_key: Option<&'a box_::SecretKey>)
            -> Self {
-        Traverser {
+        ReadContext {
             writer: writer,
             data_type: data_type,
             sec_key: sec_key,
@@ -355,8 +361,8 @@ impl<'a> Traverser<'a> {
                                                   self.data_type,
                                                   self.sec_key);
 
-        let mut sub_traverser = Traverser::new(Some(&mut translator), DataType::Index, None);
-        accessor.traverse_with(&index_data, &mut sub_traverser)
+        let mut sub_traverser = ReadContext::new(Some(&mut translator), DataType::Index, None);
+        sub_traverser.read_recursively(accessor, &index_data)
     }
 
     fn on_data(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
@@ -373,7 +379,13 @@ impl<'a> Traverser<'a> {
                         digest: &[u8],
                         ) -> Result<()> {
 
-        accessor.traverse_with(digest, self)
+        let chunk_type = try!(accessor.repo().chunk_type(digest));
+
+        let s = &*accessor as &ChunkAccessor;
+        match chunk_type {
+            DataType::Index => self.on_index(s, digest),
+            DataType::Data => self.on_data(s, digest),
+        }
     }
 }
 
@@ -396,7 +408,6 @@ trait ChunkAccessor {
         Ok(())
     }
 
-    fn traverse_with<'a>(&'a self, digest: &[u8], traverser: &mut Traverser<'a>) -> Result<()>;
 }
 
 /// `ChunkAccessor` that just reads the chunks as requested, without doing anything
@@ -415,16 +426,6 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         self.repo
     }
 
-    fn traverse_with<'b>(&'b self, digest: &[u8], traverser: &mut Traverser<'b>) -> Result<()> {
-
-        let chunk_type = try!(self.repo().chunk_type(digest));
-
-        let s = &*self as &'b ChunkAccessor;
-        match chunk_type {
-            DataType::Index => traverser.on_index(s, digest),
-            DataType::Data => traverser.on_data(s, digest),
-        }
-    }
     fn read_chunk_into(&self,
                        digest: &[u8],
                        chunk_type: DataType,
@@ -499,17 +500,6 @@ impl<'a> RecordingChunkAccessor<'a> {
 impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
     fn repo(&self) -> &Repo {
         self.raw.repo()
-    }
-
-    fn traverse_with<'b>(&'b self, digest: &[u8], traverser: &mut Traverser<'b>) -> Result<()> {
-
-        let chunk_type = try!(self.repo().chunk_type(digest));
-
-        let s = &*self as &'b ChunkAccessor;
-        match chunk_type {
-            DataType::Index => traverser.on_index(s, digest),
-            DataType::Data => traverser.on_data(s, digest),
-        }
     }
 
     fn touch(&self, digest: &[u8]) -> Result<()> {
@@ -757,7 +747,7 @@ impl Repo {
         let _lock = try!(self.lock_read());
 
         let accessor = self.chunk_accessor();
-        let mut traverser = Traverser::new(Some(writer), DataType::Data, Some(&seckey.0));
+        let mut traverser = ReadContext::new(Some(writer), DataType::Data, Some(&seckey.0));
         traverser.read_recursively(&accessor, &digest)
     }
 
@@ -770,7 +760,7 @@ impl Repo {
         let mut counter = CounterWriter::new();
         {
             let accessor = self.chunk_accessor();
-            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            let mut traverser = ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
             try!(traverser.read_recursively(&accessor, &digest));
         }
 
@@ -785,7 +775,7 @@ impl Repo {
         let mut counter = CounterWriter::new();
         {
             let accessor = self.chunk_accessor();
-            let mut traverser = Traverser::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            let mut traverser = ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
             try!(traverser.read_recursively(&accessor, &digest));
         }
 
@@ -1045,8 +1035,8 @@ impl Repo {
                                     -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut traverser = Traverser::new(None, DataType::Data, None);
-        self.recording_chunk_accessor(reachable_digests).traverse_with(digest, &mut traverser)
+        let mut traverser = ReadContext::new(None, DataType::Data, None);
+        traverser.read_recursively(&self.recording_chunk_accessor(reachable_digests), digest)
     }
 
     /// List all names
