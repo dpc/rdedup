@@ -30,6 +30,7 @@ use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 1024;
+const DIGEST_SIZE: usize = 32;
 
 const REPO_VERSION_LOWEST: u32 = 0;
 const REPO_VERSION_CURRENT: u32 = 0;
@@ -97,7 +98,7 @@ impl Chunker {
 
         debug!("sha256 hash: {}", self.sha256.result_str());
 
-        let mut sha256 = vec![0u8; 32];
+        let mut sha256 = vec![0u8; DIGEST_SIZE];
         self.sha256.result(&mut sha256);
 
         self.edges.push((input_ofs, sha256));
@@ -146,7 +147,7 @@ fn quick_sha256(data: &[u8]) -> Vec<u8> {
 
     let mut sha256 = sha2::Sha256::new();
     sha256.input(&data);
-    let mut sha256_digest = vec![0u8; 32];
+    let mut sha256_digest = vec![0u8; DIGEST_SIZE];
     sha256.result(&mut sha256_digest);
 
     return sha256_digest;
@@ -204,10 +205,10 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
     }
     tx.send(ChunkAssemblerMessage::Data(vec![], edges, DataType::Data, data_type)).unwrap();
 
-    if index.len() > 32 {
+    if index.len() > DIGEST_SIZE {
         let digest =
             try!(chunk_and_send_to_assembler(tx, &mut io::Cursor::new(index), DataType::Index));
-        assert!(digest.len() == 32);
+        assert!(digest.len() == DIGEST_SIZE);
         let index_digest = quick_sha256(&digest);
         tx.send(ChunkAssemblerMessage::Data(digest.clone(),
                                               vec![(digest.len(), index_digest.clone())],
@@ -294,12 +295,12 @@ impl<'a> Write for IndexTranslator<'a> {
         let total_len = bytes.len();
         loop {
             let has_already = self.digest.len();
-            if (has_already + bytes.len()) < 32 {
+            if (has_already + bytes.len()) < DIGEST_SIZE {
                 self.digest.extend_from_slice(bytes);
                 return Ok(total_len);
             }
 
-            let needs = 32 - has_already;
+            let needs = DIGEST_SIZE - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
             let &mut IndexTranslator { ref accessor,
@@ -356,7 +357,7 @@ impl<'a> ReadContext<'a> {
                                       &mut index_data,
                                       self.sec_key));
 
-        assert!(index_data.len() == 32);
+        assert!(index_data.len() == DIGEST_SIZE);
 
         let mut translator =
             IndexTranslator::new(accessor, self.writer.take(), self.data_type, self.sec_key);
@@ -463,7 +464,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
         let mut sha256 = sha2::Sha256::new();
         sha256.input(&data);
-        let mut sha256_digest = vec![0u8; 32];
+        let mut sha256_digest = vec![0u8; DIGEST_SIZE];
         sha256.result(&mut sha256_digest);
         if sha256_digest != digest {
             panic!("{} corrupted, data read: {}",
@@ -1055,16 +1056,37 @@ impl Repo {
             trace!("Looking in {}", path.to_string_lossy());
             for out_entry in fs::read_dir(path).unwrap() {
                 let out_entry = out_entry.unwrap();
-                trace!("Looking in {}", out_entry.path().to_string_lossy());
-                for mid_entry in fs::read_dir(out_entry.path()).unwrap() {
+                let out_entry_path = out_entry.path();
+                if !out_entry_path.is_dir() {
+                    trace!("skipping {}", out_entry_path.to_string_lossy());
+                    continue;
+                }
+                trace!("Looking in {}", out_entry_path.to_string_lossy());
+                for mid_entry in fs::read_dir(out_entry_path).unwrap() {
                     let mid_entry = mid_entry.unwrap();
+                    let mid_entry_path = mid_entry.path();
+                    if !mid_entry_path.is_dir() {
+                        trace!("skipping {}", mid_entry_path.to_string_lossy());
+                        continue;
+                    }
                     trace!("Looking in {}", mid_entry.path().to_string_lossy());
-                    for entry in fs::read_dir(mid_entry.path()).unwrap() {
+                    for entry in fs::read_dir(mid_entry_path).unwrap() {
                         let entry = entry.unwrap();
-                        trace!("Looking in {}", entry.path().to_string_lossy());
+                        let entry_path = entry.path();
+                        trace!("Looking in {}", entry_path.to_string_lossy());
                         let name = entry.file_name().to_string_lossy().to_string();
-                        let entry_digest = name.from_hex().unwrap();
-                        reachable.insert(entry_digest);
+                        match name.from_hex() {
+                            Ok(digest) => {
+                                if digest.len() == DIGEST_SIZE {
+                                    reachable.insert(digest);
+                                } else {
+                                    trace!("skipping {}", entry_path.to_string_lossy());
+                                }
+                            }
+                            Err(e) => {
+                                trace!("skipping {}, error {}", entry_path.to_string_lossy(), e);
+                            }
+                        }
                     }
                 }
             }
@@ -1083,8 +1105,20 @@ impl Repo {
         let mut reachable_digests = HashSet::new();
         let all_names = try!(self.list_names_nolock());
         for name in &all_names {
-            let digest = try!(self.name_to_digest(&name));
-            try!(self.reachable_recursively_insert(&digest, &mut reachable_digests));
+            match self.name_to_digest(&name) {
+                Ok(digest) => {
+                    // Make sure digest is the standard size
+                    if digest.len() == DIGEST_SIZE {
+                        info!("processing {}", name);
+                        try!(self.reachable_recursively_insert(&digest, &mut reachable_digests));
+                    } else {
+                        info!("skipped name {}", name);
+                    }
+                }
+                Err(e) => {
+                    info!("skipped name {} error {}", name, e);
+                }
+            };
         }
         Ok(reachable_digests)
     }
