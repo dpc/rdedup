@@ -28,6 +28,9 @@ use crypto::digest::Digest;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
+const BUFFER_SIZE: usize = 16 * 1024;
+const CHANNEL_SIZE: usize = 1024;
+
 const REPO_VERSION_LOWEST: u32 = 0;
 const REPO_VERSION_CURRENT: u32 = 0;
 
@@ -179,7 +182,7 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
 
     let mut index: Vec<u8> = vec![];
     loop {
-        let mut buf = vec![0u8; 16 * 1024];
+        let mut buf = vec![0u8; BUFFER_SIZE];
         let len = try!(reader.read(&mut buf));
 
         if len == 0 {
@@ -428,7 +431,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = try!(fs::File::open(path));
-        let mut data = Vec::with_capacity(16 * 1024);
+        let mut data = Vec::with_capacity(BUFFER_SIZE);
 
         let data = if data_type.should_encrypt() {
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
@@ -694,10 +697,10 @@ impl Repo {
         info!("Write name {}", name);
         let _lock = try!(self.lock_write());
 
-        let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(1024);
-        let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(1024);
-        let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(1024);
-        let (tx_to_writer, writer_rx) = mpsc::sync_channel(1024);
+        let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(CHANNEL_SIZE);
+        let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(CHANNEL_SIZE);
+        let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(CHANNEL_SIZE);
+        let (tx_to_writer, writer_rx) = mpsc::sync_channel(CHANNEL_SIZE);
 
 
         let mut joins = vec![];
@@ -853,7 +856,7 @@ impl Repo {
         for (ofs, sha256) in edges.drain(..) {
             let path = self.chunk_path_by_digest(&sha256, chunk_type);
             if !path.exists() {
-                let mut chunk_data = Vec::with_capacity(16 * 1024);
+                let mut chunk_data = Vec::with_capacity(BUFFER_SIZE);
 
                 for previous_part in previous_parts.drain(..) {
                     chunk_data.write_all(&previous_part).unwrap();
@@ -942,7 +945,7 @@ impl Repo {
                 }
                 ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
                     let tx_data = if data_type.should_encrypt() {
-                        let mut encrypted = Vec::with_capacity(16 * 1024);
+                        let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
                         let pub_key = &self.pub_key;
                         let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
 
