@@ -977,7 +977,6 @@ impl Repo {
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
                         chunk_file.write_all(&data).unwrap();
-                        chunk_file.sync_data().unwrap();
                         drop(chunk_file);
                         fs::rename(&tmp_path, &path).unwrap();
                     }
