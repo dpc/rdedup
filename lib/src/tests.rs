@@ -13,31 +13,30 @@ const PASS: &'static str = "FOO";
 
 fn rand_tmp_dir() -> path::PathBuf {
     // TODO: Use $TMP or something?
-    path::PathBuf::from("/tmp/rdedup-tests")
-        .join(rand::thread_rng()
-              .gen_ascii_chars()
-              .take(20)
-              .collect::<String>())
+    path::PathBuf::from("/tmp/rdedup-tests").join(rand::thread_rng()
+        .gen_ascii_chars()
+        .take(20)
+        .collect::<String>())
 }
 
 /// Generate data that repease some chunks
 struct ExampleDataGen {
-    a : Vec<u8>,
-    b : Vec<u8>,
-    c : Vec<u8>,
-    count : usize,
-    sha : sha2::Sha256,
+    a: Vec<u8>,
+    b: Vec<u8>,
+    c: Vec<u8>,
+    count: usize,
+    sha: sha2::Sha256,
 }
 
 impl ExampleDataGen {
-    fn new(kb : usize) -> Self {
+    fn new(kb: usize) -> Self {
 
         ExampleDataGen {
-            a : rand_data(1024 * 2),
-            b : rand_data(1024 * 2),
-            c : rand_data(1024 * 2),
-            count : kb,
-            sha : sha2::Sha256::new(),
+            a: rand_data(1024 * 2),
+            b: rand_data(1024 * 2),
+            c: rand_data(1024 * 2),
+            count: kb,
+            sha: sha2::Sha256::new(),
         }
     }
 
@@ -48,7 +47,7 @@ impl ExampleDataGen {
     }
 }
 
-fn copy_as_much_as_possible(dst : &mut [u8], src : &[u8]) -> usize {
+fn copy_as_much_as_possible(dst: &mut [u8], src: &[u8]) -> usize {
     let len = cmp::min(dst.len(), src.len());
     dst[..len].clone_from_slice(&src[..len]);
     len
@@ -57,11 +56,11 @@ fn copy_as_much_as_possible(dst : &mut [u8], src : &[u8]) -> usize {
 impl io::Read for ExampleDataGen {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.count == 0 {
-            return Ok(0)
+            return Ok(0);
         }
         self.count -= 1;
 
-        let len =  match rand::weak_rng().gen_range(0, 3) {
+        let len = match rand::weak_rng().gen_range(0, 3) {
             0 => copy_as_much_as_possible(buf, &self.a),
             1 => copy_as_much_as_possible(buf, &self.b),
             2 => copy_as_much_as_possible(buf, &self.c),
@@ -74,14 +73,14 @@ impl io::Read for ExampleDataGen {
     }
 }
 
-fn rand_data(len : usize) -> Vec<u8> {
+fn rand_data(len: usize) -> Vec<u8> {
     rand::weak_rng()
         .gen_iter()
         .take(len)
         .collect::<Vec<u8>>()
 }
 
-fn wipe(repo : &lib::Repo) {
+fn wipe(repo: &lib::Repo) {
     let names = repo.list_names().unwrap();
 
     for name in &names {

@@ -3,3 +3,4 @@ Cargo.lock
 testdata
 tags
 backup/
+*.bk

@@ -40,8 +40,9 @@ macro_rules! printerr {
 }
 
 
-fn read_passphrase(o : &Options) -> String {
-    printerrln!("Warning: Use `--add-newline` option if you generated repo with rdedup version <= 0.2");
+fn read_passphrase(o: &Options) -> String {
+    printerrln!("Warning: Use `--add-newline` option if you generated repo with rdedup version \
+                 <= 0.2");
     printerr!("Enter passphrase: ");
     if o.add_newline {
         rpassword::read_password().unwrap() + "\n"
@@ -66,18 +67,15 @@ impl FromStr for Command {
     type Err = ();
     fn from_str(src: &str) -> Result<Command, ()> {
         match src {
-            "help"   => Ok(Command::Help),
-            "store"  => Ok(Command::Store),
-            "load"   => Ok(Command::Load),
-            "init"   => Ok(Command::Init),
-            "rm"     |
-            "delete" |
-            "del"    => Ok(Command::Remove),
-            "ls"     |
-            "list"   => Ok(Command::List),
-            "du"     => Ok(Command::DU),
-            "gc"     => Ok(Command::GC),
-            _        => Err(()),
+            "help" => Ok(Command::Help),
+            "store" => Ok(Command::Store),
+            "load" => Ok(Command::Load),
+            "init" => Ok(Command::Init),
+            "rm" | "delete" | "del" => Ok(Command::Remove),
+            "ls" | "list" => Ok(Command::List),
+            "du" => Ok(Command::DU),
+            "gc" => Ok(Command::GC),
+            _ => Err(()),
         }
     }
 }
@@ -103,13 +101,15 @@ impl Options {
             use argparse::*;
             ap.set_description("rdedup");
             ap.refer(&mut dir_str)
-              .add_option(&["-d", "--dir"], Store, "destination dir");
+                .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut add_newline)
-              .add_option(&["-n", "--add-newline"], StoreTrue, "add newline to the password");
+                .add_option(&["-n", "--add-newline"],
+                            StoreTrue,
+                            "add newline to the password");
             ap.refer(&mut command)
-              .add_argument("command", Store, r#"command to run"#);
+                .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
-              .add_argument("arguments", List, r#"arguments for command"#);
+                .add_argument("arguments", List, r#"arguments for command"#);
 
             ap.add_option(&["-V", "--version"],
                           Print(env!("CARGO_PKG_VERSION").to_string()),
