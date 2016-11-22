@@ -189,3 +189,32 @@ fn random_sanity() {
 
     wipe(&repo);
 }
+
+#[test]
+fn change_passphrase() {
+    let mut prev_passphrase = "foo";
+    let dir_path = &rand_tmp_dir();
+    let data_before = rand_data(1024);
+
+    {
+        let repo = lib::Repo::init(dir_path, prev_passphrase).unwrap();
+        repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
+    }
+
+    for p in &["a", "", "foo", "bar"] {
+        let repo = lib::Repo::open(dir_path).unwrap();
+        let seckey = repo.get_seckey(&prev_passphrase).unwrap();
+        repo.change_passphrase(&seckey, p).unwrap();
+        prev_passphrase = p;
+    }
+
+
+    {
+        let repo = lib::Repo::open(dir_path).unwrap();
+        let seckey = repo.get_seckey(&prev_passphrase).unwrap();
+        let mut data_after = vec![];
+        repo.read("data", &mut data_after, &seckey).unwrap();
+
+        assert_eq!(data_before, data_after);
+    }
+}
