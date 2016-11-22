@@ -217,4 +217,7 @@ fn change_passphrase() {
 
         assert_eq!(data_before, data_after);
     }
+
+    let repo = lib::Repo::open(dir_path).unwrap();
+    wipe(&repo);
 }
