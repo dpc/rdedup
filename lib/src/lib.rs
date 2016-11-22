@@ -237,6 +237,21 @@ fn version_file_path(path: &Path) -> PathBuf {
     path.join(VERSION_FILE)
 }
 
+fn write_seckey_file(
+    path : &Path,
+    encrypted_seckey : &[u8],
+    nonce : &secretbox::Nonce,
+    salt : &pwhash::Salt,
+    ) -> io::Result<()> {
+    let mut seckey_file = fs::File::create(path)?;
+    let mut writer = &mut seckey_file as &mut Write;
+    writer.write_all(&encrypted_seckey.to_hex().as_bytes())?;
+    writer.write_all(&nonce.0.to_hex().as_bytes())?;
+    writer.write_all(&salt.0.to_hex().as_bytes())?;
+    writer.flush()?;
+    Ok(())
+}
+
 /// Writer that counts how many bytes were written to it
 struct CounterWriter {
     count: u64,
@@ -570,12 +585,7 @@ impl Repo {
             let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
 
             let seckey_path = sec_key_file_path(&repo_path);
-            let mut seckey_file = try!(fs::File::create(seckey_path));
-            let mut writer = &mut seckey_file as &mut Write;
-            try!(writer.write_all(&encrypted_seckey.to_hex().as_bytes()));
-            try!(writer.write_all(&nonce.0.to_hex().as_bytes()));
-            try!(writer.write_all(&salt.0.to_hex().as_bytes()));
-            try!(writer.flush());
+            write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
         }
         {
             let version_path = version_file_path(&repo_path);
@@ -673,6 +683,30 @@ impl Repo {
         info!("Remove name {}", name);
         let _lock = try!(self.lock_write());
         fs::remove_file(self.name_path(name))
+    }
+
+    /// Change the passphrase
+    pub fn change_passphrase(&self, seckey: &SecretKey, new_passphrase : &str) -> Result<()> {
+        info!("Changing password");
+        let _lock = try!(self.lock_write());
+
+
+        let salt = pwhash::gen_salt();
+        let nonce = secretbox::gen_nonce();
+
+        let derived_key = try!(derive_key(new_passphrase, &salt));
+
+
+        let encrypted_seckey = secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
+
+        let seckey_path = sec_key_file_path(&self.path);
+        let seckey_path_tmp = seckey_path.with_extension("tmp");
+
+        write_seckey_file(&seckey_path_tmp, &encrypted_seckey, &nonce, &salt)?;
+
+        fs::rename(seckey_path_tmp, &seckey_path)?;
+
+        Ok(())
     }
 
     fn lock_write(&self) -> Result<fs::File> {

@@ -43,11 +43,24 @@ macro_rules! printerr {
 fn read_passphrase(o: &Options) -> String {
     printerrln!("Warning: Use `--add-newline` option if you generated repo with rdedup version \
                  <= 0.2");
-    printerr!("Enter passphrase: ");
+    printerr!("Enter passphrase to unlock: ");
     if o.add_newline {
         rpassword::read_password().unwrap() + "\n"
     } else {
         rpassword::read_password().unwrap()
+    }
+}
+
+fn read_new_passphrase() -> String {
+    loop {
+        printerr!("Enter new passphrase: ");
+        let p1 = rpassword::read_password().unwrap();
+        printerr!("Enter new passphrase again: ");
+        let p2 = rpassword::read_password().unwrap();
+        if p1 == p2 {
+            return p1
+        }
+        printerrln!("\nPassphrases don't match, try again.");
     }
 }
 
@@ -60,6 +73,7 @@ enum Command {
     DU,
     GC,
     Remove,
+    ChangePassphrase,
     List,
 }
 
@@ -75,6 +89,7 @@ impl FromStr for Command {
             "ls" | "list" => Ok(Command::List),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
+            "chpasswd" | "chpassphrase" => Ok(Command::ChangePassphrase),
             _ => Err(()),
         }
     }
@@ -159,13 +174,14 @@ impl Options {
     fn print_usage(&self) {
         printerrln!("{}", self.usage);
 
-
         printerrln!("Commands:
   store\t\t\tsave data under name
   load\t\t\tload data under name
   ls\t\t\tlist all stored names
   rm\t\t\tdelete name
-  gc\t\t\tdelete unreachable data");
+  gc\t\t\tdelete unreachable data
+  changepassphrase\tchange the passphrase"
+  );
     }
 }
 
@@ -188,6 +204,14 @@ fn run(options: &Options) -> io::Result<()> {
             let seckey = try!(repo.get_seckey(&pass));
             try!(repo.read(&name, &mut io::stdout(), &seckey));
         }
+        Command::ChangePassphrase => {
+            let dir = options.check_dir();
+            let repo = Repo::open(&dir)?;
+            let pass = read_passphrase(&options);
+            let seckey = repo.get_seckey(&pass)?;
+            let pass = read_new_passphrase();
+            repo.change_passphrase(&seckey, &pass)?;
+        }
         Command::Remove => {
             let name = options.check_name();
             let dir = options.check_dir();
@@ -196,7 +220,7 @@ fn run(options: &Options) -> io::Result<()> {
         }
         Command::Init => {
             let dir = options.check_dir();
-            let pass = read_passphrase(&options);
+            let pass = read_new_passphrase();
             try!(Repo::init(&dir, &pass));
         }
         Command::DU => {
@@ -230,8 +254,8 @@ fn run(options: &Options) -> io::Result<()> {
     }
 
     Ok(())
-
 }
+
 fn main() {
     env_logger::init().unwrap();
 
