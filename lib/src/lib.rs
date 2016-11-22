@@ -29,7 +29,7 @@ use crypto::digest::Digest;
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
 const BUFFER_SIZE: usize = 16 * 1024;
-const CHANNEL_SIZE: usize = 1024;
+const CHANNEL_SIZE: usize = 128;
 
 const REPO_VERSION_LOWEST: u32 = 0;
 const REPO_VERSION_CURRENT: u32 = 0;
