@@ -13,9 +13,10 @@ extern crate fs2;
 use std::io::{BufRead, Read, Write, Result, Error};
 
 use std::{fs, mem, thread, io};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::cell::RefCell;
 
 use fs2::FileExt;
@@ -999,21 +1000,42 @@ impl Repo {
     }
 
     fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) {
+        let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
+        // Cache paths to make sure we don't queue up an existing block
+        let mut queue_paths: HashSet<PathBuf> = HashSet::new();
+
+        fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
+            while let Some(file) = queue.pop_front() {
+                file.sync_data().unwrap();
+            }
+            // Run renames after data sync to mitigate data writes and metadata writes contention
+            let mut drain = queue_paths.drain();
+            while let Some(path) = drain.next() {
+                let tmp_path = path.with_extension("tmp");
+                fs::rename(&tmp_path, &path).unwrap();
+            }
+        }
         loop {
             match rx.recv().unwrap() {
                 ChunkMessage::Exit => {
+                    flush(&mut queue, &mut queue_paths);
                     return;
                 }
                 ChunkMessage::Data(data, sha256, chunk_type, _) => {
                     let path = self.chunk_path_by_digest(&sha256, chunk_type);
-                    if !path.exists() {
+                    if !queue_paths.contains(&path) && !path.exists() {
+                        if queue.len() == CHANNEL_SIZE {
+                            flush(&mut queue, &mut queue_paths);
+                        }
+
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
                         chunk_file.write_all(&data).unwrap();
-                        chunk_file.sync_data().unwrap();
-                        drop(chunk_file);
-                        fs::rename(&tmp_path, &path).unwrap();
+
+                        // Queue chunk up for data sync and rename
+                        queue_paths.insert(path);
+                        queue.push_back(chunk_file);
                     }
                 }
             }
