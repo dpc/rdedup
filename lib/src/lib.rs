@@ -16,7 +16,7 @@ use std::{fs, mem, thread, io};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{HashSet, VecDeque};
 use std::cell::RefCell;
 
 use fs2::FileExt;
@@ -1000,11 +1000,11 @@ impl Repo {
     }
 
     fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) {
-        let mut queue: Vec<(PathBuf, PathBuf, File)> = Vec::with_capacity(CHANNEL_SIZE);
+        let mut queue: VecDeque<(PathBuf, PathBuf, File)> = VecDeque::with_capacity(CHANNEL_SIZE);
         // Cache paths to make sure we don't queue up an existing block
-        let mut queue_paths: BTreeSet<PathBuf> = BTreeSet::new();
+        let mut queue_paths: HashSet<PathBuf> = HashSet::new();
 
-        fn flush(queue: &Vec<(PathBuf, PathBuf, File)>) {
+        fn flush(queue: &VecDeque<(PathBuf, PathBuf, File)>) {
             for &(_, _, ref chunk_file) in queue.iter() {
                 chunk_file.sync_data().unwrap();
                 drop(chunk_file);
@@ -1030,9 +1030,9 @@ impl Repo {
 
                         // Queue chunk up for data sync and rename
                         queue_paths.insert(path.clone());
-                        queue.push((path, tmp_path, chunk_file));
-                        if queue.len() == queue.capacity() {
-                            flush(&queue);
+                        queue.push_back((path, tmp_path, chunk_file));
+                        if queue.len() == CHANNEL_SIZE {
+                            flush(&mut queue);
                             queue.clear();
                         }
                     }
