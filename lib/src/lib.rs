@@ -13,9 +13,10 @@ extern crate fs2;
 use std::io::{BufRead, Read, Write, Result, Error};
 
 use std::{fs, mem, thread, io};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use serialize::hex::{ToHex, FromHex};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::cell::RefCell;
 
 use fs2::FileExt;
@@ -999,21 +1000,41 @@ impl Repo {
     }
 
     fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) {
+        let mut queue: Vec<(PathBuf, PathBuf, File)> = Vec::with_capacity(CHANNEL_SIZE);
+        // Cache paths to make sure we don't queue up an existing block
+        let mut queue_paths: BTreeSet<PathBuf> = BTreeSet::new();
+
+        fn flush(queue: &Vec<(PathBuf, PathBuf, File)>) {
+            for &(_, _, ref chunk_file) in queue.iter() {
+                chunk_file.sync_data().unwrap();
+                drop(chunk_file);
+            }
+            // Run renames after data sync to mitigate data writes and metadata writes contention
+            for &(ref path, ref tmp_path, _) in queue.iter() {
+                fs::rename(&tmp_path, &path).unwrap();
+            }
+        }
         loop {
             match rx.recv().unwrap() {
                 ChunkMessage::Exit => {
+                    flush(&queue);
                     return;
                 }
                 ChunkMessage::Data(data, sha256, chunk_type, _) => {
                     let path = self.chunk_path_by_digest(&sha256, chunk_type);
-                    if !path.exists() {
+                    if !queue_paths.contains(&path) && !path.exists() {
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
                         chunk_file.write_all(&data).unwrap();
-                        chunk_file.sync_data().unwrap();
-                        drop(chunk_file);
-                        fs::rename(&tmp_path, &path).unwrap();
+
+                        // Queue chunk up for data sync and rename
+                        queue_paths.insert(path.clone());
+                        queue.push((path, tmp_path, chunk_file));
+                        if queue.len() == queue.capacity() {
+                            flush(&queue);
+                            queue.clear();
+                        }
                     }
                 }
             }
