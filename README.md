@@ -7,7 +7,7 @@
   <a href="https://crates.io/crates/rdedup">
       <img src="http://meritbadge.herokuapp.com/rdedup?style=flat-square" alt="crates.io">
   </a>
-  <a href="https://gitter.im/dpc/dpc">
+  <a href="https://gitter.im/dpc/rdedup">
       <img src="https://img.shields.io/badge/GITTER-join%20chat-green.svg?style=flat-square" alt="Gitter Chat">
   </a>
   <br>
@@ -114,6 +114,7 @@ If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` for R
 
 In case of troubles, check [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 or report a new one!
+
 ## Usage
 
 See `rdedup -h` for help.
