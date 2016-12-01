@@ -58,7 +58,7 @@ fn read_new_passphrase() -> String {
         printerr!("Enter new passphrase again: ");
         let p2 = rpassword::read_password().unwrap();
         if p1 == p2 {
-            return p1
+            return p1;
         }
         printerrln!("\nPassphrases don't match, try again.");
     }
@@ -171,6 +171,19 @@ impl Options {
         }
         path::Path::new(&self.dir_str).to_owned()
     }
+
+    fn get_names(&self) -> Vec<String> {
+        if self.args.len() < 1 {
+            printerrln!("At least one name is required");
+            process::exit(-1);
+        }
+        let mut names: Vec<String> = Vec::with_capacity(self.args.len());
+        for name in self.args.iter() {
+            names.push(name.clone());
+        }
+        return names;
+    }
+
     fn print_usage(&self) {
         printerrln!("{}", self.usage);
 
@@ -180,8 +193,7 @@ impl Options {
   ls\t\t\tlist all stored names
   rm\t\t\tdelete name
   gc\t\t\tdelete unreachable data
-  changepassphrase\tchange the passphrase"
-  );
+  changepassphrase\tchange the passphrase");
     }
 }
 
@@ -213,10 +225,12 @@ fn run(options: &Options) -> io::Result<()> {
             repo.change_passphrase(&seckey, &pass)?;
         }
         Command::Remove => {
-            let name = options.check_name();
+            let names = options.get_names();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            try!(repo.rm(&name));
+            for name in names.iter() {
+                try!(repo.rm(&name));
+            }
         }
         Command::Init => {
             let dir = options.check_dir();
