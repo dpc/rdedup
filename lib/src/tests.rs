@@ -3,7 +3,10 @@ mod lib {
 }
 
 use std::path;
+use std::fs;
+use std::fs::OpenOptions;
 use std::{io, cmp};
+use std::io::Write;
 use rand::{self, Rng};
 use serialize::hex::ToHex;
 use crypto::sha2;
@@ -220,4 +223,42 @@ fn change_passphrase() {
 
     let repo = lib::Repo::open(dir_path).unwrap();
     wipe(&repo);
+}
+#[test]
+fn verify_name() {
+    let dir_path = rand_tmp_dir();
+    let repo = lib::Repo::init(&dir_path, PASS).unwrap();
+    let seckey = repo.get_seckey(PASS).unwrap();
+    let data = rand_data(1024);
+    {
+        repo.write("data", &mut io::Cursor::new(&data)).unwrap();
+    }
+
+    let mut result = repo.verify("data", &seckey).unwrap();
+    assert_eq!(result.corrupted.len(), 0);
+
+    // Corrupt first chunk we find
+    let chunk_path = dir_path.join("chunk");
+    for l1 in fs::read_dir(&chunk_path).unwrap() {
+        let l1 = l1.unwrap();
+        if l1.path().is_dir() {
+            for l2 in fs::read_dir(l1.path()).unwrap() {
+                let l2 = l2.unwrap();
+                if l2.path().is_dir() {
+                    for l3 in fs::read_dir(l2.path()).unwrap() {
+                        let l3 = l3.unwrap();
+                        let mut chunk = OpenOptions::new()
+                            .write(true)
+                            .append(true)
+                            .open(l3.path())
+                            .unwrap();
+                        chunk.write(&vec![1]).unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    result = repo.verify("data", &seckey).unwrap();
+    assert_eq!(result.corrupted.len(), 1);
 }
