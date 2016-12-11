@@ -482,12 +482,14 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         let mut sha256_digest = vec![0u8; DIGEST_SIZE];
         sha256.result(&mut sha256_digest);
         if sha256_digest != digest {
-            panic!("{} corrupted, data read: {}",
-                   digest.to_hex(),
-                   sha256_digest.to_hex());
+            Err(io::Error::new(io::ErrorKind::InvalidData,
+                               format!("{} corrupted, data read: {}",
+                                       digest.to_hex(),
+                                       sha256_digest.to_hex())))
+        } else {
+            try!(io::copy(&mut io::Cursor::new(data), writer));
+            Ok(())
         }
-        try!(io::copy(&mut io::Cursor::new(data), writer));
-        Ok(())
     }
 }
 
@@ -529,6 +531,66 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         try!(self.touch(digest));
         self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
     }
+}
+
+/// `ChunkAccessor` that verifies the chunks
+/// that are accessed
+///
+/// This is used to verify a name / index
+struct VerifyingChunkAccessor<'a> {
+    raw: DefaultChunkAccessor<'a>,
+    accessed: RefCell<HashSet<Vec<u8>>>,
+    corrupted: RefCell<Vec<Vec<u8>>>,
+}
+
+impl<'a> VerifyingChunkAccessor<'a> {
+    fn new(repo: &'a Repo) -> Self {
+        VerifyingChunkAccessor {
+            raw: DefaultChunkAccessor::new(repo),
+            accessed: RefCell::new(HashSet::new()),
+            corrupted: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn get_results(&self) -> VerifyResults {
+        return VerifyResults {
+            scanned: self.accessed.borrow().len(),
+            corrupted: self.corrupted.borrow().clone(),
+        };
+    }
+}
+
+impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
+    fn repo(&self) -> &Repo {
+        self.raw.repo()
+    }
+
+    fn read_chunk_into(&self,
+                       digest: &[u8],
+                       chunk_type: DataType,
+                       data_type: DataType,
+                       writer: &mut Write,
+                       sec_key: Option<&box_::SecretKey>)
+                       -> Result<()> {
+        {
+            let mut accessed = self.accessed.borrow_mut();
+            if accessed.contains(digest) {
+                return Ok(());
+            }
+            accessed.insert(digest.to_owned());
+        }
+        let res = self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
+
+        if res.is_err() {
+            self.corrupted.borrow_mut().push(digest.to_owned());
+        }
+        Ok(())
+    }
+}
+
+pub struct VerifyResults {
+    pub scanned: usize,
+    pub corrupted: Vec<Vec<u8>>,
 }
 
 
@@ -796,6 +858,23 @@ impl Repo {
         }
 
         Ok(counter.count)
+    }
+
+    pub fn verify(&self, name: &str, seckey: &SecretKey) -> Result<VerifyResults> {
+        info!("verify name {}", name);
+
+        let _lock = try!(self.lock_read());
+
+        let digest = try!(self.name_to_digest(name));
+
+        let mut counter = CounterWriter::new();
+        let accessor = VerifyingChunkAccessor::new(self);
+        {
+            let mut traverser =
+                ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            try!(traverser.read_recursively(&accessor, &digest));
+        }
+        Ok(accessor.get_results())
     }
 
     // pub fn du_by_digest(&self, digest: &[u8], seckey: &SecretKey) -> Result<u64> {
