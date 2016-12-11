@@ -278,9 +278,9 @@ fn run(options: &Options) -> io::Result<()> {
 
             let results = try!(repo.verify(&name, &seckey));
             println!("scanned {} chunk(s)", results.scanned);
-            println!("found {} corrupted chunk(s)", results.corrupted.len());
-            for chunk in results.corrupted.into_iter() {
-                println!("chunk {} corrupted", &chunk.to_hex());
+            println!("found {} corrupted chunk(s)", results.errors.len());
+            for err in results.errors.into_iter() {
+                println!("chunk {} - {}", &err.0.to_hex(), err.1);
             }
         }
     }

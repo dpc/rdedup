@@ -235,7 +235,7 @@ fn verify_name() {
     }
 
     let mut result = repo.verify("data", &seckey).unwrap();
-    assert_eq!(result.corrupted.len(), 0);
+    assert_eq!(result.errors.len(), 0);
 
     // Corrupt first chunk we find
     let chunk_path = dir_path.join("chunk");
@@ -260,7 +260,7 @@ fn verify_name() {
     }
 
     result = repo.verify("data", &seckey).unwrap();
-    assert_eq!(result.corrupted.len(), 1);
+    assert_eq!(result.errors.len(), 1);
 
     wipe(&repo);
 }

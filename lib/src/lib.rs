@@ -540,7 +540,7 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
 struct VerifyingChunkAccessor<'a> {
     raw: DefaultChunkAccessor<'a>,
     accessed: RefCell<HashSet<Vec<u8>>>,
-    corrupted: RefCell<Vec<Vec<u8>>>,
+    errors: RefCell<Vec<(Vec<u8>, Error)>>,
 }
 
 impl<'a> VerifyingChunkAccessor<'a> {
@@ -548,14 +548,14 @@ impl<'a> VerifyingChunkAccessor<'a> {
         VerifyingChunkAccessor {
             raw: DefaultChunkAccessor::new(repo),
             accessed: RefCell::new(HashSet::new()),
-            corrupted: RefCell::new(Vec::new()),
+            errors: RefCell::new(Vec::new()),
         }
     }
 
-    fn get_results(&self) -> VerifyResults {
+    fn get_results(self) -> VerifyResults {
         return VerifyResults {
             scanned: self.accessed.borrow().len(),
-            corrupted: self.corrupted.borrow().clone(),
+            errors: self.errors.into_inner(),
         };
     }
 }
@@ -582,7 +582,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         let res = self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
 
         if res.is_err() {
-            self.corrupted.borrow_mut().push(digest.to_owned());
+            self.errors.borrow_mut().push((digest.to_owned(), res.err().unwrap()));
         }
         Ok(())
     }
@@ -590,7 +590,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
 
 pub struct VerifyResults {
     pub scanned: usize,
-    pub corrupted: Vec<Vec<u8>>,
+    pub errors: Vec<(Vec<u8>, Error)>,
 }
 
 
