@@ -261,4 +261,6 @@ fn verify_name() {
 
     result = repo.verify("data", &seckey).unwrap();
     assert_eq!(result.corrupted.len(), 1);
+
+    wipe(&repo);
 }
