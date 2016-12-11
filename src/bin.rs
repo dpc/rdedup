@@ -9,6 +9,7 @@ extern crate rpassword;
 use std::{io, process, env};
 use std::path;
 use std::str::FromStr;
+use serialize::hex::ToHex;
 
 use lib::Repo;
 
@@ -75,6 +76,7 @@ enum Command {
     Remove,
     ChangePassphrase,
     List,
+    Verify,
 }
 
 impl FromStr for Command {
@@ -90,6 +92,7 @@ impl FromStr for Command {
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
             "chpasswd" | "chpassphrase" => Ok(Command::ChangePassphrase),
+            "verify" => Ok(Command::Verify),
             _ => Err(()),
         }
     }
@@ -193,7 +196,8 @@ impl Options {
   ls\t\t\tlist all stored names
   rm\t\t\tdelete name
   gc\t\t\tdelete unreachable data
-  changepassphrase\tchange the passphrase");
+  changepassphrase\tchange the passphrase
+  verify\t\tverify integrity of chunks associated with a name");
     }
 }
 
@@ -263,6 +267,20 @@ fn run(options: &Options) -> io::Result<()> {
 
             for name in try!(repo.list_names()) {
                 println!("{}", name);
+            }
+        }
+        Command::Verify => {
+            let name = options.check_name();
+            let dir = options.check_dir();
+            let repo = try!(Repo::open(&dir));
+            let pass = read_passphrase(&options);
+            let seckey = try!(repo.get_seckey(&pass));
+
+            let results = try!(repo.verify(&name, &seckey));
+            println!("scanned {} chunk(s)", results.scanned);
+            println!("found {} corrupted chunk(s)", results.corrupted.len());
+            for chunk in results.corrupted.into_iter() {
+                println!("chunk {} corrupted", &chunk.to_hex());
             }
         }
     }
