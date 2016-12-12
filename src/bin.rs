@@ -91,7 +91,9 @@ impl FromStr for Command {
             "ls" | "list" => Ok(Command::List),
             "du" => Ok(Command::DU),
             "gc" => Ok(Command::GC),
-            "chpasswd" | "chpassphrase" => Ok(Command::ChangePassphrase),
+            "chpasswd" |
+            "chpassphrase" |
+            "changepassphrase" => Ok(Command::ChangePassphrase),
             "verify" => Ok(Command::Verify),
             _ => Err(()),
         }
