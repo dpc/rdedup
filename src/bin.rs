@@ -210,7 +210,9 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            try!(repo.write(&name, &mut io::stdin()));
+            let stats = try!(repo.write(&name, &mut io::stdin()));
+            println!("{} new chunks", stats.new_chunks);
+            println!("{} new bytes", stats.new_bytes);
         }
         Command::Load => {
             let name = options.check_name();

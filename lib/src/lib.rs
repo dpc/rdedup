@@ -21,7 +21,7 @@ use std::cell::RefCell;
 
 use fs2::FileExt;
 
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, mpsc};
 
 use rollsum::Engine;
 use crypto::sha2;
@@ -602,6 +602,11 @@ pub struct DuResults {
     pub chunks: usize,
     pub bytes: u64,
 }
+#[derive(Clone, Debug)]
+pub struct WriteStats {
+    pub new_chunks: usize,
+    pub new_bytes: u64,
+}
 
 
 /// Rdedup repository
@@ -611,6 +616,7 @@ pub struct Repo {
     path: PathBuf,
     /// Public key associated with the repository
     pub_key: box_::PublicKey,
+    write_stats: Arc<Mutex<WriteStats>>,
 }
 
 /// Opaque wrapper over secret key
@@ -670,6 +676,10 @@ impl Repo {
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
+            write_stats: Arc::new(Mutex::new(WriteStats {
+                new_bytes: 0,
+                new_chunks: 0,
+            })),
         };
         Ok(repo)
     }
@@ -748,6 +758,10 @@ impl Repo {
         Ok(Repo {
             path: repo_path.to_owned(),
             pub_key: pub_key,
+            write_stats: Arc::new(Mutex::new(WriteStats {
+                new_bytes: 0,
+                new_chunks: 0,
+            })),
         })
     }
 
@@ -800,7 +814,7 @@ impl Repo {
         Ok(file)
     }
 
-    pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<()> {
+    pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<WriteStats> {
         info!("Write name {}", name);
         let _lock = try!(self.lock_write());
 
@@ -839,7 +853,10 @@ impl Repo {
             join.join().unwrap();
         }
 
-        self.store_digest_as_name(&final_digest, name)
+        try!(self.store_digest_as_name(&final_digest, name));
+        let stats_arc = self.write_stats.clone();
+        let stats = stats_arc.lock().unwrap();
+        Ok(stats.clone())
     }
 
     pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
@@ -1094,6 +1111,7 @@ impl Repo {
         let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
         // Cache paths to make sure we don't queue up an existing block
         let mut queue_paths: HashSet<PathBuf> = HashSet::new();
+        let stats_arc = self.write_stats.clone();
 
         fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
             while let Some(file) = queue.pop_front() {
@@ -1119,6 +1137,9 @@ impl Repo {
                             flush(&mut queue, &mut queue_paths);
                         }
 
+                        let mut stats = stats_arc.lock().unwrap();
+                        stats.new_chunks += 1;
+                        stats.new_bytes += data.len() as u64;
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
