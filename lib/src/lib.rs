@@ -593,6 +593,11 @@ pub struct VerifyResults {
     pub errors: Vec<(Vec<u8>, Error)>,
 }
 
+pub struct GcResults {
+    pub chunks: usize,
+    pub bytes: u64,
+}
+
 
 /// Rdedup repository
 #[derive(Clone, Debug)]
@@ -1281,27 +1286,32 @@ impl Repo {
             .join(&digest.to_hex())
     }
 
-    fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<()> {
+    fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
         let chunk_type = try!(self.chunk_type(digest));
         let path = self.chunk_path_by_digest(digest, chunk_type);
-
-        fs::remove_file(path)
+        let md = try!(fs::metadata(&path));
+        try!(fs::remove_file(path));
+        Ok(md.len())
     }
-
-    pub fn gc(&self) -> Result<usize> {
+    pub fn gc(&self) -> Result<GcResults> {
 
         let _lock = try!(self.lock_write());
 
         let reachable = self.list_reachable_chunks().unwrap();
         let stored = self.list_stored_chunks().unwrap();
 
-        let mut removed = 0;
+        let mut result = GcResults {
+            chunks: 0,
+            bytes: 0,
+        };
         for digest in stored.difference(&reachable) {
-            try!(self.rm_chunk_by_digest(digest));
-            removed += 1
+            trace!("removing {}", digest.to_hex());
+            let bytes = try!(self.rm_chunk_by_digest(digest));
+            result.chunks += 1;
+            result.bytes += bytes;
         }
 
-        Ok(removed)
+        Ok(result)
     }
 
     fn name_dir_path(&self) -> PathBuf {

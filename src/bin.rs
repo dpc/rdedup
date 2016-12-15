@@ -257,8 +257,9 @@ fn run(options: &Options) -> io::Result<()> {
 
             let repo = try!(Repo::open(&dir));
 
-            let removed = try!(repo.gc());
-            println!("Removed {} chunks", removed);
+            let result = try!(repo.gc());
+            println!("Removed {} chunks", result.chunks);
+            println!("Freed {} bytes", result.bytes);
         }
         Command::List => {
             options.check_no_arguments();

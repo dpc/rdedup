@@ -187,7 +187,7 @@ fn random_sanity() {
 
         assert_eq!(stored_after_rm.len(), stored.len());
         assert!(reachable_after_rm.len() < reachable.len());
-        assert!(repo.gc().unwrap() > 0);
+        assert!(repo.gc().unwrap().chunks > 0);
     }
 
     wipe(&repo);
