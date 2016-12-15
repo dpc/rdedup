@@ -248,8 +248,9 @@ fn run(options: &Options) -> io::Result<()> {
             let pass = read_passphrase(&options);
             let seckey = try!(repo.get_seckey(&pass));
 
-            let size = try!(repo.du(&name, &seckey));
-            println!("{}", size);
+            let result = try!(repo.du(&name, &seckey));
+            println!("{} chunks", result.chunks);
+            println!("{} bytes", result.bytes);
         }
         Command::GC => {
             options.check_no_arguments();

@@ -598,6 +598,11 @@ pub struct GcResults {
     pub bytes: u64,
 }
 
+pub struct DuResults {
+    pub chunks: usize,
+    pub bytes: u64,
+}
+
 
 /// Rdedup repository
 #[derive(Clone, Debug)]
@@ -848,21 +853,23 @@ impl Repo {
         traverser.read_recursively(&accessor, &digest)
     }
 
-    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<u64> {
+    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<DuResults> {
         info!("DU name {}", name);
         let _lock = try!(self.lock_read());
 
         let digest = try!(self.name_to_digest(name));
 
         let mut counter = CounterWriter::new();
+        let accessor = VerifyingChunkAccessor::new(self);
         {
-            let accessor = self.chunk_accessor();
             let mut traverser =
                 ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
             try!(traverser.read_recursively(&accessor, &digest));
         }
-
-        Ok(counter.count)
+        Ok(DuResults {
+            chunks: accessor.get_results().scanned,
+            bytes: counter.count,
+        })
     }
 
     pub fn verify(&self, name: &str, seckey: &SecretKey) -> Result<VerifyResults> {
