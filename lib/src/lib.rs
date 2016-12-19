@@ -21,7 +21,7 @@ use std::cell::RefCell;
 
 use fs2::FileExt;
 
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::mpsc;
 
 use rollsum::Engine;
 use crypto::sha2;
@@ -616,7 +616,6 @@ pub struct Repo {
     path: PathBuf,
     /// Public key associated with the repository
     pub_key: box_::PublicKey,
-    write_stats: Arc<Mutex<WriteStats>>,
 }
 
 /// Opaque wrapper over secret key
@@ -676,10 +675,6 @@ impl Repo {
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
-            write_stats: Arc::new(Mutex::new(WriteStats {
-                new_bytes: 0,
-                new_chunks: 0,
-            })),
         };
         Ok(repo)
     }
@@ -758,10 +753,6 @@ impl Repo {
         Ok(Repo {
             path: repo_path.to_owned(),
             pub_key: pub_key,
-            write_stats: Arc::new(Mutex::new(WriteStats {
-                new_bytes: 0,
-                new_chunks: 0,
-            })),
         })
     }
 
@@ -840,10 +831,8 @@ impl Repo {
             move || self_clone.chunk_encrypter(encrypter_rx, tx_to_writer)
         }));
 
-        joins.push(thread::spawn({
-            let self_clone = self.clone();
-            move || self_clone.chunk_writer(writer_rx)
-        }));
+        let self_clone = self.clone();
+        let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
         let final_digest =
             try!(chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data));
@@ -852,11 +841,10 @@ impl Repo {
         for join in joins.drain(..) {
             join.join().unwrap();
         }
+        let write_stats = chunk_writer.join().unwrap();
 
         try!(self.store_digest_as_name(&final_digest, name));
-        let stats_arc = self.write_stats.clone();
-        let stats = stats_arc.lock().unwrap();
-        Ok(stats.clone())
+        Ok(write_stats)
     }
 
     pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
@@ -1107,11 +1095,14 @@ impl Repo {
         }
     }
 
-    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) {
+    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) -> WriteStats {
         let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
         // Cache paths to make sure we don't queue up an existing block
         let mut queue_paths: HashSet<PathBuf> = HashSet::new();
-        let stats_arc = self.write_stats.clone();
+        let mut write_stats = WriteStats {
+            new_bytes: 0,
+            new_chunks: 0,
+        };
 
         fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
             while let Some(file) = queue.pop_front() {
@@ -1128,7 +1119,7 @@ impl Repo {
             match rx.recv().unwrap() {
                 ChunkMessage::Exit => {
                     flush(&mut queue, &mut queue_paths);
-                    return;
+                    return write_stats;
                 }
                 ChunkMessage::Data(data, sha256, chunk_type, _) => {
                     let path = self.chunk_path_by_digest(&sha256, chunk_type);
@@ -1137,9 +1128,9 @@ impl Repo {
                             flush(&mut queue, &mut queue_paths);
                         }
 
-                        let mut stats = stats_arc.lock().unwrap();
-                        stats.new_chunks += 1;
-                        stats.new_bytes += data.len() as u64;
+
+                        write_stats.new_chunks += 1;
+                        write_stats.new_bytes += data.len() as u64;
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
