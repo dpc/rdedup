@@ -593,6 +593,21 @@ pub struct VerifyResults {
     pub errors: Vec<(Vec<u8>, Error)>,
 }
 
+pub struct GcResults {
+    pub chunks: usize,
+    pub bytes: u64,
+}
+
+pub struct DuResults {
+    pub chunks: usize,
+    pub bytes: u64,
+}
+#[derive(Clone, Debug)]
+pub struct WriteStats {
+    pub new_chunks: usize,
+    pub new_bytes: u64,
+}
+
 
 /// Rdedup repository
 #[derive(Clone, Debug)]
@@ -790,7 +805,7 @@ impl Repo {
         Ok(file)
     }
 
-    pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<()> {
+    pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<WriteStats> {
         info!("Write name {}", name);
         let _lock = try!(self.lock_write());
 
@@ -816,10 +831,8 @@ impl Repo {
             move || self_clone.chunk_encrypter(encrypter_rx, tx_to_writer)
         }));
 
-        joins.push(thread::spawn({
-            let self_clone = self.clone();
-            move || self_clone.chunk_writer(writer_rx)
-        }));
+        let self_clone = self.clone();
+        let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
         let final_digest =
             try!(chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data));
@@ -828,8 +841,10 @@ impl Repo {
         for join in joins.drain(..) {
             join.join().unwrap();
         }
+        let write_stats = chunk_writer.join().unwrap();
 
-        self.store_digest_as_name(&final_digest, name)
+        try!(self.store_digest_as_name(&final_digest, name));
+        Ok(write_stats)
     }
 
     pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
@@ -843,21 +858,23 @@ impl Repo {
         traverser.read_recursively(&accessor, &digest)
     }
 
-    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<u64> {
+    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<DuResults> {
         info!("DU name {}", name);
         let _lock = try!(self.lock_read());
 
         let digest = try!(self.name_to_digest(name));
 
         let mut counter = CounterWriter::new();
+        let accessor = VerifyingChunkAccessor::new(self);
         {
-            let accessor = self.chunk_accessor();
             let mut traverser =
                 ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
             try!(traverser.read_recursively(&accessor, &digest));
         }
-
-        Ok(counter.count)
+        Ok(DuResults {
+            chunks: accessor.get_results().scanned,
+            bytes: counter.count,
+        })
     }
 
     pub fn verify(&self, name: &str, seckey: &SecretKey) -> Result<VerifyResults> {
@@ -1078,10 +1095,14 @@ impl Repo {
         }
     }
 
-    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) {
+    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) -> WriteStats {
         let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
         // Cache paths to make sure we don't queue up an existing block
         let mut queue_paths: HashSet<PathBuf> = HashSet::new();
+        let mut write_stats = WriteStats {
+            new_bytes: 0,
+            new_chunks: 0,
+        };
 
         fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
             while let Some(file) = queue.pop_front() {
@@ -1098,7 +1119,7 @@ impl Repo {
             match rx.recv().unwrap() {
                 ChunkMessage::Exit => {
                     flush(&mut queue, &mut queue_paths);
-                    return;
+                    return write_stats;
                 }
                 ChunkMessage::Data(data, sha256, chunk_type, _) => {
                     let path = self.chunk_path_by_digest(&sha256, chunk_type);
@@ -1107,6 +1128,9 @@ impl Repo {
                             flush(&mut queue, &mut queue_paths);
                         }
 
+
+                        write_stats.new_chunks += 1;
+                        write_stats.new_bytes += data.len() as u64;
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path).unwrap();
@@ -1281,27 +1305,32 @@ impl Repo {
             .join(&digest.to_hex())
     }
 
-    fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<()> {
+    fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
         let chunk_type = try!(self.chunk_type(digest));
         let path = self.chunk_path_by_digest(digest, chunk_type);
-
-        fs::remove_file(path)
+        let md = try!(fs::metadata(&path));
+        try!(fs::remove_file(path));
+        Ok(md.len())
     }
-
-    pub fn gc(&self) -> Result<usize> {
+    pub fn gc(&self) -> Result<GcResults> {
 
         let _lock = try!(self.lock_write());
 
         let reachable = self.list_reachable_chunks().unwrap();
         let stored = self.list_stored_chunks().unwrap();
 
-        let mut removed = 0;
+        let mut result = GcResults {
+            chunks: 0,
+            bytes: 0,
+        };
         for digest in stored.difference(&reachable) {
-            try!(self.rm_chunk_by_digest(digest));
-            removed += 1
+            trace!("removing {}", digest.to_hex());
+            let bytes = try!(self.rm_chunk_by_digest(digest));
+            result.chunks += 1;
+            result.bytes += bytes;
         }
 
-        Ok(removed)
+        Ok(result)
     }
 
     fn name_dir_path(&self) -> PathBuf {

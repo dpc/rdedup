@@ -212,7 +212,9 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            try!(repo.write(&name, &mut io::stdin()));
+            let stats = try!(repo.write(&name, &mut io::stdin()));
+            println!("{} new chunks", stats.new_chunks);
+            println!("{} new bytes", stats.new_bytes);
         }
         Command::Load => {
             let name = options.check_name();
@@ -250,8 +252,9 @@ fn run(options: &Options) -> io::Result<()> {
             let pass = read_passphrase(&options);
             let seckey = try!(repo.get_seckey(&pass));
 
-            let size = try!(repo.du(&name, &seckey));
-            println!("{}", size);
+            let result = try!(repo.du(&name, &seckey));
+            println!("{} chunks", result.chunks);
+            println!("{} bytes", result.bytes);
         }
         Command::GC => {
             options.check_no_arguments();
@@ -259,8 +262,9 @@ fn run(options: &Options) -> io::Result<()> {
 
             let repo = try!(Repo::open(&dir));
 
-            let removed = try!(repo.gc());
-            println!("Removed {} chunks", removed);
+            let result = try!(repo.gc());
+            println!("Removed {} chunks", result.chunks);
+            println!("Freed {} bytes", result.bytes);
         }
         Command::List => {
             options.check_no_arguments();
