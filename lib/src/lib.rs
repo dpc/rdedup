@@ -1,3 +1,5 @@
+#![feature(proc_macro)]
+
 extern crate rollsum;
 extern crate crypto;
 #[macro_use]
@@ -9,6 +11,10 @@ extern crate flate2;
 #[cfg(test)]
 extern crate rand;
 extern crate fs2;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_yaml;
 
 use std::io::{BufRead, Read, Write, Result, Error};
 
@@ -589,27 +595,33 @@ pub struct Repo {
     path: PathBuf,
     /// Public key associated with the repository
     pub_key: box_::PublicKey,
+
+    /// Repo configuration
+    version : u32,
 }
 
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
-    pub fn init(repo_path: &Path, passphrase: &str) -> Result<Repo> {
-        info!("Init repo {}", repo_path.to_string_lossy());
-        if repo_path.exists() {
-            return Err(Error::new(io::ErrorKind::AlreadyExists,
-                                  format!("repo already exists: {}", repo_path.to_string_lossy())));
+    fn write_version_file(repo_path : &Path) -> Result<()> {
+        let path = version_file_path(&repo_path);
+        let path_tmp = path.with_extension("tmp");
+        let mut file = try!(fs::File::create(&path_tmp));
+        {
+            let mut writer = &mut file as &mut Write;
+            write!(writer, "{}", REPO_VERSION_CURRENT)?;
         }
 
-        // Workaround https://github.com/rust-lang/rust/issues/33707
-        let _ = fs::create_dir_all(&repo_path.join(repo_path));
+        file.flush()?;
+        file.sync_data()?;
 
-        try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
+        fs::rename(path_tmp, &path)?;
 
-        let (pk, sk) = box_::gen_keypair();
+        Ok(())
+    }
+
+    fn write_config_v0(repo_path: &Path, pk: box_::PublicKey, sk: box_::SecretKey, passphrase : &str) -> Result<()> {
         {
             let pubkey_path = pub_key_file_path(&repo_path);
 
@@ -630,28 +642,159 @@ impl Repo {
             let seckey_path = sec_key_file_path(&repo_path);
             write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
         }
-        {
-            let version_path = version_file_path(&repo_path);
-            let mut seckey_file = try!(fs::File::create(version_path));
-            let mut writer = &mut seckey_file as &mut Write;
-            try!(write!(writer, "{}", REPO_VERSION_CURRENT));
+        Repo::write_version_file(&repo_path)?;
+
+        Ok(())
+    }
+
+    fn write_config_v1(repo_path: &Path, pk: &box_::PublicKey, sk: &box_::SecretKey, passphrase : &str) -> Result<()> {
+
+        let salt = pwhash::gen_salt();
+        let nonce = secretbox::gen_nonce();
+
+        let pk_str = pk.0.to_hex();
+        let salt_str = salt.0.to_hex();
+        let nonce_str = nonce.0.to_hex();
+
+        let sk_str = {
+            let derived_key = try!(derive_key(passphrase, &salt));
+
+            let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
+
+            encrypted_seckey.to_hex()
+        };
+
+        let config = RepoConfig {
+            version: 1,
+            encryption: Some(EncryptionConfig {
+                sec_key: sk_str,
+                pub_key: pk_str,
+                nonce: nonce_str,
+                salt: salt_str,
+            }),
+        };
+
+        let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
+
+        let config_path = config_yml_file_path(&repo_path);
+        let config_path_tmp = config_path.with_extension("tmp");
+        let mut config_file = fs::File::create(&config_path_tmp)?;
+
+
+        (&mut config_file as &mut Write).write_all(config_str.as_bytes())?;
+        config_file.flush()?;
+        config_file.sync_data()?;
+
+        fs::rename(config_path_tmp, &config_path)?;
+
+        Repo::write_version_file(&repo_path)?;
+
+        Ok(())
+    }
+
+    fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
+        if repo_path.exists() {
+            return Err(Error::new(io::ErrorKind::AlreadyExists,
+                                  format!("repo already exists: {}", repo_path.to_string_lossy())));
         }
+        Ok(())
+    }
+
+    fn init_common_dirs(repo_path: &Path) -> Result<()> {
+        // Workaround https://github.com/rust-lang/rust/issues/33707
+        let _ = fs::create_dir_all(&repo_path.join(repo_path));
+
+        try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
+        Ok(())
+    }
+
+    /// Old repository config creation, should not be used anymore
+    /// other than backward compatibility testing purposes
+    pub fn init_v0(repo_path: &Path, passphrase: &str) -> Result<Repo> {
+        info!("Init repo (v0 - legacy) {}", repo_path.to_string_lossy());
+
+        Repo::ensure_repo_not_exists(repo_path)?;
+        Repo::init_common_dirs(repo_path)?;
+
+        let (pk, sk) = box_::gen_keypair();
+        Repo::write_config_v0(repo_path, pk, sk, passphrase)?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
+            version: 0,
         };
         Ok(repo)
     }
 
+    /// Create new rdedup repository
+    pub fn init(repo_path: &Path, passphrase: &str) -> Result<Repo> {
+        info!("Init repo {}", repo_path.to_string_lossy());
+        let (pk, sk) = box_::gen_keypair();
+
+        Repo::ensure_repo_not_exists(repo_path)?;
+        Repo::init_common_dirs(repo_path)?;
+        Repo::write_config_v1(repo_path, &pk, &sk, passphrase)?;
+
+        let repo = Repo {
+            path: repo_path.to_owned(),
+            pub_key: pk,
+            version : REPO_VERSION_CURRENT,
+        };
+
+        Ok(repo)
+    }
+
+    fn read_and_validate_version(repo_path : &Path) -> Result<u32> {
+        let version_path = version_file_path(&repo_path);
+        let mut file = try!(fs::File::open(&version_path));
+
+        let mut reader = io::BufReader::new(&mut file);
+        let mut version = String::new();
+        try!(reader.read_line(&mut version));
+        let version = version.trim();
+        let version_int = try!(version.parse::<u32>()
+                               .map_err(|_| {
+                                   io::Error::new(io::ErrorKind::InvalidData,
+                                                  format!("can't parse version file; unsupported repo format \
+                                                          version: {}",
+                                                          version))
+                               }));
+
+
+        if version_int > REPO_VERSION_CURRENT {
+            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                                      format!("repo version {} higher than supported {}; \
+                                              update?",
+                                              version,
+                                              REPO_VERSION_CURRENT)));
+        }
+
+        if version_int < REPO_VERSION_LOWEST {
+            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                                      format!("repo version {} lower than lowest supported \
+                                              {}; restore using older version?",
+                                              version,
+                                              REPO_VERSION_LOWEST)));
+        }
+
+        Ok(version_int)
+    }
 
     pub fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
         let _lock = try!(self.lock_read());
-        let sec_key = try!(self.load_sec_key(passphrase));
+        let sec_key = if self.version == 0 {
+            self.load_sec_key_v0(passphrase)?
+        } else {
+            self.load_sec_key(passphrase)?
+        };
+
         Ok(SecretKey(sec_key))
     }
 
-    pub fn open(repo_path: &Path) -> Result<Repo> {
+    pub fn open_v0(repo_path: &Path) -> Result<Repo> {
         info!("Open repo {}", repo_path.to_string_lossy());
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
@@ -665,38 +808,7 @@ impl Repo {
                                           pubkey_path.to_string_lossy())));
         }
 
-        {
-            let version_path = version_file_path(&repo_path);
-            let mut file = try!(fs::File::open(&version_path));
-
-            let mut reader = io::BufReader::new(&mut file);
-            let mut version = String::new();
-            try!(reader.read_line(&mut version));
-            let version = version.trim();
-            let version_int = try!(version.parse::<u32>()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                   format!("can't parse version file; unsupported repo format \
-                                            version: {}",
-                                           version))
-                }));
-
-            if version_int > REPO_VERSION_CURRENT {
-                return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                          format!("repo version {} higher than supported {}; \
-                                                   update?",
-                                                  version,
-                                                  REPO_VERSION_CURRENT)));
-            }
-
-            if version_int < REPO_VERSION_LOWEST {
-                return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                          format!("repo version {} lower than lowest supported \
-                                                   {}; restore using older version?",
-                                                  version,
-                                                  REPO_VERSION_LOWEST)));
-            }
-        }
+        let version_int = Repo::read_and_validate_version(repo_path)?;
 
         let mut file = try!(fs::File::open(&pubkey_path));
 
@@ -718,7 +830,47 @@ impl Repo {
         Ok(Repo {
             path: repo_path.to_owned(),
             pub_key: pub_key,
+            version: version_int,
         })
+    }
+
+    pub fn open(repo_path: &Path) -> Result<Repo> {
+        info!("Open repo {}", repo_path.to_string_lossy());
+        if !repo_path.exists() {
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("repo not found: {}", repo_path.to_string_lossy())));
+        }
+
+        let version = Repo::read_and_validate_version(repo_path)?;
+
+        if version == 0 {
+            return Repo::open_v0(repo_path);
+        }
+
+        let file = fs::File::open(&config_yml_file_path(&repo_path))?;
+        let config : config::RepoConfig = serde_yaml::from_reader(file).map_err(|e| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
+        })?;
+
+        if let Some(encryption_config) = config.encryption {
+            let pubkey_bytes = encryption_config.pub_key
+                .from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData,
+                                   "pubkey data invalid: not hex")
+                })?;
+            let pub_key = try!(box_::PublicKey::from_slice(&pubkey_bytes)
+                               .ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                     "pubkey data invalid: can't convert to pubkey")));
+
+            Ok(Repo {
+                path: repo_path.to_owned(),
+                pub_key: pub_key,
+                version: version,
+            })
+        } else {
+            Err(io::Error::new(io::ErrorKind::InvalidData, format!("Repo without encryptin not supported yet")))
+        }
     }
 
     /// Remove a stored name from repo
@@ -728,8 +880,7 @@ impl Repo {
         fs::remove_file(self.name_path(name))
     }
 
-    /// Change the passphrase
-    pub fn change_passphrase(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
+    fn change_passphrase_v0(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
         info!("Changing password");
         let _lock = try!(self.lock_write());
 
@@ -750,6 +901,15 @@ impl Repo {
         fs::rename(seckey_path_tmp, &seckey_path)?;
 
         Ok(())
+    }
+
+    /// Change the passphrase
+    pub fn change_passphrase(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
+        if self.version == 0 {
+            self.change_passphrase_v0(seckey, new_passphrase)
+        } else {
+            Repo::write_config_v1(&self.path, &self.pub_key, &seckey.0, new_passphrase)
+        }
     }
 
     fn lock_write(&self) -> Result<fs::File> {
@@ -891,7 +1051,7 @@ impl Repo {
         Ok(bytes)
     }
 
-    fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
+    fn load_sec_key_v0(&self, passphrase: &str) -> Result<box_::SecretKey> {
         let seckey_path = sec_key_file_path(&self.path);
         if !seckey_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
@@ -929,6 +1089,59 @@ impl Repo {
                                   "encrypted seckey data invalid: can't convert to seckey")));
 
         Ok(sec_key)
+    }
+
+    fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
+
+        let file = fs::File::open(&config_yml_file_path(&self.path))?;
+        let config : config::RepoConfig = serde_yaml::from_reader(file).map_err(|e| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
+        })?;
+
+        if let Some(encryption_config) = config.encryption {
+            let sealed_key = encryption_config.sec_key
+                .from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
+                })?;
+
+            let nonce = encryption_config.nonce
+                .from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "nonce data invalid: not hex")
+                })?;
+            let nonce = try!(secretbox::Nonce::from_slice(&nonce)
+                             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                   "nonce data invalid: can't convert to nonce")));
+
+            let salt = encryption_config.salt
+                .from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "salt data invalid: not hex")
+                })?;
+            let salt = try!(pwhash::Salt::from_slice(&salt)
+                            .ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                  "salt data invalid: can't convert to salt")));
+
+
+            let derived_key = try!(derive_key(passphrase, &salt));
+
+            let plain_seckey = try!(secretbox::open(&sealed_key, &nonce, &derived_key)
+                                    .map_err(|_| {
+                                        io::Error::new(io::ErrorKind::InvalidData,
+                                                       "can't decrypt key using given passphrase")
+                                    }));
+            let sec_key = try!(box_::SecretKey::from_slice(&plain_seckey)
+                               .ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                     "encrypted seckey data invalid: can't convert to seckey")));
+
+
+
+            Ok(sec_key)
+
+        } else {
+            Err(io::Error::new(io::ErrorKind::InvalidData, format!("Repo without encryptin not supported yet")))
+        }
     }
 
     fn chunk_accessor<'a>(&'a self) -> DefaultChunkAccessor<'a> {

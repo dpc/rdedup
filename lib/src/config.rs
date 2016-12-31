@@ -8,15 +8,17 @@ use sodiumoxide::crypto::{pwhash, secretbox};
 use serialize::hex::{ToHex};
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
-pub const REPO_VERSION_CURRENT: u32 = 0;
+pub const REPO_VERSION_CURRENT: u32 = 1;
 
 pub const DATA_SUBDIR: &'static str = "chunk";
+pub const NAME_SUBDIR: &'static str = "name";
+pub const INDEX_SUBDIR: &'static str = "index";
+
 pub const LOCK_FILE: &'static str = ".lock";
 pub const PUBKEY_FILE: &'static str = "pub_key";
 pub const SECKEY_FILE: &'static str = "sec_key";
 pub const VERSION_FILE: &'static str = "version";
-pub const NAME_SUBDIR: &'static str = "name";
-pub const INDEX_SUBDIR: &'static str = "index";
+pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
 pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
@@ -34,6 +36,10 @@ pub fn version_file_path(path: &Path) -> PathBuf {
     path.join(VERSION_FILE)
 }
 
+pub fn config_yml_file_path(path: &Path) -> PathBuf {
+    path.join(CONFIG_YML_FILE)
+}
+
 pub fn write_seckey_file(path: &Path,
                      encrypted_seckey: &[u8],
                      nonce: &secretbox::Nonce,
@@ -48,4 +54,16 @@ pub fn write_seckey_file(path: &Path,
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct EncryptionConfig {
+    pub sec_key: String,
+    pub pub_key: String,
+    pub salt: String,
+    pub nonce: String,
+}
 
+#[derive(Serialize, Deserialize)]
+pub struct RepoConfig {
+    pub version : u32,
+    pub encryption: Option<EncryptionConfig>,
+}
