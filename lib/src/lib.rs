@@ -32,12 +32,12 @@ use sodiumoxide::crypto::{box_, pwhash, secretbox};
 mod iterators;
 use iterators::StoredChunks;
 
+mod config;
+use config::*;
+
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
 const DIGEST_SIZE: usize = 32;
-
-const REPO_VERSION_LOWEST: u32 = 0;
-const REPO_VERSION_CURRENT: u32 = 0;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum DataType {
@@ -225,36 +225,6 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
     }
 }
 
-
-fn lock_file_path(path: &Path) -> PathBuf {
-    path.join(LOCK_FILE)
-}
-
-fn pub_key_file_path(path: &Path) -> PathBuf {
-    path.join(PUBKEY_FILE)
-}
-
-fn sec_key_file_path(path: &Path) -> PathBuf {
-    path.join(SECKEY_FILE)
-}
-
-fn version_file_path(path: &Path) -> PathBuf {
-    path.join(VERSION_FILE)
-}
-
-fn write_seckey_file(path: &Path,
-                     encrypted_seckey: &[u8],
-                     nonce: &secretbox::Nonce,
-                     salt: &pwhash::Salt)
-                     -> io::Result<()> {
-    let mut seckey_file = fs::File::create(path)?;
-    let mut writer = &mut seckey_file as &mut Write;
-    writer.write_all(&encrypted_seckey.to_hex().as_bytes())?;
-    writer.write_all(&nonce.0.to_hex().as_bytes())?;
-    writer.write_all(&salt.0.to_hex().as_bytes())?;
-    writer.flush()?;
-    Ok(())
-}
 
 /// Writer that counts how many bytes were written to it
 struct CounterWriter {
@@ -623,14 +593,6 @@ pub struct Repo {
 
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
-
-const DATA_SUBDIR: &'static str = "chunk";
-const LOCK_FILE: &'static str = ".lock";
-const PUBKEY_FILE: &'static str = "pub_key";
-const SECKEY_FILE: &'static str = "sec_key";
-const VERSION_FILE: &'static str = "version";
-const NAME_SUBDIR: &'static str = "name";
-const INDEX_SUBDIR: &'static str = "index";
 
 impl Repo {
     pub fn init(repo_path: &Path, passphrase: &str) -> Result<Repo> {
