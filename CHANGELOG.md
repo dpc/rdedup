@@ -4,6 +4,7 @@
 - Missing "changepassphrase" command to rdedup
 - Improved stats to store, du, gc api calls and commands
 - Changelog to repository
+- Optimized GC to use an iterator of stored chunks instead of an in memory set
 
 # v1.0.1
 ## Added
