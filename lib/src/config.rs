@@ -4,8 +4,11 @@ use std::{io, fs};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use sodiumoxide::crypto::{pwhash, secretbox};
+use sodiumoxide::crypto::{pwhash, secretbox, box_};
 use serialize::hex::{ToHex};
+
+use base64;
+use serde::{self, Deserialize};
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
 pub const REPO_VERSION_CURRENT: u32 = 1;
@@ -54,12 +57,65 @@ pub fn write_seckey_file(path: &Path,
     Ok(())
 }
 
+trait MyTryFromBytes : Sized {
+    type Err : 'static + Sized + ::std::error::Error;
+    fn try_from(&[u8]) -> Result<Self, Self::Err>;
+}
+
+impl MyTryFromBytes for box_::PublicKey {
+    type Err = io::Error;
+    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
+        box_::PublicKey::from_slice(slice).ok_or(
+            io::Error::new(io::ErrorKind::InvalidData, "can't derive PublicKey from invalid binary data")
+            )
+    }
+}
+
+impl MyTryFromBytes for secretbox::Nonce {
+    type Err = io::Error;
+    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
+        secretbox::Nonce::from_slice(slice).ok_or(
+            io::Error::new(io::ErrorKind::InvalidData, "can't derive Nonce from invalid binary data")
+            )
+    }
+}
+
+impl MyTryFromBytes for pwhash::Salt {
+    type Err = io::Error;
+    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
+        pwhash::Salt::from_slice(slice).ok_or(
+            io::Error::new(io::ErrorKind::InvalidData, "can't derive Nonce from invalid binary data")
+            )
+    }
+}
+
+fn from_base64<'a, T, D>(deserializer: &mut D) -> Result<T, D::Error>
+where D: serde::Deserializer,
+      T: MyTryFromBytes,
+{
+    use serde::de::Error;
+    String::deserialize(deserializer)
+        .and_then(|string| base64::decode(&string).map_err(|err| Error::custom(err.to_string())))
+        .and_then(|ref bytes| T::try_from(bytes).map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error))))
+}
+
+fn as_base64<T, S>(key: &T, serializer: &mut S) -> Result<(), S::Error>
+    where T: AsRef<[u8]>,
+          S: serde::Serializer
+{
+    serializer.serialize_str(&base64::encode(key.as_ref()))
+}
+
+
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionConfig {
-    pub sec_key: String,
-    pub pub_key: String,
-    pub salt: String,
-    pub nonce: String,
+    pub sealed_sec_key: Vec<u8>,
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    pub pub_key: box_::PublicKey,
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    pub salt: pwhash::Salt,
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    pub nonce: secretbox::Nonce,
 }
 
 #[derive(Serialize, Deserialize)]

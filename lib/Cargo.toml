@@ -27,6 +27,7 @@ fs2 = "0.2.5"
 serde = "0.8"
 serde_derive = "*"
 serde_yaml = "*"
+base64 = "*"
 
 [dev-dependencies]
 rand = "0.3.14"

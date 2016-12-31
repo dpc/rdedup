@@ -15,6 +15,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_yaml;
+extern crate base64;
 
 use std::io::{BufRead, Read, Write, Result, Error};
 
@@ -652,25 +653,19 @@ impl Repo {
         let salt = pwhash::gen_salt();
         let nonce = secretbox::gen_nonce();
 
-        let pk_str = pk.0.to_hex();
-        let salt_str = salt.0.to_hex();
-        let nonce_str = nonce.0.to_hex();
-
-        let sk_str = {
+        let sealed_sk = {
             let derived_key = try!(derive_key(passphrase, &salt));
 
-            let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
-
-            encrypted_seckey.to_hex()
+            secretbox::seal(&sk.0, &nonce, &derived_key)
         };
 
         let config = RepoConfig {
             version: 1,
             encryption: Some(EncryptionConfig {
-                sec_key: sk_str,
-                pub_key: pk_str,
-                nonce: nonce_str,
-                salt: salt_str,
+                sealed_sec_key: sealed_sk,
+                pub_key: *pk,
+                nonce: nonce,
+                salt: salt,
             }),
         };
 
@@ -853,19 +848,9 @@ impl Repo {
         })?;
 
         if let Some(encryption_config) = config.encryption {
-            let pubkey_bytes = encryption_config.pub_key
-                .from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                   "pubkey data invalid: not hex")
-                })?;
-            let pub_key = try!(box_::PublicKey::from_slice(&pubkey_bytes)
-                               .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                     "pubkey data invalid: can't convert to pubkey")));
-
             Ok(Repo {
                 path: repo_path.to_owned(),
-                pub_key: pub_key,
+                pub_key: encryption_config.pub_key,
                 version: version,
             })
         } else {
@@ -1098,35 +1083,10 @@ impl Repo {
             io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
         })?;
 
-        if let Some(encryption_config) = config.encryption {
-            let sealed_key = encryption_config.sec_key
-                .from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
-                })?;
+        if let Some(enc) = config.encryption {
+            let derived_key = try!(derive_key(passphrase, &enc.salt));
 
-            let nonce = encryption_config.nonce
-                .from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "nonce data invalid: not hex")
-                })?;
-            let nonce = try!(secretbox::Nonce::from_slice(&nonce)
-                             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                   "nonce data invalid: can't convert to nonce")));
-
-            let salt = encryption_config.salt
-                .from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "salt data invalid: not hex")
-                })?;
-            let salt = try!(pwhash::Salt::from_slice(&salt)
-                            .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                  "salt data invalid: can't convert to salt")));
-
-
-            let derived_key = try!(derive_key(passphrase, &salt));
-
-            let plain_seckey = try!(secretbox::open(&sealed_key, &nonce, &derived_key)
+            let plain_seckey = try!(secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
                                     .map_err(|_| {
                                         io::Error::new(io::ErrorKind::InvalidData,
                                                        "can't decrypt key using given passphrase")
