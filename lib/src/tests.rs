@@ -2,17 +2,21 @@ mod lib {
     pub use super::super::*;
 }
 
+use iterators::StoredChunks;
+
+use std::collections::HashSet;
 use std::path;
 use std::fs;
 use std::fs::OpenOptions;
 use std::{io, cmp};
-use std::io::Write;
+use std::io::{Result, Write};
 use rand::{self, Rng};
 use serialize::hex::ToHex;
 use crypto::sha2;
 use crypto::digest::Digest;
 
 const PASS: &'static str = "FOO";
+const DIGEST_SIZE: usize = 32;
 
 fn rand_tmp_dir() -> path::PathBuf {
     // TODO: Use $TMP or something?
@@ -20,6 +24,18 @@ fn rand_tmp_dir() -> path::PathBuf {
         .gen_ascii_chars()
         .take(20)
         .collect::<String>())
+}
+
+fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
+    info!("List stored chunks");
+    let mut digests = HashSet::new();
+    let index_chunks = try!(StoredChunks::new(&repo.index_dir_path(), DIGEST_SIZE));
+    let data_chunks = try!(StoredChunks::new(&repo.chunk_dir_path(), DIGEST_SIZE));
+    for digest in index_chunks.chain(data_chunks) {
+        let digest = digest.unwrap();
+        digests.insert(digest);
+    }
+    Ok(digests)
 }
 
 /// Generate data that repease some chunks
@@ -92,7 +108,7 @@ fn wipe(repo: &lib::Repo) {
 
     repo.gc().unwrap();
 
-    assert_eq!(repo.list_stored_chunks().unwrap().len(), 0);
+    assert_eq!(list_stored_chunks(repo).unwrap().len(), 0);
     assert_eq!(repo.list_reachable_chunks().unwrap().len(), 0);
 }
 
@@ -172,7 +188,7 @@ fn random_sanity() {
         }
 
         let reachable = repo.list_reachable_chunks().unwrap();
-        let stored = repo.list_stored_chunks().unwrap();
+        let stored = list_stored_chunks(&repo).unwrap();
 
         for digest in reachable.iter() {
             assert!(stored.contains(digest));
@@ -183,7 +199,7 @@ fn random_sanity() {
 
         repo.rm(&name).unwrap();
         let reachable_after_rm = repo.list_reachable_chunks().unwrap();
-        let stored_after_rm = repo.list_stored_chunks().unwrap();
+        let stored_after_rm = list_stored_chunks(&repo).unwrap();
 
         assert_eq!(stored_after_rm.len(), stored.len());
         assert!(reachable_after_rm.len() < reachable.len());
