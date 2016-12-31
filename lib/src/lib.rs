@@ -29,6 +29,8 @@ use crypto::digest::Digest;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
+mod iterators;
+
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
 const DIGEST_SIZE: usize = 32;
@@ -1211,42 +1213,10 @@ impl Repo {
     fn list_stored_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         info!("List stored chunks");
         fn insert_all_digest(path: &Path, reachable: &mut HashSet<Vec<u8>>) {
-            trace!("Looking in {}", path.to_string_lossy());
-            for out_entry in fs::read_dir(path).unwrap() {
-                let out_entry = out_entry.unwrap();
-                let out_entry_path = out_entry.path();
-                if !out_entry_path.is_dir() {
-                    trace!("skipping {}", out_entry_path.to_string_lossy());
-                    continue;
-                }
-                trace!("Looking in {}", out_entry_path.to_string_lossy());
-                for mid_entry in fs::read_dir(out_entry_path).unwrap() {
-                    let mid_entry = mid_entry.unwrap();
-                    let mid_entry_path = mid_entry.path();
-                    if !mid_entry_path.is_dir() {
-                        trace!("skipping {}", mid_entry_path.to_string_lossy());
-                        continue;
-                    }
-                    trace!("Looking in {}", mid_entry.path().to_string_lossy());
-                    for entry in fs::read_dir(mid_entry_path).unwrap() {
-                        let entry = entry.unwrap();
-                        let entry_path = entry.path();
-                        trace!("Looking in {}", entry_path.to_string_lossy());
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        match name.from_hex() {
-                            Ok(digest) => {
-                                if digest.len() == DIGEST_SIZE {
-                                    reachable.insert(digest);
-                                } else {
-                                    trace!("skipping {}", entry_path.to_string_lossy());
-                                }
-                            }
-                            Err(e) => {
-                                trace!("skipping {}, error {}", entry_path.to_string_lossy(), e);
-                            }
-                        }
-                    }
-                }
+            let dirs = iterators::StoredChunks::new(path, DIGEST_SIZE).unwrap();
+            for digest in dirs {
+                let val = digest.unwrap();
+                reachable.insert(val);
             }
         }
 
