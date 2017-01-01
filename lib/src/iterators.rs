@@ -48,7 +48,6 @@ impl Iterator for StoredChunks {
                 Ok(sc) => Some(Box::new(sc)),
                 Err(e) => return Some(Err(e)),
             };
-
             return self.next();
         }
         // We have landed on a file, we need to verify the file is a valid chunk by parsing the hex
@@ -58,16 +57,12 @@ impl Iterator for StoredChunks {
             Ok(digest) => {
                 if digest.len() == self.digest_size {
                     return Some(Ok(digest));
-                } else {
-                    trace!("skipping {}", entry_path_str);
-                    // Maybe we should remove this file? It is not a valid chunk file.
-                    return self.next();
                 }
+                trace!("skipping {}", entry_path_str);
+                // Maybe we should remove this file? It is not a valid chunk file.
             }
-            Err(e) => {
-                trace!("skipping {}, error {}", entry_path_str, e);
-                return self.next();
-            }
+            Err(e) => trace!("skipping {}, error {}", entry_path_str, e),
         }
+        return self.next();
     }
 }
