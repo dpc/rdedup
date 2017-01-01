@@ -605,13 +605,13 @@ pub struct Repo {
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
-    fn write_version_file(repo_path : &Path) -> Result<()> {
+    fn write_version_file(repo_path : &Path, version : u32) -> Result<()> {
         let path = version_file_path(&repo_path);
         let path_tmp = path.with_extension("tmp");
         let mut file = try!(fs::File::create(&path_tmp));
         {
             let mut writer = &mut file as &mut Write;
-            write!(writer, "{}", REPO_VERSION_CURRENT)?;
+            write!(writer, "{}", version)?;
         }
 
         file.flush()?;
@@ -643,7 +643,7 @@ impl Repo {
             let seckey_path = sec_key_file_path(&repo_path);
             write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
         }
-        Repo::write_version_file(&repo_path)?;
+        Repo::write_version_file(&repo_path, 0)?;
 
         Ok(())
     }
@@ -682,7 +682,7 @@ impl Repo {
 
         fs::rename(config_path_tmp, &config_path)?;
 
-        Repo::write_version_file(&repo_path)?;
+        Repo::write_version_file(&repo_path, REPO_VERSION_CURRENT)?;
 
         Ok(())
     }
