@@ -26,37 +26,29 @@ impl Iterator for StoredChunks {
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
         // Check if we have an iterator for the next level, if so we process from that iterator.
-        let is_some = self.next_level.is_some();
-        if is_some {
-            let val: Option<Result<Vec<u8>>>;
-            {
-                val = self.next_level.as_mut().unwrap().next();
-            }
-            match val {
+        if self.next_level.is_some() {
+            match self.next_level.as_mut().unwrap().next() {
                 Some(v) => return Some(v),
                 None => self.next_level = None,
             };
         }
         // There was either no next_level or next_level is now exhausted, move our directory
         // iterator forward
-        let dir_res = self.dir.next();
-        if dir_res.is_none() {
-            return None;
-        }
-        let entry = match dir_res.unwrap() {
-            Ok(e) => e,
-            Err(err) => return Some(Err(err)),
+        let entry = match self.dir.next() {
+            Some(Ok(entry)) => entry,
+            Some(Err(error)) => return Some(Err(error)),
+            None => return None,
         };
         let entry_path = entry.path();
-        trace!("Looking at {}", entry_path.to_string_lossy());
+        let entry_path_str = entry_path.to_string_lossy();
+        trace!("Looking at {}", entry_path_str);
         if entry_path.is_dir() {
             // We hit a directory lets get a new StoredChunks iterator for that level and exhaust it.
-            let next_level = match StoredChunks::new(&entry_path, self.digest_size) {
-                Ok(sc) => sc,
+            self.next_level = match StoredChunks::new(&entry_path, self.digest_size) {
+                Ok(sc) => Some(Box::new(sc)),
                 Err(e) => return Some(Err(e)),
             };
 
-            self.next_level = Some(Box::new(next_level));
             return self.next();
         }
         // We have landed on a file, we need to verify the file is a valid chunk by parsing the hex
@@ -67,13 +59,13 @@ impl Iterator for StoredChunks {
                 if digest.len() == self.digest_size {
                     return Some(Ok(digest));
                 } else {
-                    trace!("skipping {}", entry_path.to_string_lossy());
+                    trace!("skipping {}", entry_path_str);
                     // Maybe we should remove this file? It is not a valid chunk file.
                     return self.next();
                 }
             }
             Err(e) => {
-                trace!("skipping {}, error {}", entry_path.to_string_lossy(), e);
+                trace!("skipping {}, error {}", entry_path_str, e);
                 return self.next();
             }
         }
