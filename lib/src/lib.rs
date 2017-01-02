@@ -40,7 +40,6 @@ mod iterators;
 use iterators::StoredChunks;
 
 mod config;
-use config::*;
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
@@ -597,7 +596,7 @@ pub struct Repo {
     /// Public key associated with the repository
     pub_key: box_::PublicKey,
 
-    /// Repo configuration
+    /// Repo configuration version
     version : u32,
 }
 
@@ -605,88 +604,6 @@ pub struct Repo {
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
-    fn write_version_file(repo_path : &Path, version : u32) -> Result<()> {
-        let path = version_file_path(&repo_path);
-        let path_tmp = path.with_extension("tmp");
-        let mut file = try!(fs::File::create(&path_tmp));
-        {
-            let mut writer = &mut file as &mut Write;
-            write!(writer, "{}", version)?;
-        }
-
-        file.flush()?;
-        file.sync_data()?;
-
-        fs::rename(path_tmp, &path)?;
-
-        Ok(())
-    }
-
-    fn write_config_v0(repo_path: &Path, pk: box_::PublicKey, sk: box_::SecretKey, passphrase : &str) -> Result<()> {
-        {
-            let pubkey_path = pub_key_file_path(&repo_path);
-
-            let mut pubkey_file = try!(fs::File::create(pubkey_path));
-
-
-            try!((&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes()));
-            try!(pubkey_file.flush());
-        }
-        {
-            let salt = pwhash::gen_salt();
-            let nonce = secretbox::gen_nonce();
-
-            let derived_key = try!(derive_key(passphrase, &salt));
-
-            let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
-
-            let seckey_path = sec_key_file_path(&repo_path);
-            write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
-        }
-        Repo::write_version_file(&repo_path, 0)?;
-
-        Ok(())
-    }
-
-    fn write_config_v1(repo_path: &Path, pk: &box_::PublicKey, sk: &box_::SecretKey, passphrase : &str) -> Result<()> {
-
-        let salt = pwhash::gen_salt();
-        let nonce = secretbox::gen_nonce();
-
-        let sealed_sk = {
-            let derived_key = try!(derive_key(passphrase, &salt));
-
-            secretbox::seal(&sk.0, &nonce, &derived_key)
-        };
-
-        let config = RepoConfig {
-            version: 1,
-            encryption: Some(EncryptionConfig {
-                sealed_sec_key: sealed_sk,
-                pub_key: *pk,
-                nonce: nonce,
-                salt: salt,
-            }),
-        };
-
-        let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
-
-        let config_path = config_yml_file_path(&repo_path);
-        let config_path_tmp = config_path.with_extension("tmp");
-        let mut config_file = fs::File::create(&config_path_tmp)?;
-
-
-        (&mut config_file as &mut Write).write_all(config_str.as_bytes())?;
-        config_file.flush()?;
-        config_file.sync_data()?;
-
-        fs::rename(config_path_tmp, &config_path)?;
-
-        Repo::write_version_file(&repo_path, REPO_VERSION_CURRENT)?;
-
-        Ok(())
-    }
-
     fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
         if repo_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists,
@@ -699,9 +616,9 @@ impl Repo {
         // Workaround https://github.com/rust-lang/rust/issues/33707
         let _ = fs::create_dir_all(&repo_path.join(repo_path));
 
-        try!(fs::create_dir_all(&repo_path.join(DATA_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(INDEX_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(NAME_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(config::DATA_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(config::INDEX_SUBDIR)));
+        try!(fs::create_dir_all(&repo_path.join(config::NAME_SUBDIR)));
         Ok(())
     }
 
@@ -714,7 +631,7 @@ impl Repo {
         Repo::init_common_dirs(repo_path)?;
 
         let (pk, sk) = box_::gen_keypair();
-        Repo::write_config_v0(repo_path, pk, sk, passphrase)?;
+        config::write_config_v0(repo_path, pk, sk, passphrase)?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
@@ -731,19 +648,19 @@ impl Repo {
 
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
-        Repo::write_config_v1(repo_path, &pk, &sk, passphrase)?;
+        config::write_config_v1(repo_path, &pk, &sk, passphrase)?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
-            version : REPO_VERSION_CURRENT,
+            version : config::REPO_VERSION_CURRENT,
         };
 
         Ok(repo)
     }
 
     fn read_and_validate_version(repo_path : &Path) -> Result<u32> {
-        let version_path = version_file_path(&repo_path);
+        let version_path = config::version_file_path(&repo_path);
         let mut file = try!(fs::File::open(&version_path));
 
         let mut reader = io::BufReader::new(&mut file);
@@ -759,20 +676,20 @@ impl Repo {
                                }));
 
 
-        if version_int > REPO_VERSION_CURRENT {
+        if version_int > config::REPO_VERSION_CURRENT {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                                       format!("repo version {} higher than supported {}; \
                                               update?",
                                               version,
-                                              REPO_VERSION_CURRENT)));
+                                              config::REPO_VERSION_CURRENT)));
         }
 
-        if version_int < REPO_VERSION_LOWEST {
+        if version_int < config::REPO_VERSION_LOWEST {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                                       format!("repo version {} lower than lowest supported \
                                               {}; restore using older version?",
                                               version,
-                                              REPO_VERSION_LOWEST)));
+                                              config::REPO_VERSION_LOWEST)));
         }
 
         Ok(version_int)
@@ -796,7 +713,7 @@ impl Repo {
                                   format!("repo not found: {}", repo_path.to_string_lossy())));
         }
 
-        let pubkey_path = pub_key_file_path(&repo_path);
+        let pubkey_path = config::pub_key_file_path(&repo_path);
         if !pubkey_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("pubkey file not found: {}",
@@ -842,8 +759,8 @@ impl Repo {
             return Repo::open_v0(repo_path);
         }
 
-        let file = fs::File::open(&config_yml_file_path(&repo_path))?;
-        let config : config::RepoConfig = serde_yaml::from_reader(file).map_err(|e| {
+        let file = fs::File::open(&config::config_yml_file_path(&repo_path))?;
+        let config : config::Repo = serde_yaml::from_reader(file).map_err(|e| {
             io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
         })?;
 
@@ -878,10 +795,10 @@ impl Repo {
 
         let encrypted_seckey = secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
 
-        let seckey_path = sec_key_file_path(&self.path);
+        let seckey_path = config::sec_key_file_path(&self.path);
         let seckey_path_tmp = seckey_path.with_extension("tmp");
 
-        write_seckey_file(&seckey_path_tmp, &encrypted_seckey, &nonce, &salt)?;
+        config::write_seckey_file(&seckey_path_tmp, &encrypted_seckey, &nonce, &salt)?;
 
         fs::rename(seckey_path_tmp, &seckey_path)?;
 
@@ -893,12 +810,12 @@ impl Repo {
         if self.version == 0 {
             self.change_passphrase_v0(seckey, new_passphrase)
         } else {
-            Repo::write_config_v1(&self.path, &self.pub_key, &seckey.0, new_passphrase)
+            config::write_config_v1(&self.path, &self.pub_key, &seckey.0, new_passphrase)
         }
     }
 
     fn lock_write(&self) -> Result<fs::File> {
-        let lock_path = lock_file_path(&self.path);
+        let lock_path = config::lock_file_path(&self.path);
 
         let file = try!(fs::File::create(&lock_path));
         try!(file.lock_exclusive());
@@ -907,7 +824,7 @@ impl Repo {
     }
 
     fn lock_read(&self) -> Result<fs::File> {
-        let lock_path = lock_file_path(&self.path);
+        let lock_path = config::lock_file_path(&self.path);
 
         let file = try!(fs::File::create(&lock_path));
         try!(file.lock_shared());
@@ -1037,7 +954,7 @@ impl Repo {
     }
 
     fn load_sec_key_v0(&self, passphrase: &str) -> Result<box_::SecretKey> {
-        let seckey_path = sec_key_file_path(&self.path);
+        let seckey_path = config::sec_key_file_path(&self.path);
         if !seckey_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("seckey file not found: {}",
@@ -1078,8 +995,8 @@ impl Repo {
 
     fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
 
-        let file = fs::File::open(&config_yml_file_path(&self.path))?;
-        let config : config::RepoConfig = serde_yaml::from_reader(file).map_err(|e| {
+        let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
+        let config : config::Repo = serde_yaml::from_reader(file).map_err(|e| {
             io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
         })?;
 
@@ -1384,8 +1301,8 @@ impl Repo {
 
     fn chunk_path_by_digest(&self, digest: &[u8], chunk_type: DataType) -> PathBuf {
         let i_or_c = match chunk_type {
-            DataType::Data => Path::new(DATA_SUBDIR),
-            DataType::Index => Path::new(INDEX_SUBDIR),
+            DataType::Data => Path::new(config::DATA_SUBDIR),
+            DataType::Index => Path::new(config::INDEX_SUBDIR),
         };
 
         self.path
@@ -1429,15 +1346,15 @@ impl Repo {
     }
 
     fn name_dir_path(&self) -> PathBuf {
-        self.path.join(NAME_SUBDIR)
+        self.path.join(config::NAME_SUBDIR)
     }
 
     fn index_dir_path(&self) -> PathBuf {
-        self.path.join(INDEX_SUBDIR)
+        self.path.join(config::INDEX_SUBDIR)
     }
 
     fn chunk_dir_path(&self) -> PathBuf {
-        self.path.join(DATA_SUBDIR)
+        self.path.join(config::DATA_SUBDIR)
     }
 
     fn name_path(&self, name: &str) -> PathBuf {
