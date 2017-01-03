@@ -60,7 +60,7 @@ pub fn write_seckey_file(path: &Path,
 pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
     let path = version_file_path(&repo_path);
     let path_tmp = path.with_extension("tmp");
-    let mut file = try!(fs::File::create(&path_tmp));
+    let mut file = fs::File::create(&path_tmp)?;
     {
         let mut writer = &mut file as &mut Write;
         write!(writer, "{}", version)?;
@@ -82,17 +82,17 @@ pub fn write_config_v0(repo_path: &Path,
     {
         let pubkey_path = pub_key_file_path(&repo_path);
 
-        let mut pubkey_file = try!(fs::File::create(pubkey_path));
+        let mut pubkey_file = fs::File::create(pubkey_path)?;
 
 
-        try!((&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes()));
-        try!(pubkey_file.flush());
+        (&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes())?;
+        pubkey_file.flush()?;
     }
     {
         let salt = pwhash::gen_salt();
         let nonce = secretbox::gen_nonce();
 
-        let derived_key = try!(super::derive_key(passphrase, &salt));
+        let derived_key = super::derive_key(passphrase, &salt)?;
 
         let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
 
@@ -114,7 +114,7 @@ pub fn write_config_v1(repo_path: &Path,
     let nonce = secretbox::gen_nonce();
 
     let sealed_sk = {
-        let derived_key = try!(super::derive_key(passphrase, &salt));
+        let derived_key = super::derive_key(passphrase, &salt)?;
 
         secretbox::seal(&sk.0, &nonce, &derived_key)
     };
