@@ -166,7 +166,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     let mut derived_key = secretbox::Key([0; secretbox::KEYBYTES]);
     {
         let secretbox::Key(ref mut kb) = derived_key;
-        try!(pwhash::derive_key(kb,
+        pwhash::derive_key(kb,
                                 passphrase.as_bytes(),
                                 salt,
                                 pwhash::OPSLIMIT_SENSITIVE,
@@ -174,7 +174,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "can't derive encryption key from passphrase")
-            }));
+            })?;
     }
 
     Ok(derived_key)
@@ -192,7 +192,7 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
     let mut index: Vec<u8> = vec![];
     loop {
         let mut buf = vec![0u8; BUFFER_SIZE];
-        let len = try!(reader.read(&mut buf));
+        let len = reader.read(&mut buf)?;
 
         if len == 0 {
             break;
@@ -217,7 +217,7 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
 
     if index.len() > DIGEST_SIZE {
         let digest =
-            try!(chunk_and_send_to_assembler(tx, &mut io::Cursor::new(index), DataType::Index));
+            chunk_and_send_to_assembler(tx, &mut io::Cursor::new(index), DataType::Index)?;
         assert!(digest.len() == DIGEST_SIZE);
         let index_digest = quick_sha256(&digest);
         tx.send(ChunkAssemblerMessage::Data(digest.clone(),
@@ -304,9 +304,9 @@ impl<'a> Write for IndexTranslator<'a> {
                                        ref mut writer } = self;
             if let &mut Some(ref mut writer) = writer {
                 let mut traverser = ReadContext::new(Some(writer), data_type, sec_key);
-                try!(traverser.read_recursively(*accessor, &digest));
+                traverser.read_recursively(*accessor, &digest)?;
             } else {
-                try!(accessor.touch(&digest))
+                accessor.touch(&digest)?
             }
             digest.clear();
         }
@@ -345,11 +345,11 @@ impl<'a> ReadContext<'a> {
     fn on_index(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec![];
-        try!(accessor.read_chunk_into(digest,
+        accessor.read_chunk_into(digest,
                                       DataType::Index,
                                       DataType::Index,
                                       &mut index_data,
-                                      self.sec_key));
+                                      self.sec_key)?;
 
         assert!(index_data.len() == DIGEST_SIZE);
 
@@ -371,7 +371,7 @@ impl<'a> ReadContext<'a> {
 
     fn read_recursively(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
 
-        let chunk_type = try!(accessor.repo().chunk_type(digest));
+        let chunk_type = accessor.repo().chunk_type(digest)?;
 
         let s = &*accessor as &ChunkAccessor;
         match chunk_type {
@@ -425,21 +425,21 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        sec_key: Option<&box_::SecretKey>)
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
-        let mut file = try!(fs::File::open(path));
+        let mut file = fs::File::open(path)?;
         let mut data = Vec::with_capacity(BUFFER_SIZE);
 
         let data = if data_type.should_encrypt() {
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
-            try!(file.read_exact(&mut ephemeral_pub));
-            try!(file.read_to_end(&mut data));
+            file.read_exact(&mut ephemeral_pub)?;
+            file.read_to_end(&mut data)?;
             let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-            try!(box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key.unwrap())
+            box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key.unwrap())
                 .map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
                                    format!("can't decrypt chunk file: {}", digest.to_hex()))
-                }))
+                })?
         } else {
-            try!(file.read_to_end(&mut data));
+            file.read_to_end(&mut data)?;
             data
         };
 
@@ -447,8 +447,8 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             let mut decompressor =
                 flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
 
-            try!(decompressor.write_all(&data));
-            try!(decompressor.finish())
+            decompressor.write_all(&data)?;
+            decompressor.finish()?
         } else {
             data
         };
@@ -463,7 +463,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                                        digest.to_hex(),
                                        sha256_digest.to_hex())))
         } else {
-            try!(io::copy(&mut io::Cursor::new(data), writer));
+            io::copy(&mut io::Cursor::new(data), writer)?;
             Ok(())
         }
     }
@@ -504,7 +504,7 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
                        writer: &mut Write,
                        sec_key: Option<&box_::SecretKey>)
                        -> Result<()> {
-        try!(self.touch(digest));
+        self.touch(digest)?;
         self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
     }
 }
@@ -615,9 +615,9 @@ impl Repo {
         // Workaround https://github.com/rust-lang/rust/issues/33707
         let _ = fs::create_dir_all(&repo_path.join(repo_path));
 
-        try!(fs::create_dir_all(&repo_path.join(config::DATA_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(config::INDEX_SUBDIR)));
-        try!(fs::create_dir_all(&repo_path.join(config::NAME_SUBDIR)));
+        fs::create_dir_all(&repo_path.join(config::DATA_SUBDIR))?;
+        fs::create_dir_all(&repo_path.join(config::INDEX_SUBDIR))?;
+        fs::create_dir_all(&repo_path.join(config::NAME_SUBDIR))?;
         Ok(())
     }
 
@@ -660,18 +660,18 @@ impl Repo {
 
     fn read_and_validate_version(repo_path: &Path) -> Result<u32> {
         let version_path = config::version_file_path(&repo_path);
-        let mut file = try!(fs::File::open(&version_path));
+        let mut file = fs::File::open(&version_path)?;
 
         let mut reader = io::BufReader::new(&mut file);
         let mut version = String::new();
-        try!(reader.read_line(&mut version));
-        let version_int = try!(version.parse::<u32>()
+        reader.read_line(&mut version)?;
+        let version_int = version.parse::<u32>()
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                format!("can't parse version file; unsupported \
                                         repo format version: {}",
                                        version))
-            }));
+            })?;
 
 
         if version_int > config::REPO_VERSION_CURRENT {
@@ -695,7 +695,7 @@ impl Repo {
     }
 
     pub fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
-        let _lock = try!(self.lock_read());
+        let _lock = self.lock_read()?;
         let sec_key = if self.version == 0 {
             self.load_sec_key_v0(passphrase)?
         } else {
@@ -721,21 +721,21 @@ impl Repo {
 
         let version_int = Repo::read_and_validate_version(repo_path)?;
 
-        let mut file = try!(fs::File::open(&pubkey_path));
+        let mut file = fs::File::open(&pubkey_path)?;
 
         let mut buf = vec![];
-        try!(file.read_to_end(&mut buf));
+        file.read_to_end(&mut buf)?;
 
-        let pubkey_str = try!(std::str::from_utf8(&buf).map_err(|_| {
+        let pubkey_str = std::str::from_utf8(&buf).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not utf8")
-        }));
-        let pubkey_bytes = try!(pubkey_str.from_hex()
+        })?;
+        let pubkey_bytes = pubkey_str.from_hex()
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not hex")
-            }));
-        let pub_key = try!(box_::PublicKey::from_slice(&pubkey_bytes)
+            })?;
+        let pub_key = box_::PublicKey::from_slice(&pubkey_bytes)
             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                  "pubkey data invalid: can't convert to pubkey")));
+                                  "pubkey data invalid: can't convert to pubkey"))?;
 
         Ok(Repo {
             path: repo_path.to_owned(),
@@ -778,19 +778,19 @@ impl Repo {
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         info!("Remove name {}", name);
-        let _lock = try!(self.lock_write());
+        let _lock = self.lock_write()?;
         fs::remove_file(self.name_path(name))
     }
 
     fn change_passphrase_v0(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
         info!("Changing password");
-        let _lock = try!(self.lock_write());
+        let _lock = self.lock_write()?;
 
 
         let salt = pwhash::gen_salt();
         let nonce = secretbox::gen_nonce();
 
-        let derived_key = try!(derive_key(new_passphrase, &salt));
+        let derived_key = derive_key(new_passphrase, &salt)?;
 
 
         let encrypted_seckey = secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
@@ -817,8 +817,8 @@ impl Repo {
     fn lock_write(&self) -> Result<fs::File> {
         let lock_path = config::lock_file_path(&self.path);
 
-        let file = try!(fs::File::create(&lock_path));
-        try!(file.lock_exclusive());
+        let file = fs::File::create(&lock_path)?;
+        file.lock_exclusive()?;
 
         Ok(file)
     }
@@ -826,15 +826,15 @@ impl Repo {
     fn lock_read(&self) -> Result<fs::File> {
         let lock_path = config::lock_file_path(&self.path);
 
-        let file = try!(fs::File::create(&lock_path));
-        try!(file.lock_shared());
+        let file = fs::File::create(&lock_path)?;
+        file.lock_shared()?;
 
         Ok(file)
     }
 
     pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<WriteStats> {
         info!("Write name {}", name);
-        let _lock = try!(self.lock_write());
+        let _lock = self.lock_write()?;
 
         let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(CHANNEL_SIZE);
         let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(CHANNEL_SIZE);
@@ -862,7 +862,7 @@ impl Repo {
         let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
         let final_digest =
-            try!(chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data));
+            chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data)?;
 
         tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
         for join in joins.drain(..) {
@@ -870,15 +870,15 @@ impl Repo {
         }
         let write_stats = chunk_writer.join().unwrap();
 
-        try!(self.store_digest_as_name(&final_digest, name));
+        self.store_digest_as_name(&final_digest, name)?;
         Ok(write_stats)
     }
 
     pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
         info!("Read name {}", name);
-        let digest = try!(self.name_to_digest(name));
+        let digest = self.name_to_digest(name)?;
 
-        let _lock = try!(self.lock_read());
+        let _lock = self.lock_read()?;
 
         let accessor = self.chunk_accessor();
         let mut traverser = ReadContext::new(Some(writer), DataType::Data, Some(&seckey.0));
@@ -887,16 +887,16 @@ impl Repo {
 
     pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<DuResults> {
         info!("DU name {}", name);
-        let _lock = try!(self.lock_read());
+        let _lock = self.lock_read()?;
 
-        let digest = try!(self.name_to_digest(name));
+        let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self);
         {
             let mut traverser =
                 ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
-            try!(traverser.read_recursively(&accessor, &digest));
+            traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(DuResults {
             chunks: accessor.get_results().scanned,
@@ -907,16 +907,16 @@ impl Repo {
     pub fn verify(&self, name: &str, seckey: &SecretKey) -> Result<VerifyResults> {
         info!("verify name {}", name);
 
-        let _lock = try!(self.lock_read());
+        let _lock = self.lock_read()?;
 
-        let digest = try!(self.name_to_digest(name));
+        let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self);
         {
             let mut traverser =
                 ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
-            try!(traverser.read_recursively(&accessor, &digest));
+            traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(accessor.get_results())
     }
@@ -937,18 +937,18 @@ impl Repo {
     //
 
     fn read_hex_file(&self, path: &Path) -> Result<Vec<u8>> {
-        let mut file = try!(fs::File::open(&path));
+        let mut file = fs::File::open(&path)?;
 
         let mut buf = vec![];
-        try!(file.read_to_end(&mut buf));
+        file.read_to_end(&mut buf)?;
 
-        let str_ = try!(std::str::from_utf8(&buf).map_err(|_| {
+        let str_ = std::str::from_utf8(&buf).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8")
-        }));
-        let bytes = try!(str_.from_hex()
+        })?;
+        let bytes = str_.from_hex()
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
-            }));
+            })?;
         Ok(bytes)
     }
 
@@ -961,7 +961,7 @@ impl Repo {
         }
 
 
-        let secfile_bytes = try!(self.read_hex_file(&seckey_path));
+        let secfile_bytes = self.read_hex_file(&seckey_path)?;
 
         const TOTAL_SECKEY_FILE_LEN: usize =
             pwhash::SALTBYTES + secretbox::NONCEBYTES + secretbox::MACBYTES + box_::SECRETKEYBYTES;
@@ -979,17 +979,17 @@ impl Repo {
         let salt = pwhash::Salt::from_slice(salt).unwrap();
         let nonce = secretbox::Nonce::from_slice(nonce).unwrap();
 
-        let derived_key = try!(derive_key(passphrase, &salt));
+        let derived_key = derive_key(passphrase, &salt)?;
 
-        let plain_seckey = try!(secretbox::open(sealed_key, &nonce, &derived_key)
+        let plain_seckey = secretbox::open(sealed_key, &nonce, &derived_key)
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "can't decrypt key using given passphrase")
-            }));
-        let sec_key = try!(box_::SecretKey::from_slice(&plain_seckey)
+            })?;
+        let sec_key = box_::SecretKey::from_slice(&plain_seckey)
             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
                                   "encrypted seckey data invalid: can't convert \
-                                   to seckey")));
+                                   to seckey"))?;
 
         Ok(sec_key)
     }
@@ -1003,18 +1003,18 @@ impl Repo {
             })?;
 
         if let Some(enc) = config.encryption {
-            let derived_key = try!(derive_key(passphrase, &enc.salt));
+            let derived_key = derive_key(passphrase, &enc.salt)?;
 
             let plain_seckey =
-                try!(secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
+                secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
                     .map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData,
                                        "can't decrypt key using given passphrase")
-                    }));
-            let sec_key = try!(box_::SecretKey::from_slice(&plain_seckey)
+                    })?;
+            let sec_key = box_::SecretKey::from_slice(&plain_seckey)
                 .ok_or(io::Error::new(io::ErrorKind::InvalidData,
                                       "encrypted seckey data invalid: can't \
-                                       convert to seckey")));
+                                       convert to seckey"))?;
 
 
 
@@ -1215,9 +1215,9 @@ impl Repo {
             return Err(Error::new(io::ErrorKind::NotFound, "name file not found"));
         }
 
-        let mut file = try!(fs::File::open(&name_path));
+        let mut file = fs::File::open(&name_path)?;
         let mut buf = vec![];
-        try!(file.read_to_end(&mut buf));
+        file.read_to_end(&mut buf)?;
 
         debug!("Name {} is {}", name, buf.to_hex());
         Ok(buf)
@@ -1225,16 +1225,16 @@ impl Repo {
 
     fn store_digest_as_name(&self, digest: &[u8], name: &str) -> Result<()> {
         let name_dir = self.name_dir_path();
-        try!(fs::create_dir_all(&name_dir));
+        fs::create_dir_all(&name_dir)?;
         let name_path = self.name_path(name);
 
         if name_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists, "name already exists"));
         }
 
-        let mut file = try!(fs::File::create(&name_path));
+        let mut file = fs::File::create(&name_path)?;
 
-        try!(file.write_all(digest));
+        file.write_all(digest)?;
         Ok(())
     }
 
@@ -1254,8 +1254,8 @@ impl Repo {
         let mut ret: Vec<String> = vec![];
 
         let name_dir = self.name_dir_path();
-        for entry in try!(fs::read_dir(name_dir)) {
-            let entry = try!(entry);
+        for entry in fs::read_dir(name_dir)? {
+            let entry = entry?;
             let name = entry.file_name().to_string_lossy().to_string();
             ret.push(name)
         }
@@ -1266,7 +1266,7 @@ impl Repo {
     /// List all names
     pub fn list_names(&self) -> Result<Vec<String>> {
         info!("List repo");
-        let _lock = try!(self.lock_read());
+        let _lock = self.lock_read()?;
 
         self.list_names_nolock()
     }
@@ -1276,14 +1276,14 @@ impl Repo {
 
         info!("List reachable chunks");
         let mut reachable_digests = HashSet::new();
-        let all_names = try!(self.list_names_nolock());
+        let all_names = self.list_names_nolock()?;
         for name in &all_names {
             match self.name_to_digest(&name) {
                 Ok(digest) => {
                     // Make sure digest is the standard size
                     if digest.len() == DIGEST_SIZE {
                         info!("processing {}", name);
-                        try!(self.reachable_recursively_insert(&digest, &mut reachable_digests));
+                        self.reachable_recursively_insert(&digest, &mut reachable_digests)?;
                     } else {
                         info!("skipped name {}", name);
                     }
@@ -1321,19 +1321,19 @@ impl Repo {
     }
 
     fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
-        let chunk_type = try!(self.chunk_type(digest));
+        let chunk_type = self.chunk_type(digest)?;
         let path = self.chunk_path_by_digest(digest, chunk_type);
-        let md = try!(fs::metadata(&path));
-        try!(fs::remove_file(path));
+        let md = fs::metadata(&path)?;
+        fs::remove_file(path)?;
         Ok(md.len())
     }
     pub fn gc(&self) -> Result<GcResults> {
 
-        let _lock = try!(self.lock_write());
+        let _lock = self.lock_write()?;
 
         let reachable = self.list_reachable_chunks().unwrap();
-        let index_chunks = try!(StoredChunks::new(&self.index_dir_path(), DIGEST_SIZE));
-        let data_chunks = try!(StoredChunks::new(&self.chunk_dir_path(), DIGEST_SIZE));
+        let index_chunks = StoredChunks::new(&self.index_dir_path(), DIGEST_SIZE)?;
+        let data_chunks = StoredChunks::new(&self.chunk_dir_path(), DIGEST_SIZE)?;
 
         let mut result = GcResults {
             chunks: 0,
@@ -1341,10 +1341,10 @@ impl Repo {
         };
 
         for digest in index_chunks.chain(data_chunks) {
-            let digest = try!(digest);
+            let digest = digest?;
             if !reachable.contains(&digest) {
                 trace!("removing {}", digest.to_hex());
-                let bytes = try!(self.rm_chunk_by_digest(&digest));
+                let bytes = self.rm_chunk_by_digest(&digest)?;
                 result.chunks += 1;
                 result.bytes += bytes;
             }
