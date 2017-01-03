@@ -1,4 +1,4 @@
-# (unreleased)
+# v1.0.2
 ## Added
 - Support to remove multiple names in a single call in lib and command line
 - Missing "changepassphrase" command to rdedup
