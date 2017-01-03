@@ -17,7 +17,8 @@ use lib::Repo;
 macro_rules! printerrln {
     ($($arg:tt)*) => ({
         use std::io::prelude::*;
-        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}", format_args!($($arg)*)) {
+        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}",
+            format_args!($($arg)*)) {
             panic!(concat!(
                     "Failed to write to stderr.\n",
                     "Original error output: {}\n",
@@ -30,7 +31,8 @@ macro_rules! printerrln {
 macro_rules! printerr {
     ($($arg:tt)*) => ({
         use std::io::prelude::*;
-        if let Err(e) = write!(&mut ::std::io::stderr(), "{}", format_args!($($arg)*)) {
+        if let Err(e) = write!(&mut ::std::io::stderr(), "{}",
+            format_args!($($arg)*)) {
             panic!(concat!(
                     "Failed to write to stderr.\n",
                     "Original error output: {}\n",
@@ -42,8 +44,8 @@ macro_rules! printerr {
 
 
 fn read_passphrase(o: &Options) -> String {
-    printerrln!("Warning: Use `--add-newline` option if you generated repo with rdedup version \
-                 <= 0.2");
+    printerrln!("Warning: Use `--add-newline` option if you generated repo with \
+                 rdedup version <= 0.2");
     printerr!("Enter passphrase to unlock: ");
     if o.add_newline {
         rpassword::read_password().unwrap() + "\n"
@@ -171,7 +173,8 @@ impl Options {
 
     fn check_dir(&self) -> path::PathBuf {
         if self.dir_str.is_empty() {
-            printerrln!("No destination directory specified. Use `--dir` or `$RDEDUP_DIR`");
+            printerrln!("No destination directory specified. Use `--dir` or \
+                         `$RDEDUP_DIR`");
             process::exit(-1);
         }
         path::Path::new(&self.dir_str).to_owned()
