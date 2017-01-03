@@ -25,9 +25,9 @@ sodiumoxide = { version = "0.0.12", git = "https://github.com/dnaq/sodiumoxide",
 flate2 = "0.2.14"
 fs2 = "0.2.5"
 serde = "0.8"
-serde_derive = "*"
-serde_yaml = "*"
-base64 = "*"
+serde_derive = "0.8"
+serde_yaml = "0.5.0"
+base64 = "0.2.1"
 
 [dev-dependencies]
 rand = "0.3.14"
