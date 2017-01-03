@@ -190,6 +190,7 @@ fn as_base64<T, S>(key: &T, serializer: &mut S) -> Result<(), S::Error>
 
 
 #[derive(Serialize, Deserialize)]
+/// Configuration of repository encryption
 pub struct RepoEncryption {
     pub sealed_sec_key: Vec<u8>,
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
@@ -201,6 +202,10 @@ pub struct RepoEncryption {
 }
 
 #[derive(Serialize, Deserialize)]
+/// Rdedup repository configuration
+///
+/// This datastructure is used for serialization and deserialization
+/// of repo configuration that is stored as a repostiory metadata.
 pub struct Repo {
     pub version : u32,
     pub encryption: Option<RepoEncryption>,

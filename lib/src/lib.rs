@@ -666,7 +666,6 @@ impl Repo {
         let mut reader = io::BufReader::new(&mut file);
         let mut version = String::new();
         try!(reader.read_line(&mut version));
-        let version = version.trim();
         let version_int = try!(version.parse::<u32>()
                                .map_err(|_| {
                                    io::Error::new(io::ErrorKind::InvalidData,
