@@ -20,9 +20,14 @@ rust-crypto = "0.2"
 log = "0.3.6"
 rustc-serialize = "0.3.19"
 argparse = "0.2.1"
-sodiumoxide = "0.0.12"
+# Serde 0.8 serialization for sec/pub key not released yet
+sodiumoxide = { version = "0.0.12", git = "https://github.com/dnaq/sodiumoxide", features = ["serde"] }
 flate2 = "0.2.14"
 fs2 = "0.2.5"
+serde = "0.8"
+serde_derive = "0.8"
+serde_yaml = "0.5.0"
+base64 = "0.2.1"
 
 [dev-dependencies]
 rand = "0.3.14"

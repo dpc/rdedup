@@ -1,7 +1,7 @@
 language: rust
 rust:
-  - stable
-  - beta
+# - stable
+# - beta
   - nightly
 script:
   - make all
