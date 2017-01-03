@@ -102,9 +102,7 @@ impl Chunker {
     }
 
     fn edge_found(&mut self, input_ofs: usize) {
-        debug!("found edge at {}; sum: {:x}",
-               self.bytes_total,
-               self.roll.digest());
+        debug!("found edge at {}; sum: {:x}", self.bytes_total, self.roll.digest());
 
         debug!("sha256 hash: {}", self.sha256.result_str());
 
@@ -206,14 +204,16 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
         for &(_, ref sum) in &edges {
             index.append(&mut sum.clone());
         }
-        tx.send(ChunkAssemblerMessage::Data(buf, edges, DataType::Data, data_type)).unwrap();
+        tx.send(ChunkAssemblerMessage::Data(buf, edges, DataType::Data, data_type))
+            .unwrap();
     }
     let edges = chunker.finish();
 
     for &(_, ref sum) in &edges {
         index.append(&mut sum.clone());
     }
-    tx.send(ChunkAssemblerMessage::Data(vec![], edges, DataType::Data, data_type)).unwrap();
+    tx.send(ChunkAssemblerMessage::Data(vec![], edges, DataType::Data, data_type))
+        .unwrap();
 
     if index.len() > DIGEST_SIZE {
         let digest =
@@ -433,10 +433,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             try!(file.read_exact(&mut ephemeral_pub));
             try!(file.read_to_end(&mut data));
             let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-            try!(box_::open(&data,
-                            &nonce,
-                            &box_::PublicKey(ephemeral_pub),
-                            sec_key.unwrap())
+            try!(box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key.unwrap())
                 .map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
                                    format!("can't decrypt chunk file: {}", digest.to_hex()))
@@ -558,7 +555,8 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
+        let res = self.raw
+            .read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
 
         if res.is_err() {
             self.errors.borrow_mut().push((digest.to_owned(), res.err().unwrap()));
@@ -597,7 +595,7 @@ pub struct Repo {
     pub_key: box_::PublicKey,
 
     /// Repo configuration version
-    version : u32,
+    version: u32,
 }
 
 /// Opaque wrapper over secret key
@@ -607,7 +605,8 @@ impl Repo {
     fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
         if repo_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists,
-                                  format!("repo already exists: {}", repo_path.to_string_lossy())));
+                                  format!("repo already exists: {}",
+                                          repo_path.to_string_lossy())));
         }
         Ok(())
     }
@@ -653,13 +652,13 @@ impl Repo {
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
-            version : config::REPO_VERSION_CURRENT,
+            version: config::REPO_VERSION_CURRENT,
         };
 
         Ok(repo)
     }
 
-    fn read_and_validate_version(repo_path : &Path) -> Result<u32> {
+    fn read_and_validate_version(repo_path: &Path) -> Result<u32> {
         let version_path = config::version_file_path(&repo_path);
         let mut file = try!(fs::File::open(&version_path));
 
@@ -667,26 +666,27 @@ impl Repo {
         let mut version = String::new();
         try!(reader.read_line(&mut version));
         let version_int = try!(version.parse::<u32>()
-                               .map_err(|_| {
-                                   io::Error::new(io::ErrorKind::InvalidData,
-                                                  format!("can't parse version file; unsupported repo format \
-                                                          version: {}",
-                                                          version))
-                               }));
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               format!("can't parse version file; unsupported \
+                                        repo format version: {}",
+                                       version))
+            }));
 
 
         if version_int > config::REPO_VERSION_CURRENT {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      format!("repo version {} higher than supported {}; \
-                                              update?",
+                                      format!("repo version {} higher than \
+                                               supported {}; update?",
                                               version,
                                               config::REPO_VERSION_CURRENT)));
         }
 
         if version_int < config::REPO_VERSION_LOWEST {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      format!("repo version {} lower than lowest supported \
-                                              {}; restore using older version?",
+                                      format!("repo version {} lower than \
+                                               lowest supported {}; restore \
+                                               using older version?",
                                               version,
                                               config::REPO_VERSION_LOWEST)));
         }
@@ -730,10 +730,9 @@ impl Repo {
             io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not utf8")
         }));
         let pubkey_bytes = try!(pubkey_str.from_hex()
-                                          .map_err(|_| {
-                                              io::Error::new(io::ErrorKind::InvalidData,
-                                                             "pubkey data invalid: not hex")
-                                          }));
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not hex")
+            }));
         let pub_key = try!(box_::PublicKey::from_slice(&pubkey_bytes)
             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
                                   "pubkey data invalid: can't convert to pubkey")));
@@ -759,9 +758,10 @@ impl Repo {
         }
 
         let file = fs::File::open(&config::config_yml_file_path(&repo_path))?;
-        let config : config::Repo = serde_yaml::from_reader(file).map_err(|e| {
-            io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
-        })?;
+        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               format!("couldn't parse yaml: {}", e.to_string()))
+            })?;
 
         if let Some(encryption_config) = config.encryption {
             Ok(Repo {
@@ -770,7 +770,8 @@ impl Repo {
                 version: version,
             })
         } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData, format!("Repo without encryptin not supported yet")))
+            Err(io::Error::new(io::ErrorKind::InvalidData,
+                               format!("Repo without encryptin not supported yet")))
         }
     }
 
@@ -945,10 +946,9 @@ impl Repo {
             io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8")
         }));
         let bytes = try!(str_.from_hex()
-                             .map_err(|_| {
-                                 io::Error::new(io::ErrorKind::InvalidData,
-                                                "seckey data invalid: not hex")
-                             }));
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
+            }));
         Ok(bytes)
     }
 
@@ -970,7 +970,8 @@ impl Repo {
                                   "seckey file is not of correct length"));
         }
 
-        let (sealed_key, rest) = secfile_bytes.split_at(box_::SECRETKEYBYTES + secretbox::MACBYTES);
+        let (sealed_key, rest) =
+            secfile_bytes.split_at(box_::SECRETKEYBYTES + secretbox::MACBYTES);
         let (nonce, rest) = rest.split_at(secretbox::NONCEBYTES);
         let (salt, rest) = rest.split_at(pwhash::SALTBYTES);
         assert!(rest.len() == 0);
@@ -987,7 +988,8 @@ impl Repo {
             }));
         let sec_key = try!(box_::SecretKey::from_slice(&plain_seckey)
             .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                  "encrypted seckey data invalid: can't convert to seckey")));
+                                  "encrypted seckey data invalid: can't convert \
+                                   to seckey")));
 
         Ok(sec_key)
     }
@@ -995,28 +997,32 @@ impl Repo {
     fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
 
         let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
-        let config : config::Repo = serde_yaml::from_reader(file).map_err(|e| {
-            io::Error::new(io::ErrorKind::InvalidData, format!("couldn't parse yaml: {}", e.to_string()))
-        })?;
+        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               format!("couldn't parse yaml: {}", e.to_string()))
+            })?;
 
         if let Some(enc) = config.encryption {
             let derived_key = try!(derive_key(passphrase, &enc.salt));
 
-            let plain_seckey = try!(secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
-                                    .map_err(|_| {
-                                        io::Error::new(io::ErrorKind::InvalidData,
-                                                       "can't decrypt key using given passphrase")
-                                    }));
+            let plain_seckey =
+                try!(secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData,
+                                       "can't decrypt key using given passphrase")
+                    }));
             let sec_key = try!(box_::SecretKey::from_slice(&plain_seckey)
-                               .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                     "encrypted seckey data invalid: can't convert to seckey")));
+                .ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                      "encrypted seckey data invalid: can't \
+                                       convert to seckey")));
 
 
 
             Ok(sec_key)
 
         } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData, format!("Repo without encryptin not supported yet")))
+            Err(io::Error::new(io::ErrorKind::InvalidData,
+                               format!("Repo without encryptin not supported yet")))
         }
     }
 
@@ -1049,7 +1055,8 @@ impl Repo {
                 if ofs != prev_ofs {
                     chunk_data.write_all(&part[prev_ofs..ofs]).unwrap();
                 }
-                tx.send(ChunkMessage::Data(chunk_data, sha256, chunk_type, data_type)).unwrap();
+                tx.send(ChunkMessage::Data(chunk_data, sha256, chunk_type, data_type))
+                    .unwrap();
 
             } else {
                 previous_parts.clear();
@@ -1112,7 +1119,8 @@ impl Repo {
                     } else {
                         data
                     };
-                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type)).unwrap();
+                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type))
+                        .unwrap();
                 }
             }
         }
@@ -1143,7 +1151,8 @@ impl Repo {
                         data
                     };
 
-                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type)).unwrap();
+                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type))
+                        .unwrap();
                 }
             }
         }

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use sodiumoxide::crypto::{pwhash, secretbox, box_};
-use serialize::hex::{ToHex};
+use serialize::hex::ToHex;
 
 use {base64, serde_yaml};
 use serde::{self, Deserialize};
@@ -44,10 +44,10 @@ pub fn config_yml_file_path(path: &Path) -> PathBuf {
 }
 
 pub fn write_seckey_file(path: &Path,
-                     encrypted_seckey: &[u8],
-                     nonce: &secretbox::Nonce,
-                     salt: &pwhash::Salt)
-                     -> io::Result<()> {
+                         encrypted_seckey: &[u8],
+                         nonce: &secretbox::Nonce,
+                         salt: &pwhash::Salt)
+                         -> io::Result<()> {
     let mut seckey_file = fs::File::create(path)?;
     let mut writer = &mut seckey_file as &mut Write;
     writer.write_all(&encrypted_seckey.to_hex().as_bytes())?;
@@ -57,7 +57,7 @@ pub fn write_seckey_file(path: &Path,
     Ok(())
 }
 
-pub fn write_version_file(repo_path : &Path, version : u32) -> super::Result<()> {
+pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
     let path = version_file_path(&repo_path);
     let path_tmp = path.with_extension("tmp");
     let mut file = try!(fs::File::create(&path_tmp));
@@ -74,7 +74,11 @@ pub fn write_version_file(repo_path : &Path, version : u32) -> super::Result<()>
     Ok(())
 }
 
-pub fn write_config_v0(repo_path: &Path, pk: box_::PublicKey, sk: box_::SecretKey, passphrase : &str) -> super::Result<()> {
+pub fn write_config_v0(repo_path: &Path,
+                       pk: box_::PublicKey,
+                       sk: box_::SecretKey,
+                       passphrase: &str)
+                       -> super::Result<()> {
     {
         let pubkey_path = pub_key_file_path(&repo_path);
 
@@ -100,7 +104,11 @@ pub fn write_config_v0(repo_path: &Path, pk: box_::PublicKey, sk: box_::SecretKe
     Ok(())
 }
 
-pub fn write_config_v1(repo_path: &Path, pk: &box_::PublicKey, sk: &box_::SecretKey, passphrase : &str) -> super::Result<()> {
+pub fn write_config_v1(repo_path: &Path,
+                       pk: &box_::PublicKey,
+                       sk: &box_::SecretKey,
+                       passphrase: &str)
+                       -> super::Result<()> {
 
     let salt = pwhash::gen_salt();
     let nonce = secretbox::gen_nonce();
@@ -139,46 +147,49 @@ pub fn write_config_v1(repo_path: &Path, pk: &box_::PublicKey, sk: &box_::Secret
     Ok(())
 }
 
-trait MyTryFromBytes : Sized {
-    type Err : 'static + Sized + ::std::error::Error;
+trait MyTryFromBytes: Sized {
+    type Err: 'static + Sized + ::std::error::Error;
     fn try_from(&[u8]) -> Result<Self, Self::Err>;
 }
 
 impl MyTryFromBytes for box_::PublicKey {
     type Err = io::Error;
-    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
-        box_::PublicKey::from_slice(slice).ok_or(
-            io::Error::new(io::ErrorKind::InvalidData, "can't derive PublicKey from invalid binary data")
-            )
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
+        box_::PublicKey::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                                "can't derive PublicKey \
+                                                                 from invalid binary data"))
     }
 }
 
 impl MyTryFromBytes for secretbox::Nonce {
     type Err = io::Error;
-    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
-        secretbox::Nonce::from_slice(slice).ok_or(
-            io::Error::new(io::ErrorKind::InvalidData, "can't derive Nonce from invalid binary data")
-            )
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
+        secretbox::Nonce::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                                 "can't derive Nonce from \
+                                                                  invalid binary data"))
     }
 }
 
 impl MyTryFromBytes for pwhash::Salt {
     type Err = io::Error;
-    fn try_from(slice : &[u8]) -> Result<Self, Self::Err> {
-        pwhash::Salt::from_slice(slice).ok_or(
-            io::Error::new(io::ErrorKind::InvalidData, "can't derive Nonce from invalid binary data")
-            )
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
+        pwhash::Salt::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
+                                                             "can't derive Nonce from \
+                                                              invalid binary data"))
     }
 }
 
 fn from_base64<'a, T, D>(deserializer: &mut D) -> Result<T, D::Error>
-where D: serde::Deserializer,
-      T: MyTryFromBytes,
+    where D: serde::Deserializer,
+          T: MyTryFromBytes
 {
     use serde::de::Error;
     String::deserialize(deserializer)
         .and_then(|string| base64::decode(&string).map_err(|err| Error::custom(err.to_string())))
-        .and_then(|ref bytes| T::try_from(bytes).map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error))))
+        .and_then(|ref bytes| {
+            T::try_from(bytes)
+                .map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error)))
+        })
 }
 
 fn as_base64<T, S>(key: &T, serializer: &mut S) -> Result<(), S::Error>
@@ -207,6 +218,6 @@ pub struct RepoEncryption {
 /// This datastructure is used for serialization and deserialization
 /// of repo configuration that is stored as a repostiory metadata.
 pub struct Repo {
-    pub version : u32,
+    pub version: u32,
     pub encryption: Option<RepoEncryption>,
 }
