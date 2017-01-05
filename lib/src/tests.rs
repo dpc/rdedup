@@ -314,3 +314,49 @@ fn migration_v0_to_v1() {
     let repo = lib::Repo::open(dir_path).unwrap();
     wipe(&repo);
 }
+
+#[test]
+fn test_stored_chunks_iter() {
+    let dir_path = rand_tmp_dir();
+    let repo = lib::Repo::init(&dir_path, PASS).unwrap();
+    let data = rand_data(1024 * 1024);
+
+    repo.write("data", &mut io::Cursor::new(&data)).unwrap();
+    let chunks_from_indexes = repo.list_reachable_chunks().unwrap();
+
+    let mut chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+
+    // Insert garbage file into chunks folder
+    let garbage_file_path = dir_path.join("chunk/garbage.data");
+    {
+        let mut f = fs::File::create(&garbage_file_path).unwrap();
+        f.write_all(&data).unwrap();
+    }
+    chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+
+    fs::remove_file(&garbage_file_path).unwrap();
+
+    // Add a second name to the repo and compare chunks
+    let data2 = rand_data(1024 * 1024);
+    repo.write("data2", &mut io::Cursor::new(&data2)).unwrap();
+    let chunks_from_indexes2 = repo.list_reachable_chunks().unwrap();
+    chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+
+    // Remove the second name and make sure the difference
+    repo.rm("data2").unwrap();
+    let chunks_from_indexes3 = repo.list_reachable_chunks().unwrap();
+    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(),
+               0);
+    // Chunks from iterator should equal the list from both names before the removal
+    chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(),
+               0);
+
+    repo.gc().unwrap();
+    // Chunks from iterator should equal the first reachable list
+    chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+}
