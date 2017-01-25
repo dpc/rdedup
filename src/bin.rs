@@ -22,7 +22,7 @@ macro_rules! printerrln {
                     "Failed to write to stderr.\n",
                     "Original error output: {}\n",
                     "Secondary error writing to stderr: {}"),
-                    format!($($arg)*), e);
+                    format_args!($($arg)*), e);
         }
     })
 }
@@ -36,7 +36,7 @@ macro_rules! printerr {
                     "Failed to write to stderr.\n",
                     "Original error output: {}\n",
                     "Secondary error writing to stderr: {}"),
-                    format!($($arg)*), e);
+                    format_args!($($arg)*), e);
         }
     })
 }
@@ -111,7 +111,9 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
-        let mut dir_str = env::var("RDEDUP_DIR").unwrap_or("".to_owned());
+        //TODO: When stable we should use unwrap_or_default() instead
+        //See https://github.com/rust-lang/rust/issues/37516
+        let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_else(|_| "".to_owned());
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
@@ -183,10 +185,10 @@ impl Options {
             process::exit(-1);
         }
         let mut names: Vec<String> = Vec::with_capacity(self.args.len());
-        for name in self.args.iter() {
+        for name in &self.args {
             names.push(name.clone());
         }
-        return names;
+        names
     }
 
     fn print_usage(&self) {
@@ -220,14 +222,14 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            let pass = read_passphrase(&options);
+            let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
             try!(repo.read(&name, &mut io::stdout(), &seckey));
         }
         Command::ChangePassphrase => {
             let dir = options.check_dir();
             let repo = Repo::open(&dir)?;
-            let pass = read_passphrase(&options);
+            let pass = read_passphrase(options);
             let seckey = repo.get_seckey(&pass)?;
             let pass = read_new_passphrase();
             repo.change_passphrase(&seckey, &pass)?;
@@ -236,7 +238,7 @@ fn run(options: &Options) -> io::Result<()> {
             let names = options.get_names();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            for name in names.iter() {
+            for name in &names {
                 try!(repo.rm(&name));
             }
         }
@@ -249,7 +251,7 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            let pass = read_passphrase(&options);
+            let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
 
             let result = try!(repo.du(&name, &seckey));
@@ -279,13 +281,13 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir));
-            let pass = read_passphrase(&options);
+            let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
 
             let results = try!(repo.verify(&name, &seckey));
             println!("scanned {} chunk(s)", results.scanned);
             println!("found {} corrupted chunk(s)", results.errors.len());
-            for err in results.errors.into_iter() {
+            for err in results.errors {
                 println!("chunk {} - {}", &err.0.to_hex(), err.1);
             }
         }
