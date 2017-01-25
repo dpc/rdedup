@@ -657,7 +657,8 @@ impl Repo {
         Ok(repo)
     }
 
-    #[allow(absurd_extreme_comparison)]
+    #[allow(unknown_lints)]
+    #[allow(absurd_extreme_comparisons)]
     fn read_and_validate_version(repo_path: &Path) -> Result<u32> {
         let version_path = config::version_file_path(repo_path);
         let mut file = fs::File::open(&version_path)?;
