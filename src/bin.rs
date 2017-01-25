@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate log;
 extern crate rustc_serialize as serialize;
 extern crate argparse;
@@ -125,9 +124,7 @@ impl Options {
             ap.refer(&mut dir_str)
                 .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut add_newline)
-                .add_option(&["-n", "--add-newline"],
-                            StoreTrue,
-                            "add newline to the password");
+                .add_option(&["-n", "--add-newline"], StoreTrue, "add newline to the password");
             ap.refer(&mut command)
                 .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
