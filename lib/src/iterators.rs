@@ -5,7 +5,7 @@ use std::fs::ReadDir;
 use std::io::Result;
 use std::path::Path;
 
-/// StoredChunks is an iterator for the list of chunks stored in a path, it will crawl the
+/// ```StoredChunks``` is an iterator for the list of chunks stored in a path, it will crawl the
 /// directory structure looking for chunks that have valid digest sized elements as their name.
 /// Invalid files with incorrect names will be ignored.
 pub struct StoredChunks {
@@ -26,7 +26,7 @@ impl Iterator for StoredChunks {
     type Item = Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
-        while self.dirs.len() > 0 {
+        while !self.dirs.is_empty() {
             let entry = match self.dirs.last_mut().unwrap().next() {
                 Some(Ok(entry)) => entry,
                 Some(Err(error)) => return Some(Err(error)),

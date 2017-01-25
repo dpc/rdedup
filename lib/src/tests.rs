@@ -348,12 +348,10 @@ fn test_stored_chunks_iter() {
     // Remove the second name and make sure the difference
     repo.rm("data2").unwrap();
     let chunks_from_indexes3 = repo.list_reachable_chunks().unwrap();
-    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(),
-               0);
+    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(), 0);
     // Chunks from iterator should equal the list from both names before the removal
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(),
-               0);
+    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(), 0);
 
     repo.gc().unwrap();
     // Chunks from iterator should equal the first reachable list

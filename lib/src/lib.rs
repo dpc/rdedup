@@ -154,11 +154,11 @@ impl Chunker {
 fn quick_sha256(data: &[u8]) -> Vec<u8> {
 
     let mut sha256 = sha2::Sha256::new();
-    sha256.input(&data);
+    sha256.input(data);
     let mut sha256_digest = vec![0u8; DIGEST_SIZE];
     sha256.result(&mut sha256_digest);
 
-    return sha256_digest;
+    sha256_digest
 }
 
 /// Derive secret key from passphrase and salt
@@ -167,11 +167,10 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     {
         let secretbox::Key(ref mut kb) = derived_key;
         pwhash::derive_key(kb,
-                                passphrase.as_bytes(),
-                                salt,
-                                pwhash::OPSLIMIT_SENSITIVE,
-                                pwhash::MEMLIMIT_SENSITIVE)
-            .map_err(|_| {
+                           passphrase.as_bytes(),
+                           salt,
+                           pwhash::OPSLIMIT_SENSITIVE,
+                           pwhash::MEMLIMIT_SENSITIVE).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "can't derive encryption key from passphrase")
             })?;
@@ -180,7 +179,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     Ok(derived_key)
 }
 
-/// Store data, using input_f to get chunks of data
+/// Store data, using ```input_f``` to get chunks of data
 ///
 /// Return final digest
 fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
@@ -297,16 +296,16 @@ impl<'a> Write for IndexTranslator<'a> {
             let needs = DIGEST_SIZE - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
-            let &mut IndexTranslator { ref accessor,
+            let &mut IndexTranslator { accessor,
                                        ref mut digest,
                                        data_type,
                                        sec_key,
                                        ref mut writer } = self;
-            if let &mut Some(ref mut writer) = writer {
+            if let Some(ref mut writer) = *writer {
                 let mut traverser = ReadContext::new(Some(writer), data_type, sec_key);
-                traverser.read_recursively(*accessor, &digest)?;
+                traverser.read_recursively(accessor, digest)?;
             } else {
-                accessor.touch(&digest)?
+                accessor.touch(digest)?
             }
             digest.clear();
         }
@@ -346,10 +345,10 @@ impl<'a> ReadContext<'a> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec![];
         accessor.read_chunk_into(digest,
-                                      DataType::Index,
-                                      DataType::Index,
-                                      &mut index_data,
-                                      self.sec_key)?;
+                             DataType::Index,
+                             DataType::Index,
+                             &mut index_data,
+                             self.sec_key)?;
 
         assert!(index_data.len() == DIGEST_SIZE);
 
@@ -529,10 +528,10 @@ impl<'a> VerifyingChunkAccessor<'a> {
     }
 
     fn get_results(self) -> VerifyResults {
-        return VerifyResults {
+        VerifyResults {
             scanned: self.accessed.borrow().len(),
             errors: self.errors.into_inner(),
-        };
+        }
     }
 }
 
@@ -658,8 +657,9 @@ impl Repo {
         Ok(repo)
     }
 
+    #[allow(absurd_extreme_comparison)]
     fn read_and_validate_version(repo_path: &Path) -> Result<u32> {
-        let version_path = config::version_file_path(&repo_path);
+        let version_path = config::version_file_path(repo_path);
         let mut file = fs::File::open(&version_path)?;
 
         let mut reader = io::BufReader::new(&mut file);
@@ -681,7 +681,8 @@ impl Repo {
                                               version,
                                               config::REPO_VERSION_CURRENT)));
         }
-
+        //This if statement triggers the absurd_extreme_comparisons because the minimum repo
+        //version is also the smallest value of a u32
         if version_int < config::REPO_VERSION_LOWEST {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                                       format!("repo version {} lower than \
@@ -712,7 +713,7 @@ impl Repo {
                                   format!("repo not found: {}", repo_path.to_string_lossy())));
         }
 
-        let pubkey_path = config::pub_key_file_path(&repo_path);
+        let pubkey_path = config::pub_key_file_path(repo_path);
         if !pubkey_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("pubkey file not found: {}",
@@ -727,15 +728,17 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let pubkey_str = std::str::from_utf8(&buf).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not utf8")
-        })?;
-        let pubkey_bytes = pubkey_str.from_hex()
-            .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not hex")
+                io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not utf8")
             })?;
-        let pub_key = box_::PublicKey::from_slice(&pubkey_bytes)
-            .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                  "pubkey data invalid: can't convert to pubkey"))?;
+        let pubkey_bytes =
+            pubkey_str.from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not hex")
+                })?;
+        let pub_key = box_::PublicKey::from_slice(&pubkey_bytes).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "pubkey data invalid: can't convert to pubkey")
+            })?;
 
         Ok(Repo {
             path: repo_path.to_owned(),
@@ -757,7 +760,7 @@ impl Repo {
             return Repo::open_v0(repo_path);
         }
 
-        let file = fs::File::open(&config::config_yml_file_path(&repo_path))?;
+        let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
         let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                format!("couldn't parse yaml: {}", e.to_string()))
@@ -771,7 +774,7 @@ impl Repo {
             })
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData,
-                               format!("Repo without encryptin not supported yet")))
+                               "Repo without encryptin not supported yet"))
         }
     }
 
@@ -861,8 +864,7 @@ impl Repo {
         let self_clone = self.clone();
         let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
-        let final_digest =
-            chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data)?;
+        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data)?;
 
         tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
         for join in joins.drain(..) {
@@ -943,12 +945,13 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let str_ = std::str::from_utf8(&buf).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8")
-        })?;
-        let bytes = str_.from_hex()
-            .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
+                io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8")
             })?;
+        let bytes =
+            str_.from_hex()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
+                })?;
         Ok(bytes)
     }
 
@@ -981,15 +984,14 @@ impl Repo {
 
         let derived_key = derive_key(passphrase, &salt)?;
 
-        let plain_seckey = secretbox::open(sealed_key, &nonce, &derived_key)
-            .map_err(|_| {
+        let plain_seckey = secretbox::open(sealed_key, &nonce, &derived_key).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "can't decrypt key using given passphrase")
             })?;
-        let sec_key = box_::SecretKey::from_slice(&plain_seckey)
-            .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                  "encrypted seckey data invalid: can't convert \
-                                   to seckey"))?;
+        let sec_key = box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "encrypted seckey data invalid: can't convert to seckey")
+            })?;
 
         Ok(sec_key)
     }
@@ -1006,15 +1008,14 @@ impl Repo {
             let derived_key = derive_key(passphrase, &enc.salt)?;
 
             let plain_seckey =
-                secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key)
-                    .map_err(|_| {
+                secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key).map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData,
                                        "can't decrypt key using given passphrase")
                     })?;
-            let sec_key = box_::SecretKey::from_slice(&plain_seckey)
-                .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                      "encrypted seckey data invalid: can't \
-                                       convert to seckey"))?;
+            let sec_key = box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData,
+                                   "encrypted seckey data invalid: can't convert to seckey")
+                })?;
 
 
 
@@ -1022,11 +1023,11 @@ impl Repo {
 
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData,
-                               format!("Repo without encryptin not supported yet")))
+                               "Repo without encryptin not supported yet"))
         }
     }
 
-    fn chunk_accessor<'a>(&'a self) -> DefaultChunkAccessor<'a> {
+    fn chunk_accessor(&self) -> DefaultChunkAccessor {
         DefaultChunkAccessor::new(self)
     }
 
@@ -1143,7 +1144,7 @@ impl Repo {
                         let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
 
                         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-                        let cipher = box_::seal(&data, &nonce, &pub_key, &ephemeral_sec);
+                        let cipher = box_::seal(&data, &nonce, pub_key, &ephemeral_sec);
                         encrypted.write_all(&ephemeral_pub.0).unwrap();
                         encrypted.write_all(&cipher).unwrap();
                         encrypted
@@ -1172,8 +1173,7 @@ impl Repo {
                 file.sync_data().unwrap();
             }
             // Run renames after data sync to mitigate data writes and metadata writes contention
-            let mut drain = queue_paths.drain();
-            while let Some(path) = drain.next() {
+            for path in queue_paths.drain() {
                 let tmp_path = path.with_extension("tmp");
                 fs::rename(&tmp_path, &path).unwrap();
             }
@@ -1278,7 +1278,7 @@ impl Repo {
         let mut reachable_digests = HashSet::new();
         let all_names = self.list_names_nolock()?;
         for name in &all_names {
-            match self.name_to_digest(&name) {
+            match self.name_to_digest(name) {
                 Ok(digest) => {
                     // Make sure digest is the standard size
                     if digest.len() == DIGEST_SIZE {
