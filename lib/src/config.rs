@@ -50,15 +50,15 @@ pub fn write_seckey_file(path: &Path,
                          -> io::Result<()> {
     let mut seckey_file = fs::File::create(path)?;
     let mut writer = &mut seckey_file as &mut Write;
-    writer.write_all(&encrypted_seckey.to_hex().as_bytes())?;
-    writer.write_all(&nonce.0.to_hex().as_bytes())?;
-    writer.write_all(&salt.0.to_hex().as_bytes())?;
+    writer.write_all(encrypted_seckey.to_hex().as_bytes())?;
+    writer.write_all(nonce.0.to_hex().as_bytes())?;
+    writer.write_all(salt.0.to_hex().as_bytes())?;
     writer.flush()?;
     Ok(())
 }
 
 pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
-    let path = version_file_path(&repo_path);
+    let path = version_file_path(repo_path);
     let path_tmp = path.with_extension("tmp");
     let mut file = fs::File::create(&path_tmp)?;
     {
@@ -80,12 +80,12 @@ pub fn write_config_v0(repo_path: &Path,
                        passphrase: &str)
                        -> super::Result<()> {
     {
-        let pubkey_path = pub_key_file_path(&repo_path);
+        let pubkey_path = pub_key_file_path(repo_path);
 
         let mut pubkey_file = fs::File::create(pubkey_path)?;
 
 
-        (&mut pubkey_file as &mut Write).write_all(&pk.0.to_hex().as_bytes())?;
+        (&mut pubkey_file as &mut Write).write_all(pk.0.to_hex().as_bytes())?;
         pubkey_file.flush()?;
     }
     {
@@ -96,10 +96,10 @@ pub fn write_config_v0(repo_path: &Path,
 
         let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
 
-        let seckey_path = sec_key_file_path(&repo_path);
+        let seckey_path = sec_key_file_path(repo_path);
         write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
     }
-    write_version_file(&repo_path, 0)?;
+    write_version_file(repo_path, 0)?;
 
     Ok(())
 }
@@ -131,7 +131,7 @@ pub fn write_config_v1(repo_path: &Path,
 
     let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
 
-    let config_path = config_yml_file_path(&repo_path);
+    let config_path = config_yml_file_path(repo_path);
     let config_path_tmp = config_path.with_extension("tmp");
     let mut config_file = fs::File::create(&config_path_tmp)?;
 
@@ -142,7 +142,7 @@ pub fn write_config_v1(repo_path: &Path,
 
     fs::rename(config_path_tmp, &config_path)?;
 
-    write_version_file(&repo_path, REPO_VERSION_CURRENT)?;
+    write_version_file(repo_path, REPO_VERSION_CURRENT)?;
 
     Ok(())
 }
@@ -155,31 +155,34 @@ trait MyTryFromBytes: Sized {
 impl MyTryFromBytes for box_::PublicKey {
     type Err = io::Error;
     fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        box_::PublicKey::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                                "can't derive PublicKey \
-                                                                 from invalid binary data"))
+        box_::PublicKey::from_slice(slice).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData,
+                           "can't derive PublicKey from invalid binary data")
+        })
     }
 }
 
 impl MyTryFromBytes for secretbox::Nonce {
     type Err = io::Error;
     fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        secretbox::Nonce::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                                 "can't derive Nonce from \
-                                                                  invalid binary data"))
+        secretbox::Nonce::from_slice(slice).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData,
+                           "can't derive Nonce from invalid binary data")
+        })
     }
 }
 
 impl MyTryFromBytes for pwhash::Salt {
     type Err = io::Error;
     fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        pwhash::Salt::from_slice(slice).ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                                             "can't derive Nonce from \
-                                                              invalid binary data"))
+        pwhash::Salt::from_slice(slice).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData,
+                           "can't derive Nonce from invalid binary data")
+        })
     }
 }
 
-fn from_base64<'a, T, D>(deserializer: &mut D) -> Result<T, D::Error>
+fn from_base64<T, D>(deserializer: &mut D) -> Result<T, D::Error>
     where D: serde::Deserializer,
           T: MyTryFromBytes
 {
