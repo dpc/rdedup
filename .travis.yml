@@ -8,6 +8,7 @@ rust:
 # - beta
   - nightly
 script:
+  - ./scripts/check-fmt.sh
   - cargo clippy
   - cd lib && cargo clippy && cd ..
   - make all
