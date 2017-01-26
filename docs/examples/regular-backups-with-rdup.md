@@ -11,7 +11,7 @@ Script:
 stamp=$(date +"%y-%m-%d")
 base="home"
 
-rdup -cv /dev/null /path/to/backup | rdedup store $base-$stamp
+rdup -v /dev/null /path/to/backup | rdedup store $base-$stamp
 ```
 
 This script creates a new name using the timestamp at the end to differentiate
