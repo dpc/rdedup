@@ -1169,7 +1169,7 @@ impl Repo {
 
         fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
             while let Some(file) = queue.pop_front() {
-                file.sync_data().unwrap();
+                file.sync_all().unwrap();
             }
             // Run renames after data sync to mitigate data writes and metadata writes contention
             let mut drain = queue_paths.drain();
