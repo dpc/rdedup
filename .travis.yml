@@ -5,6 +5,7 @@ rust:
 # - beta
   - nightly
 script:
+  - export PATH=$PATH:~/.cargo/bin
   - ./scripts/check-fmt.sh
   - cargo clippy
   - cd lib && cargo clippy && cd ..
