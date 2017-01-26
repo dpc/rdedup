@@ -1,6 +1,6 @@
-# Using rdedup with rbup for regular backups
+# Using rdedup with rdup for regular backups
 
-This is a simple example of a script used to backup regularly with rbup as the
+This is a simple example of a script used to backup regularly with rdup as the
 utility stream the file / folder structure as well as the data into a ```name```
 in your rdedup repo.
 
@@ -29,7 +29,7 @@ written to your repo.
 To restore the data the command is simple. You can create it as a script if you
 want to abstract the slightly complex command.
 
-To restore a name from rdedup what has used rbup run the following:
+To restore a name from rdedup what has used rdup run the following:
 ```bash
 rdedup load name | rdup-up "/path/to/restore/to"
 ```
