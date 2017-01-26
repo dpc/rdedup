@@ -1,9 +1,5 @@
 language: rust
-cache:
-  cargo: true
-  directories:
-    - libsodium-1.0.8
-    - installed_libsodium
+cache: cargo
 rust:
 # - stable
 # - beta
@@ -25,11 +21,12 @@ env:
     - RELEASE=true
 
 install:
-- if [ ! -d installed_libsodium ]; then ./scripts/install-sodium.sh; fi
+- ./scripts/install-sodium.sh
 - export PKG_CONFIG_PATH=$HOME/installed_libsodium/lib/pkgconfig:$PKG_CONFIG_PATH
 - export LD_LIBRARY_PATH=$HOME/installed_libsodium/lib:$LD_LIBRARY_PATH
 - if [ ! -x ~/.cargo/bin/cargo-fmt ]; then cargo install rustfmt; fi
 - if [ ! -x ~/.cargo/bin/cargo-clippy ]; then cargo install clippy; fi
+- ls -ahl ~/.cargo/bin/
 
 notifications:
   webhooks:
