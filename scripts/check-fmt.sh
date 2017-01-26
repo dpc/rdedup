@@ -1,6 +1,6 @@
 #!/bin/bash
-cargo fmt
-cd lib && cargo fmt && cd ..
+~/.cargo/bin/cargo-fmt
+cd lib && ~/.cargo/bin/cargo-fmt && cd ..
 git diff > fmt-diff.patch
 if [ -s fmt-diff.patch ]; then
   rm fmt-diff.patch
