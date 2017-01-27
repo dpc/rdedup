@@ -107,7 +107,8 @@ pub fn write_config_v0(repo_path: &Path,
 pub fn write_config_v1(repo_path: &Path,
                        pk: &box_::PublicKey,
                        sk: &box_::SecretKey,
-                       passphrase: &str)
+                       passphrase: &str,
+                       chunking: RepoChunking)
                        -> super::Result<()> {
 
     let salt = pwhash::gen_salt();
@@ -127,6 +128,7 @@ pub fn write_config_v1(repo_path: &Path,
             nonce: nonce,
             salt: salt,
         }),
+        chunking: Some(chunking),
     };
 
     let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
@@ -215,6 +217,28 @@ pub struct RepoEncryption {
     pub nonce: secretbox::Nonce,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// Chunking Algorithms supported by rdedup
+pub enum ChunkingAlogrithm {
+    Bup,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// RepoChunking is the configuration of the chunking algorithm and parameters for the repo
+pub struct RepoChunking {
+    pub algorithm: ChunkingAlogrithm,
+    pub size: u32, // size is generic enough to work with different algorithms
+}
+/// Default implementation for the RepoChunking structure
+impl Default for RepoChunking {
+    fn default() -> RepoChunking {
+        RepoChunking {
+            algorithm: ChunkingAlogrithm::Bup,
+            size: 17,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 /// Rdedup repository configuration
 ///
@@ -223,4 +247,5 @@ pub struct RepoEncryption {
 pub struct Repo {
     pub version: u32,
     pub encryption: Option<RepoEncryption>,
+    pub chunking: Option<RepoChunking>,
 }

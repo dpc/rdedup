@@ -78,6 +78,7 @@ type Edge = (usize, Vec<u8>);
 
 /// Finds edges using rolling sum
 struct Chunker {
+    bits: u32,
     roll: rollsum::Bup,
     sha256: sha2::Sha256,
     bytes_total: usize,
@@ -87,12 +88,11 @@ struct Chunker {
     edges: Vec<Edge>,
 }
 
-const ROLLSUM_BUP_CHUNK_BITS: u32 = 17;
-
 impl Chunker {
-    pub fn new() -> Self {
+    pub fn new(chunk_bits: u32) -> Self {
         Chunker {
-            roll: rollsum::Bup::new_with_chunk_bits(ROLLSUM_BUP_CHUNK_BITS),
+            bits: chunk_bits,
+            roll: rollsum::Bup::new_with_chunk_bits(chunk_bits),
             sha256: sha2::Sha256::new(),
             bytes_total: 0,
             bytes_chunk: 0,
@@ -115,7 +115,7 @@ impl Chunker {
         self.bytes_chunk = 0;
 
         self.sha256.reset();
-        self.roll = rollsum::Bup::new_with_chunk_bits(ROLLSUM_BUP_CHUNK_BITS);
+        self.roll = rollsum::Bup::new_with_chunk_bits(self.bits);
     }
 
     pub fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
@@ -184,9 +184,10 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 /// Return final digest
 fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
                                         mut reader: &mut R,
-                                        data_type: DataType)
+                                        data_type: DataType,
+                                        chunk_bits: u32)
                                         -> Result<Vec<u8>> {
-    let mut chunker = Chunker::new();
+    let mut chunker = Chunker::new(chunk_bits);
 
     let mut index: Vec<u8> = vec![];
     loop {
@@ -215,8 +216,10 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
         .unwrap();
 
     if index.len() > DIGEST_SIZE {
-        let digest =
-            chunk_and_send_to_assembler(tx, &mut io::Cursor::new(index), DataType::Index)?;
+        let digest = chunk_and_send_to_assembler(tx,
+                                                 &mut io::Cursor::new(index),
+                                                 DataType::Index,
+                                                 chunk_bits)?;
         assert!(digest.len() == DIGEST_SIZE);
         let index_digest = quick_sha256(&digest);
         tx.send(ChunkAssemblerMessage::Data(digest.clone(),
@@ -595,6 +598,9 @@ pub struct Repo {
 
     /// Repo configuration version
     version: u32,
+
+    /// Repo Chunking Algorithm and settings
+    chunking: config::RepoChunking,
 }
 
 /// Opaque wrapper over secret key
@@ -635,23 +641,28 @@ impl Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
             version: 0,
+            chunking: config::RepoChunking::default(),
         };
         Ok(repo)
     }
 
     /// Create new rdedup repository
-    pub fn init(repo_path: &Path, passphrase: &str) -> Result<Repo> {
+    pub fn init(repo_path: &Path,
+                passphrase: &str,
+                chunking: config::RepoChunking)
+                -> Result<Repo> {
         info!("Init repo {}", repo_path.to_string_lossy());
         let (pk, sk) = box_::gen_keypair();
 
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
-        config::write_config_v1(repo_path, &pk, &sk, passphrase)?;
+        config::write_config_v1(repo_path, &pk, &sk, passphrase, chunking.clone())?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
             version: config::REPO_VERSION_CURRENT,
+            chunking: chunking,
         };
 
         Ok(repo)
@@ -745,6 +756,7 @@ impl Repo {
             path: repo_path.to_owned(),
             pub_key: pub_key,
             version: version_int,
+            chunking: config::RepoChunking::default(),
         })
     }
 
@@ -772,6 +784,7 @@ impl Repo {
                 path: repo_path.to_owned(),
                 pub_key: encryption_config.pub_key,
                 version: version,
+                chunking: config.chunking.unwrap_or_default(),
             })
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData,
@@ -814,7 +827,11 @@ impl Repo {
         if self.version == 0 {
             self.change_passphrase_v0(seckey, new_passphrase)
         } else {
-            config::write_config_v1(&self.path, &self.pub_key, &seckey.0, new_passphrase)
+            config::write_config_v1(&self.path,
+                                    &self.pub_key,
+                                    &seckey.0,
+                                    new_passphrase,
+                                    self.chunking.clone())
         }
     }
 
@@ -865,7 +882,10 @@ impl Repo {
         let self_clone = self.clone();
         let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
-        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data)?;
+        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler,
+                                                       reader,
+                                                       DataType::Data,
+                                                       self.chunking.size)?;
 
         tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
         for join in joins.drain(..) {
