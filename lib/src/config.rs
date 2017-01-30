@@ -226,6 +226,7 @@ pub struct Curve25519 {
 #[derive(Serialize, Deserialize)]
 pub enum Encryption {
     /// No encryption
+    #[serde(rename = "none")]
     None,
     /// `Curve25519Blake2BSalsa20Poly1305`
     #[serde(rename = "curve25519")]
