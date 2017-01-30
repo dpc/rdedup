@@ -121,7 +121,7 @@ pub fn write_config_v1(repo_path: &Path,
 
     let config = Repo {
         version: 1,
-        encryption: Encryption::Curve25519(Curve25519{
+        encryption: Encryption::Curve25519(Curve25519 {
             sealed_sec_key: sealed_sk,
             pub_key: *pk,
             nonce: nonce,

@@ -682,8 +682,8 @@ impl Repo {
                                               version,
                                               config::REPO_VERSION_CURRENT)));
         }
-        //This if statement triggers the absurd_extreme_comparisons because the minimum repo
-        //version is also the smallest value of a u32
+        // This if statement triggers the absurd_extreme_comparisons because the minimum repo
+        // version is also the smallest value of a u32
         if version_int < config::REPO_VERSION_LOWEST {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                                       format!("repo version {} lower than \
