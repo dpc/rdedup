@@ -121,7 +121,7 @@ pub fn write_config_v1(repo_path: &Path,
 
     let config = Repo {
         version: 1,
-        encryption: Some(RepoEncryption {
+        encryption: Encryption::Curve25519(Curve25519{
             sealed_sec_key: sealed_sk,
             pub_key: *pk,
             nonce: nonce,
@@ -182,6 +182,12 @@ impl MyTryFromBytes for pwhash::Salt {
     }
 }
 
+impl MyTryFromBytes for Vec<u8> {
+    type Err = io::Error;
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
+        Ok(Vec::from(slice))
+    }
+}
 fn from_base64<T, D>(deserializer: &mut D) -> Result<T, D::Error>
     where D: serde::Deserializer,
           T: MyTryFromBytes
@@ -203,9 +209,10 @@ fn as_base64<T, S>(key: &T, serializer: &mut S) -> Result<(), S::Error>
 }
 
 
-#[derive(Serialize, Deserialize)]
 /// Configuration of repository encryption
-pub struct RepoEncryption {
+#[derive(Serialize, Deserialize)]
+pub struct Curve25519 {
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub sealed_sec_key: Vec<u8>,
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub pub_key: box_::PublicKey,
@@ -215,12 +222,22 @@ pub struct RepoEncryption {
     pub nonce: secretbox::Nonce,
 }
 
+/// Types of supported encryption
 #[derive(Serialize, Deserialize)]
+pub enum Encryption {
+    /// No encryption
+    None,
+    /// `Curve25519Blake2BSalsa20Poly1305`
+    #[serde(rename = "curve25519")]
+    Curve25519(Curve25519),
+}
+
 /// Rdedup repository configuration
 ///
 /// This datastructure is used for serialization and deserialization
 /// of repo configuration that is stored as a repostiory metadata.
+#[derive(Serialize, Deserialize)]
 pub struct Repo {
     pub version: u32,
-    pub encryption: Option<RepoEncryption>,
+    pub encryption: Encryption,
 }

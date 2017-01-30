@@ -767,7 +767,7 @@ impl Repo {
                                format!("couldn't parse yaml: {}", e.to_string()))
             })?;
 
-        if let Some(encryption_config) = config.encryption {
+        if let config::Encryption::Curve25519(encryption_config) = config.encryption {
             Ok(Repo {
                 path: repo_path.to_owned(),
                 pub_key: encryption_config.pub_key,
@@ -1005,7 +1005,7 @@ impl Repo {
                                format!("couldn't parse yaml: {}", e.to_string()))
             })?;
 
-        if let Some(enc) = config.encryption {
+        if let config::Encryption::Curve25519(enc) = config.encryption {
             let derived_key = derive_key(passphrase, &enc.salt)?;
 
             let plain_seckey =
