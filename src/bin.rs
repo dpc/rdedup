@@ -252,12 +252,13 @@ impl Options {
                     printerrln!("invalid chunk size provided for bup, must be power of 2");
                     process::exit(-1);
                 }
-                if 1024 > size || size > 1024u64.pow(3) {
+                let algo = ChunkingAlgorithm::Bup(size.trailing_zeros());
+                if !algo.valid() {
                     printerrln!("invalid chunk size, value must be at least 1K and no more then \
                                  1G");
                     process::exit(-1);
                 }
-                ChunkingAlgorithm::Bup(size.trailing_zeros())
+                algo
             }
             _ => {
                 printerrln!("chunking algorithm {:} not supported", self.chunking);
