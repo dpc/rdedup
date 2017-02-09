@@ -11,7 +11,7 @@ use std::str::FromStr;
 use serialize::hex::ToHex;
 
 use lib::Repo;
-use lib::config::RepoChunking;
+use lib::config::{ChunkingAlogrithm, RepoChunking};
 
 
 macro_rules! printerrln {
@@ -215,7 +215,15 @@ impl Options {
         }
         path::Path::new(&self.dir_str).to_owned()
     }
-
+    fn check_chunking(&self) -> ChunkingAlogrithm {
+        match self.chunking.to_lowercase().as_str() {
+            "bup" => ChunkingAlogrithm::Bup,
+            _ => {
+                printerrln!("chunking algorithm {:} not supported", self.chunking);
+                process::exit(-1);
+            }
+        }
+    }
     fn check_chunk_size(&self) -> u64 {
         let size = match parse_size(&self.chunk_size) {
             Some(s) => s,
@@ -299,12 +307,15 @@ fn run(options: &Options) -> io::Result<()> {
             }
         }
         Command::Init => {
+            let algo = options.check_chunking();
             let size = options.check_chunk_size();
             let dir = options.check_dir();
             let pass = read_new_passphrase();
             //Expand this logic when more algorithms are supported
-            let mut chunking = RepoChunking::default();
-            chunking.size = size.trailing_zeros();
+            let chunking = RepoChunking {
+                algorithm: algo,
+                size: size.trailing_zeros(),
+            };
             try!(Repo::init(&dir, &pass, chunking));
         }
         Command::DU => {
