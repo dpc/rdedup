@@ -11,6 +11,7 @@ use std::str::FromStr;
 use serialize::hex::ToHex;
 
 use lib::Repo;
+use lib::config::RepoChunking;
 
 
 macro_rules! printerrln {
@@ -65,6 +66,32 @@ fn read_new_passphrase() -> String {
         printerrln!("\nPassphrases don't match, try again.");
     }
 }
+///```parse_size``` is a utility function to take a string representing a size in bytes like 192k
+///or 192K and turns it into a u64. Currently this parses up to a Terabyte value but additional
+///values are supported by simply expanding the units array.
+fn parse_size(input: &str) -> Option<u64> {
+    let input = input.to_uppercase();
+    let units = ["K", "M", "G", "T"];
+    let unit = input.matches(char::is_alphabetic).next();
+    let str_size: String = input.matches(char::is_numeric).collect();
+
+    let mut size = if !str_size.is_empty() {
+        match u64::from_str(str_size.as_str()) {
+            Ok(s) => s,
+            Err(_) => return None,
+        }
+    } else {
+        0
+    };
+
+    if let Some(unit) = unit {
+        if let Some(idx) = units.iter().position(|&u| u == unit) {
+            let modifier: u64 = (1024 as u64).pow(idx as u32 + 1);
+            size *= modifier;
+        }
+    }
+    Some(size)
+}
 
 #[derive(Copy, Clone)]
 enum Command {
@@ -107,6 +134,8 @@ struct Options {
     command: Command,
     add_newline: bool,
     usage: String,
+    chunk_size: String,
+    chunking: String,
 }
 
 impl Options {
@@ -118,6 +147,8 @@ impl Options {
         let mut command = Command::Help;
         let mut usage = vec![];
         let mut add_newline = false;
+        let mut chunk_size: String = "128k".to_owned();
+        let mut chunking: String = "bup".to_owned();
 
         {
             let mut ap = argparse::ArgumentParser::new();
@@ -127,6 +158,10 @@ impl Options {
                 .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut add_newline)
                 .add_option(&["-n", "--add-newline"], StoreTrue, "add newline to the password");
+            ap.refer(&mut chunking)
+                .add_option(&["--chunking"], Store, "chunking algorithm (bup - default)");
+            ap.refer(&mut chunk_size)
+                .add_option(&["--chunk_size"], Store, "chunking size, default: 128k");
             ap.refer(&mut command)
                 .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
@@ -148,6 +183,8 @@ impl Options {
             args: args,
             add_newline: add_newline,
             usage: String::from_utf8_lossy(&usage).to_string(),
+            chunk_size: chunk_size,
+            chunking: chunking,
         }
     }
 
@@ -177,6 +214,25 @@ impl Options {
             process::exit(-1);
         }
         path::Path::new(&self.dir_str).to_owned()
+    }
+
+    fn check_chunk_size(&self) -> u64 {
+        let size = match parse_size(&self.chunk_size) {
+            Some(s) => s,
+            None => {
+                printerrln!("invalid chunk size provided, must be a number with a size suffix");
+                process::exit(-1);
+            }
+        };
+        if self.chunking == "bup" && !size.is_power_of_two() {
+            printerrln!("invalid chunk size provided for bup, must be power of 2");
+            process::exit(-1);
+        }
+        if 1024 > size || size > 1024u64.pow(3) {
+            printerrln!("invalid chunk size, value must be at least 1K and no more then 1G");
+            process::exit(-1);
+        }
+        size
     }
 
     fn get_names(&self) -> Vec<String> {
@@ -243,9 +299,13 @@ fn run(options: &Options) -> io::Result<()> {
             }
         }
         Command::Init => {
+            let size = options.check_chunk_size();
             let dir = options.check_dir();
             let pass = read_new_passphrase();
-            try!(Repo::init(&dir, &pass));
+            //Expand this logic when more algorithms are supported
+            let mut chunking = RepoChunking::default();
+            chunking.size = size.trailing_zeros();
+            try!(Repo::init(&dir, &pass, chunking));
         }
         Command::DU => {
             let name = options.check_name();

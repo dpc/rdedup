@@ -39,7 +39,7 @@ use sodiumoxide::crypto::{box_, pwhash, secretbox};
 mod iterators;
 use iterators::StoredChunks;
 
-mod config;
+pub mod config;
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
