@@ -40,6 +40,7 @@ mod iterators;
 use iterators::StoredChunks;
 
 pub mod config;
+use config::ChunkingAlgorithm;
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
@@ -185,8 +186,11 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
                                         mut reader: &mut R,
                                         data_type: DataType,
-                                        chunk_bits: u32)
+                                        chunking_algo: ChunkingAlgorithm)
                                         -> Result<Vec<u8>> {
+    let chunk_bits = match chunking_algo {
+        ChunkingAlgorithm::Bup(bits) => bits,
+    };
     let mut chunker = Chunker::new(chunk_bits);
 
     let mut index: Vec<u8> = vec![];
@@ -219,7 +223,7 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
         let digest = chunk_and_send_to_assembler(tx,
                                                  &mut io::Cursor::new(index),
                                                  DataType::Index,
-                                                 chunk_bits)?;
+                                                 chunking_algo)?;
         assert!(digest.len() == DIGEST_SIZE);
         let index_digest = quick_sha256(&digest);
         tx.send(ChunkAssemblerMessage::Data(digest.clone(),
@@ -600,7 +604,7 @@ pub struct Repo {
     version: u32,
 
     /// Repo Chunking Algorithm and settings
-    chunking: config::RepoChunking,
+    chunking: config::ChunkingAlgorithm,
 }
 
 /// Opaque wrapper over secret key
@@ -641,22 +645,26 @@ impl Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
             version: 0,
-            chunking: config::RepoChunking::default(),
+            chunking: ChunkingAlgorithm::default(),
         };
         Ok(repo)
     }
 
     /// Create new rdedup repository
-    pub fn init(repo_path: &Path,
-                passphrase: &str,
-                chunking: config::RepoChunking)
-                -> Result<Repo> {
+    pub fn init(repo_path: &Path, passphrase: &str, chunking: ChunkingAlgorithm) -> Result<Repo> {
         info!("Init repo {}", repo_path.to_string_lossy());
+
+        // Validate ChunkingAlgorithm
+        if !chunking.valid() {
+            return Err(Error::new(io::ErrorKind::InvalidInput,
+                                  format!("invalid chunking algorithm defined")));
+        }
+
         let (pk, sk) = box_::gen_keypair();
 
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
-        config::write_config_v1(repo_path, &pk, &sk, passphrase, chunking.clone())?;
+        config::write_config_v1(repo_path, &pk, &sk, passphrase, chunking)?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
@@ -756,7 +764,7 @@ impl Repo {
             path: repo_path.to_owned(),
             pub_key: pub_key,
             version: version_int,
-            chunking: config::RepoChunking::default(),
+            chunking: ChunkingAlgorithm::default(),
         })
     }
 
@@ -831,7 +839,7 @@ impl Repo {
                                     &self.pub_key,
                                     &seckey.0,
                                     new_passphrase,
-                                    self.chunking.clone())
+                                    self.chunking)
         }
     }
 
@@ -882,10 +890,9 @@ impl Repo {
         let self_clone = self.clone();
         let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
-        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler,
-                                                       reader,
-                                                       DataType::Data,
-                                                       self.chunking.size)?;
+
+        let final_digest =
+            chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data, self.chunking)?;
 
         tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
         for join in joins.drain(..) {

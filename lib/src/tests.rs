@@ -3,7 +3,7 @@ mod lib {
 }
 
 use iterators::StoredChunks;
-use config::{ChunkingAlogrithm, RepoChunking};
+use config::ChunkingAlgorithm;
 
 use std::collections::HashSet;
 use std::path;
@@ -115,7 +115,7 @@ fn wipe(repo: &lib::Repo) {
 
 #[test]
 fn zero_size() {
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, RepoChunking::default()).unwrap();
+    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
 
     let seckey = repo.get_seckey(PASS).unwrap();
 
@@ -132,7 +132,7 @@ fn zero_size() {
 
 #[test]
 fn byte_size() {
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, RepoChunking::default()).unwrap();
+    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let tests = [0u8, 1, 13, 255];
     for &b in &tests {
@@ -154,7 +154,7 @@ fn byte_size() {
 fn random_sanity() {
     let mut names = vec![];
 
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, RepoChunking::default()).unwrap();
+    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     for i in 0..10 {
         let mut data = ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
@@ -217,7 +217,8 @@ fn change_passphrase() {
     let data_before = rand_data(1024);
 
     {
-        let repo = lib::Repo::init(dir_path, prev_passphrase, RepoChunking::default()).unwrap();
+        let repo = lib::Repo::init(dir_path, prev_passphrase, ChunkingAlgorithm::default())
+            .unwrap();
         repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
     }
 
@@ -245,7 +246,7 @@ fn change_passphrase() {
 #[test]
 fn verify_name() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, RepoChunking::default()).unwrap();
+    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default()).unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let data = rand_data(1024);
     {
@@ -319,7 +320,7 @@ fn migration_v0_to_v1() {
 #[test]
 fn test_stored_chunks_iter() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, RepoChunking::default()).unwrap();
+    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default()).unwrap();
     let data = rand_data(1024 * 1024);
 
     repo.write("data", &mut io::Cursor::new(&data)).unwrap();
@@ -362,16 +363,25 @@ fn test_stored_chunks_iter() {
 
 #[test]
 fn test_custom_chunking_size() {
-    let dir_path = rand_tmp_dir();
-    let chunking = RepoChunking {
-        algorithm: ChunkingAlogrithm::Bup,
-        size: 20,
-    };
-    {
-        lib::Repo::init(&dir_path, PASS, chunking.clone()).unwrap();
+    for bits in [9, 10, 17, 20, 30, 31].iter() {
+        let bits = *bits;
+        let dir_path = rand_tmp_dir();
+        let chunking = ChunkingAlgorithm::Bup(bits);
+        {
+
+            let result = lib::Repo::init(&dir_path, PASS, chunking.clone());
+            if bits < 10 || bits > 30 {
+                if result.is_err() {
+                    continue;
+                } else {
+                    panic!("expected an error for value {:}, but got Ok", bits);
+                }
+            } else if result.is_err() {
+                panic!("expected Ok, but got {:}", result.err().unwrap());
+            }
+        }
+        let repo = lib::Repo::open(&dir_path).unwrap();
+        assert_eq!(chunking, repo.chunking);
+        wipe(&repo);
     }
-    let repo = lib::Repo::open(&dir_path).unwrap();
-    assert_eq!(chunking.algorithm, repo.chunking.algorithm);
-    assert_eq!(chunking.size, repo.chunking.size);
-    wipe(&repo);
 }

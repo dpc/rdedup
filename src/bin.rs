@@ -11,7 +11,7 @@ use std::str::FromStr;
 use serialize::hex::ToHex;
 
 use lib::Repo;
-use lib::config::{ChunkingAlogrithm, RepoChunking};
+use lib::config::ChunkingAlgorithm;
 
 
 macro_rules! printerrln {
@@ -244,9 +244,21 @@ impl Options {
         }
         path::Path::new(&self.dir_str).to_owned()
     }
-    fn check_chunking(&self) -> ChunkingAlogrithm {
+    fn check_chunking(&self, size: u64) -> ChunkingAlgorithm {
         match self.chunking.to_lowercase().as_str() {
-            "bup" => ChunkingAlogrithm::Bup,
+            "bup" => {
+                //Validate that the size provided works for the bup algorithm
+                if !size.is_power_of_two() {
+                    printerrln!("invalid chunk size provided for bup, must be power of 2");
+                    process::exit(-1);
+                }
+                if 1024 > size || size > 1024u64.pow(3) {
+                    printerrln!("invalid chunk size, value must be at least 1K and no more then \
+                                 1G");
+                    process::exit(-1);
+                }
+                ChunkingAlgorithm::Bup(size.trailing_zeros())
+            }
             _ => {
                 printerrln!("chunking algorithm {:} not supported", self.chunking);
                 process::exit(-1);
@@ -254,22 +266,13 @@ impl Options {
         }
     }
     fn check_chunk_size(&self) -> u64 {
-        let size = match parse_size(&self.chunk_size) {
+        match parse_size(&self.chunk_size) {
             Some(s) => s,
             None => {
                 printerrln!("invalid chunk size provided, must be a number with a size suffix");
                 process::exit(-1);
             }
-        };
-        if self.chunking == "bup" && !size.is_power_of_two() {
-            printerrln!("invalid chunk size provided for bup, must be power of 2");
-            process::exit(-1);
         }
-        if 1024 > size || size > 1024u64.pow(3) {
-            printerrln!("invalid chunk size, value must be at least 1K and no more then 1G");
-            process::exit(-1);
-        }
-        size
     }
 
     fn get_names(&self) -> Vec<String> {
@@ -336,15 +339,10 @@ fn run(options: &Options) -> io::Result<()> {
             }
         }
         Command::Init => {
-            let algo = options.check_chunking();
             let size = options.check_chunk_size();
+            let chunking = options.check_chunking(size);
             let dir = options.check_dir();
             let pass = read_new_passphrase();
-            //Expand this logic when more algorithms are supported
-            let chunking = RepoChunking {
-                algorithm: algo,
-                size: size.trailing_zeros(),
-            };
             try!(Repo::init(&dir, &pass, chunking));
         }
         Command::DU => {

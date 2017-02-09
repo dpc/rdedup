@@ -108,7 +108,7 @@ pub fn write_config_v1(repo_path: &Path,
                        pk: &box_::PublicKey,
                        sk: &box_::SecretKey,
                        passphrase: &str,
-                       chunking: RepoChunking)
+                       chunking: ChunkingAlgorithm)
                        -> super::Result<()> {
 
     let salt = pwhash::gen_salt();
@@ -224,24 +224,24 @@ pub struct Curve25519 {
     pub nonce: secretbox::Nonce,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-/// Chunking Algorithms supported by rdedup
-pub enum ChunkingAlogrithm {
-    Bup,
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
+pub enum ChunkingAlgorithm {
+    /// ```Bup``` is the default algorithm, the u32 value provided with bup is the bit mask size to
+    /// be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    Bup(u32),
+}
+/// Default implementation for the ```ChunkingAlgorithm```
+impl Default for ChunkingAlgorithm {
+    fn default() -> ChunkingAlgorithm {
+        ChunkingAlgorithm::Bup(17)
+    }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-/// ```RepoChunking``` is the configuration of the chunking algorithm and parameters for the repo
-pub struct RepoChunking {
-    pub algorithm: ChunkingAlogrithm,
-    pub size: u32, // size is generic enough to work with different algorithms
-}
-/// Default implementation for the ```RepoChunking``` structure
-impl Default for RepoChunking {
-    fn default() -> RepoChunking {
-        RepoChunking {
-            algorithm: ChunkingAlogrithm::Bup,
-            size: 17,
+impl ChunkingAlgorithm {
+    pub fn valid(self) -> bool {
+        match self {
+            ChunkingAlgorithm::Bup(bits) => 30 >= bits && bits >= 10,
         }
     }
 }
@@ -264,6 +264,6 @@ pub enum Encryption {
 #[derive(Serialize, Deserialize)]
 pub struct Repo {
     pub version: u32,
-    pub chunking: Option<RepoChunking>,
+    pub chunking: Option<ChunkingAlgorithm>,
     pub encryption: Encryption,
 }
