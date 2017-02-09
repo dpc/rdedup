@@ -231,12 +231,12 @@ pub enum ChunkingAlogrithm {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-/// RepoChunking is the configuration of the chunking algorithm and parameters for the repo
+/// ```RepoChunking``` is the configuration of the chunking algorithm and parameters for the repo
 pub struct RepoChunking {
     pub algorithm: ChunkingAlogrithm,
     pub size: u32, // size is generic enough to work with different algorithms
 }
-/// Default implementation for the RepoChunking structure
+/// Default implementation for the ```RepoChunking``` structure
 impl Default for RepoChunking {
     fn default() -> RepoChunking {
         RepoChunking {
