@@ -161,7 +161,7 @@ impl Options {
             ap.refer(&mut chunking)
                 .add_option(&["--chunking"], Store, "chunking algorithm (bup - default)");
             ap.refer(&mut chunk_size)
-                .add_option(&["--chunk_size"], Store, "chunking size, default: 128k");
+                .add_option(&["--chunk-size"], Store, "chunking size, default: 128k");
             ap.refer(&mut command)
                 .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
