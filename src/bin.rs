@@ -71,6 +71,11 @@ fn read_new_passphrase() -> String {
 ///values are supported by simply expanding the units array.
 fn parse_size(input: &str) -> Option<u64> {
     let input = input.to_uppercase();
+
+    if input.contains('.') {
+        return None;
+    }
+
     let units = ["K", "M", "G", "T"];
     let unit = input.matches(char::is_alphabetic).next();
     let str_size: String = input.matches(char::is_numeric).collect();
@@ -81,16 +86,40 @@ fn parse_size(input: &str) -> Option<u64> {
             Err(_) => return None,
         }
     } else {
-        0
+        return None;
     };
 
     if let Some(unit) = unit {
         if let Some(idx) = units.iter().position(|&u| u == unit) {
-            let modifier: u64 = (1024 as u64).pow(idx as u32 + 1);
+            let modifier: u64 = 1024u64.pow(idx as u32 + 1);
             size *= modifier;
         }
     }
     Some(size)
+}
+
+#[test]
+fn test_parse_size() {
+    // tuples that are str, expected u64, pass or fail
+    let tests = [("192K", 192 * 1024, true),
+                 ("1M", 1024u64.pow(2), true),
+                 ("Hello", 0, false),
+                 ("12345.6789", 0, false),
+                 ("1024B", 1024, true), // Passes because we ignore unknown suffixes
+                 ("1024P", 1024, true), // Passes because we ignore unknown suffixes
+                 ("1t", 1024u64.pow(4), true)];
+
+    for test in &tests {
+        if let Some(value) = parse_size(test.0) {
+            if !test.2 {
+                panic!("test {:} should of failed but did not, value: {:}", test.0, value);
+            } else if test.1 != value {
+                panic!("expected {:}, got {:}", test.1, value);
+            }
+        } else if test.2 {
+            panic!("test {:} failed when it shouldn't have", test.0);
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
