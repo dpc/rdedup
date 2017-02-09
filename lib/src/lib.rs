@@ -79,7 +79,7 @@ type Edge = (usize, Vec<u8>);
 
 /// Finds edges using rolling sum
 struct Chunker {
-    bits: u32,
+    chunk_bits: u32,
     roll: rollsum::Bup,
     sha256: sha2::Sha256,
     bytes_total: usize,
@@ -92,7 +92,7 @@ struct Chunker {
 impl Chunker {
     pub fn new(chunk_bits: u32) -> Self {
         Chunker {
-            bits: chunk_bits,
+            chunk_bits: chunk_bits,
             roll: rollsum::Bup::new_with_chunk_bits(chunk_bits),
             sha256: sha2::Sha256::new(),
             bytes_total: 0,
@@ -116,7 +116,7 @@ impl Chunker {
         self.bytes_chunk = 0;
 
         self.sha256.reset();
-        self.roll = rollsum::Bup::new_with_chunk_bits(self.bits);
+        self.roll = rollsum::Bup::new_with_chunk_bits(self.chunk_bits);
     }
 
     pub fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
