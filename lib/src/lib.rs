@@ -189,7 +189,7 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
                                         chunking_algo: ChunkingAlgorithm)
                                         -> Result<Vec<u8>> {
     let chunk_bits = match chunking_algo {
-        ChunkingAlgorithm::Bup(bits) => bits,
+        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
     };
     let mut chunker = Chunker::new(chunk_bits);
 
@@ -657,7 +657,7 @@ impl Repo {
         // Validate ChunkingAlgorithm
         if !chunking.valid() {
             return Err(Error::new(io::ErrorKind::InvalidInput,
-                                  format!("invalid chunking algorithm defined")));
+                                  "invalid chunking algorithm defined"));
         }
 
         let (pk, sk) = box_::gen_keypair();

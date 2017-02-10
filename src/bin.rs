@@ -250,7 +250,7 @@ impl Options {
                     printerrln!("invalid chunk size provided for bup, must be power of 2");
                     process::exit(-1);
                 }
-                let algo = ChunkingAlgorithm::Bup(size.trailing_zeros());
+                let algo = ChunkingAlgorithm::Bup { chunk_bits: size.trailing_zeros() };
                 if !algo.valid() {
                     printerrln!("invalid chunk size, value must be at least 1K and no more then \
                                  1G");

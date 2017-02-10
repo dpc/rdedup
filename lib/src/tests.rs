@@ -366,7 +366,7 @@ fn test_custom_chunking_size() {
     for bits in [9, 10, 17, 20, 30, 31].iter() {
         let bits = *bits;
         let dir_path = rand_tmp_dir();
-        let chunking = ChunkingAlgorithm::Bup(bits);
+        let chunking = ChunkingAlgorithm::Bup { chunk_bits: bits };
         {
 
             let result = lib::Repo::init(&dir_path, PASS, chunking.clone());

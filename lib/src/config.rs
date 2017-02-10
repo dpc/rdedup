@@ -227,21 +227,21 @@ pub struct Curve25519 {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 /// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
 pub enum ChunkingAlgorithm {
-    /// ```Bup``` is the default algorithm, the u32 value provided with bup is the bit mask size to
-    /// be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
-    Bup(u32),
+    /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit mask
+    ///size to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    Bup { chunk_bits: u32 },
 }
 /// Default implementation for the ```ChunkingAlgorithm```
 impl Default for ChunkingAlgorithm {
     fn default() -> ChunkingAlgorithm {
-        ChunkingAlgorithm::Bup(17)
+        ChunkingAlgorithm::Bup { chunk_bits: 17 }
     }
 }
 
 impl ChunkingAlgorithm {
     pub fn valid(self) -> bool {
         match self {
-            ChunkingAlgorithm::Bup(bits) => 30 >= bits && bits >= 10,
+            ChunkingAlgorithm::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
         }
     }
 }
