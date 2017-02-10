@@ -227,8 +227,8 @@ pub struct Curve25519 {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 /// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
 pub enum ChunkingAlgorithm {
-    /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit mask
-    ///size to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit shift
+    ///to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
     Bup { chunk_bits: u32 },
 }
 /// Default implementation for the ```ChunkingAlgorithm```
