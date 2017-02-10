@@ -76,7 +76,7 @@ fn parse_size(input: &str) -> Option<u64> {
         return None;
     }
 
-    let units = ["K", "M", "G", "T"];
+    let units = ["K", "M", "G", "T", "P", "E"];
     let unit = input.matches(char::is_alphabetic).next();
     let str_size: String = input.matches(char::is_numeric).collect();
 
@@ -93,6 +93,8 @@ fn parse_size(input: &str) -> Option<u64> {
         if let Some(idx) = units.iter().position(|&u| u == unit) {
             let modifier: u64 = 1024u64.pow(idx as u32 + 1);
             size *= modifier;
+        } else {
+            return None;
         }
     }
     Some(size)
@@ -100,24 +102,20 @@ fn parse_size(input: &str) -> Option<u64> {
 
 #[test]
 fn test_parse_size() {
-    // tuples that are str, expected u64, pass or fail
-    let tests = [("192K", 192 * 1024, true),
-                 ("1M", 1024u64.pow(2), true),
-                 ("Hello", 0, false),
-                 ("12345.6789", 0, false),
-                 ("1024B", 1024, true), // Passes because we ignore unknown suffixes
-                 ("1024P", 1024, true), // Passes because we ignore unknown suffixes
-                 ("1t", 1024u64.pow(4), true)];
+    // tuples that are str, expected Option<u64>
+    let tests = [("192K", Some(192 * 1024)),
+                 ("1M", Some(1024u64.pow(2))),
+                 ("Hello", None),
+                 ("12345.6789", None),
+                 ("1024B", None),
+                 ("1024A", None),
+                 ("1t", Some(1024u64.pow(4))),
+                 ("1E", Some(1024u64.pow(6)))];
 
     for test in &tests {
-        if let Some(value) = parse_size(test.0) {
-            if !test.2 {
-                panic!("test {:} should of failed but did not, value: {:}", test.0, value);
-            } else if test.1 != value {
-                panic!("expected {:}, got {:}", test.1, value);
-            }
-        } else if test.2 {
-            panic!("test {:} failed when it shouldn't have", test.0);
+        let result = parse_size(test.0);
+        if result != test.1 {
+            panic!("expected {:?}, got {:?}", test.1, result);
         }
     }
 }
