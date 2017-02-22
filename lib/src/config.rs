@@ -107,7 +107,8 @@ pub fn write_config_v0(repo_path: &Path,
 pub fn write_config_v1(repo_path: &Path,
                        pk: &box_::PublicKey,
                        sk: &box_::SecretKey,
-                       passphrase: &str)
+                       passphrase: &str,
+                       chunking: ChunkingAlgorithm)
                        -> super::Result<()> {
 
     let salt = pwhash::gen_salt();
@@ -127,6 +128,7 @@ pub fn write_config_v1(repo_path: &Path,
             nonce: nonce,
             salt: salt,
         }),
+        chunking: Some(chunking),
     };
 
     let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
@@ -222,6 +224,28 @@ pub struct Curve25519 {
     pub nonce: secretbox::Nonce,
 }
 
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
+pub enum ChunkingAlgorithm {
+    /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit shift
+    ///to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    Bup { chunk_bits: u32 },
+}
+/// Default implementation for the ```ChunkingAlgorithm```
+impl Default for ChunkingAlgorithm {
+    fn default() -> ChunkingAlgorithm {
+        ChunkingAlgorithm::Bup { chunk_bits: 17 }
+    }
+}
+
+impl ChunkingAlgorithm {
+    pub fn valid(self) -> bool {
+        match self {
+            ChunkingAlgorithm::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
+        }
+    }
+}
+
 /// Types of supported encryption
 #[derive(Serialize, Deserialize)]
 pub enum Encryption {
@@ -240,5 +264,6 @@ pub enum Encryption {
 #[derive(Serialize, Deserialize)]
 pub struct Repo {
     pub version: u32,
+    pub chunking: Option<ChunkingAlgorithm>,
     pub encryption: Encryption,
 }
