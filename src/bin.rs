@@ -5,13 +5,13 @@ extern crate env_logger;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
 
-use std::{io, process, env};
-use std::path;
-use std::str::FromStr;
-use serialize::hex::ToHex;
 
 use lib::Repo;
 use lib::config::ChunkingAlgorithm;
+use serialize::hex::ToHex;
+use std::{io, process, env};
+use std::path;
+use std::str::FromStr;
 
 
 macro_rules! printerrln {
@@ -44,8 +44,8 @@ macro_rules! printerr {
 
 
 fn read_passphrase(o: &Options) -> String {
-    printerrln!("Warning: Use `--add-newline` option if you generated repo with \
-                 rdedup version <= 0.2");
+    printerrln!("Warning: Use `--add-newline` option if you generated repo \
+                 with rdedup version <= 0.2");
     printerr!("Enter passphrase to unlock: ");
     if o.add_newline {
         rpassword::read_password().unwrap() + "\n"
@@ -66,9 +66,10 @@ fn read_new_passphrase() -> String {
         printerrln!("\nPassphrases don't match, try again.");
     }
 }
-///```parse_size``` is a utility function to take a string representing a size in bytes like 192k
-///or 192K and turns it into a u64. Currently this parses up to a Terabyte value but additional
-///values are supported by simply expanding the units array.
+/// `parse_size` is a utility function to take a string representing a size
+/// in bytes like 192k or 192K and turns it into a u64. Currently this parses up
+/// to a Terabyte value but additional values are supported by simply expanding
+/// the units array.
 fn parse_size(input: &str) -> Option<u64> {
     let input = input.to_uppercase();
 
@@ -169,7 +170,8 @@ impl Options {
     fn new() -> Self {
         //TODO: When stable we should use unwrap_or_default() instead
         //See https://github.com/rust-lang/rust/issues/37516
-        let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_else(|_| "".to_owned());
+        let mut dir_str: String = env::var("RDEDUP_DIR")
+            .unwrap_or_else(|_| "".to_owned());
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
@@ -184,11 +186,17 @@ impl Options {
             ap.refer(&mut dir_str)
                 .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut add_newline)
-                .add_option(&["-n", "--add-newline"], StoreTrue, "add newline to the password");
+                .add_option(&["-n", "--add-newline"],
+                            StoreTrue,
+                            "add newline to the password");
             ap.refer(&mut chunking)
-                .add_option(&["--chunking"], Store, "chunking algorithm (bup - default)");
+                .add_option(&["--chunking"],
+                            Store,
+                            "chunking algorithm (bup - default)");
             ap.refer(&mut chunk_size)
-                .add_option(&["--chunk-size"], Store, "chunking size, default: 128k");
+                .add_option(&["--chunk-size"],
+                            Store,
+                            "chunking size, default: 128k");
             ap.refer(&mut command)
                 .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
@@ -247,19 +255,23 @@ impl Options {
             "bup" => {
                 //Validate that the size provided works for the bup algorithm
                 if !size.is_power_of_two() {
-                    printerrln!("invalid chunk size provided for bup, must be power of 2");
+                    printerrln!("invalid chunk size provided for bup, must \
+                                 be power of 2");
                     process::exit(-1);
                 }
-                let algo = ChunkingAlgorithm::Bup { chunk_bits: size.trailing_zeros() };
+                let algo = ChunkingAlgorithm::Bup {
+                    chunk_bits: size.trailing_zeros(),
+                };
                 if !algo.valid() {
-                    printerrln!("invalid chunk size, value must be at least 1K and no more then \
-                                 1G");
+                    printerrln!("invalid chunk size, value must be at least \
+                                 1K and no more then 1G");
                     process::exit(-1);
                 }
                 algo
             }
             _ => {
-                printerrln!("chunking algorithm {:} not supported", self.chunking);
+                printerrln!("chunking algorithm {:} not supported",
+                            self.chunking);
                 process::exit(-1);
             }
         }
@@ -268,7 +280,8 @@ impl Options {
         match parse_size(&self.chunk_size) {
             Some(s) => s,
             None => {
-                printerrln!("invalid chunk size provided, must be a number with a size suffix");
+                printerrln!("invalid chunk size provided, must be a number \
+                             with a size suffix");
                 process::exit(-1);
             }
         }

@@ -2,19 +2,19 @@ mod lib {
     pub use super::super::*;
 }
 
-use iterators::StoredChunks;
 use config::ChunkingAlgorithm;
-
-use std::collections::HashSet;
-use std::path;
-use std::fs;
-use std::fs::OpenOptions;
-use std::{io, cmp};
-use std::io::{Result, Write};
+use crypto::digest::Digest;
+use crypto::sha2;
+use iterators::StoredChunks;
 use rand::{self, Rng};
 use serialize::hex::ToHex;
-use crypto::sha2;
-use crypto::digest::Digest;
+use std::{io, cmp};
+
+use std::collections::HashSet;
+use std::fs;
+use std::fs::OpenOptions;
+use std::io::{Result, Write};
+use std::path;
 
 const PASS: &'static str = "FOO";
 const DIGEST_SIZE: usize = 32;
@@ -115,7 +115,9 @@ fn wipe(repo: &lib::Repo) {
 
 #[test]
 fn zero_size() {
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
+    let repo =
+        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+            .unwrap();
 
     let seckey = repo.get_seckey(PASS).unwrap();
 
@@ -132,7 +134,9 @@ fn zero_size() {
 
 #[test]
 fn byte_size() {
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
+    let repo =
+        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+            .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let tests = [0u8, 1, 13, 255];
     for &b in &tests {
@@ -154,10 +158,13 @@ fn byte_size() {
 fn random_sanity() {
     let mut names = vec![];
 
-    let repo = lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default()).unwrap();
+    let repo =
+        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+            .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     for i in 0..10 {
-        let mut data = ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
+        let mut data = ExampleDataGen::new(rand::weak_rng()
+            .gen_range(0, 10 * 1024));
         let name = format!("{:x}", i);
         repo.write(&name, &mut data).unwrap();
         names.push((name, data.finish()));
@@ -217,7 +224,9 @@ fn change_passphrase() {
     let data_before = rand_data(1024);
 
     {
-        let repo = lib::Repo::init(dir_path, prev_passphrase, ChunkingAlgorithm::default())
+        let repo = lib::Repo::init(dir_path,
+                                   prev_passphrase,
+                                   ChunkingAlgorithm::default())
             .unwrap();
         repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
     }
@@ -246,7 +255,8 @@ fn change_passphrase() {
 #[test]
 fn verify_name() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default()).unwrap();
+    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default())
+        .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let data = rand_data(1024);
     {
@@ -320,7 +330,8 @@ fn migration_v0_to_v1() {
 #[test]
 fn test_stored_chunks_iter() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default()).unwrap();
+    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default())
+        .unwrap();
     let data = rand_data(1024 * 1024);
 
     repo.write("data", &mut io::Cursor::new(&data)).unwrap();
@@ -350,10 +361,13 @@ fn test_stored_chunks_iter() {
     // Remove the second name and make sure the difference
     repo.rm("data2").unwrap();
     let chunks_from_indexes3 = repo.list_reachable_chunks().unwrap();
-    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(), 0);
-    // Chunks from iterator should equal the list from both names before the removal
+    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(),
+               0);
+    // Chunks from iterator should equal the list from both names before the
+    // removal
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(), 0);
+    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(),
+               0);
 
     repo.gc().unwrap();
     // Chunks from iterator should equal the first reachable list

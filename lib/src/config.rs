@@ -1,14 +1,14 @@
 //! Repository config and metadata
 
-use std::{io, fs};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-
-use sodiumoxide::crypto::{pwhash, secretbox, box_};
-use serialize::hex::ToHex;
 
 use {base64, serde_yaml};
 use serde::{self, Deserialize};
+use serialize::hex::ToHex;
+
+use sodiumoxide::crypto::{pwhash, secretbox, box_};
+use std::{io, fs};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
 pub const REPO_VERSION_CURRENT: u32 = 1;
@@ -131,7 +131,8 @@ pub fn write_config_v1(repo_path: &Path,
         chunking: Some(chunking),
     };
 
-    let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
+    let config_str = serde_yaml::to_string(&config)
+        .expect("yaml serialization failed");
 
     let config_path = config_yml_file_path(repo_path);
     let config_path_tmp = config_path.with_extension("tmp");
@@ -197,10 +198,14 @@ fn from_base64<T, D>(deserializer: D) -> Result<T, D::Error>
 {
     use serde::de::Error;
     String::deserialize(deserializer)
-        .and_then(|string| base64::decode(&string).map_err(|err| Error::custom(err.to_string())))
+        .and_then(|string| {
+            base64::decode(&string)
+                .map_err(|err| Error::custom(err.to_string()))
+        })
         .and_then(|ref bytes| {
-            T::try_from(bytes)
-                .map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error)))
+            T::try_from(bytes).map_err(|err| {
+                Error::custom(format!("{}", &err as &::std::error::Error))
+            })
         })
 }
 
@@ -227,10 +232,11 @@ pub struct Curve25519 {
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
-/// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
+/// `ChunkingAlgorithm` are the algorithms supported by rdedup
 pub enum ChunkingAlgorithm {
-    /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit shift
-    ///to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    /// `Bup` is the default algorithm, the chunk_bits value provided with bup
+    /// is the bit shift to be used by rollsum. The valid range is between 10
+    /// and 30 (1KB to 1GB)
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
 }
@@ -244,7 +250,9 @@ impl Default for ChunkingAlgorithm {
 impl ChunkingAlgorithm {
     pub fn valid(self) -> bool {
         match self {
-            ChunkingAlgorithm::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
+            ChunkingAlgorithm::Bup { chunk_bits: bits } => {
+                30 >= bits && bits >= 10
+            }
         }
     }
 }
