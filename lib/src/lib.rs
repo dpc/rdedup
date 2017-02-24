@@ -17,24 +17,24 @@ extern crate serde_derive;
 extern crate serde_yaml;
 extern crate base64;
 
-use std::io::{BufRead, Read, Write, Result, Error};
-
-use std::{fs, mem, thread, io};
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use serialize::hex::{ToHex, FromHex};
-use std::collections::{HashSet, VecDeque};
-use std::cell::RefCell;
+use crypto::digest::Digest;
+use crypto::sha2;
 
 use fs2::FileExt;
 
-use std::sync::mpsc;
-
 use rollsum::Engine;
-use crypto::sha2;
-use crypto::digest::Digest;
+use serialize::hex::{ToHex, FromHex};
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
+
+use std::{fs, mem, thread, io};
+use std::cell::RefCell;
+use std::collections::{HashSet, VecDeque};
+use std::fs::File;
+use std::io::{BufRead, Read, Write, Result, Error};
+use std::path::{Path, PathBuf};
+
+use std::sync::mpsc;
 
 mod iterators;
 use iterators::StoredChunks;
@@ -103,7 +103,9 @@ impl Chunker {
     }
 
     fn edge_found(&mut self, input_ofs: usize) {
-        debug!("found edge at {}; sum: {:x}", self.bytes_total, self.roll.digest());
+        debug!("found edge at {}; sum: {:x}",
+               self.bytes_total,
+               self.roll.digest());
 
         debug!("sha256 hash: {}", self.sha256.result_str());
 
@@ -183,11 +185,12 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 /// Store data, using ```input_f``` to get chunks of data
 ///
 /// Return final digest
-fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
-                                        mut reader: &mut R,
-                                        data_type: DataType,
-                                        chunking_algo: ChunkingAlgorithm)
-                                        -> Result<Vec<u8>> {
+fn chunk_and_send_to_assembler<R: Read>(
+    tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
+    mut reader: &mut R,
+    data_type: DataType,
+    chunking_algo: ChunkingAlgorithm)
+-> Result<Vec<u8>> {
     let chunk_bits = match chunking_algo {
         ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
     };
@@ -208,7 +211,10 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
         for &(_, ref sum) in &edges {
             index.append(&mut sum.clone());
         }
-        tx.send(ChunkAssemblerMessage::Data(buf, edges, DataType::Data, data_type))
+        tx.send(ChunkAssemblerMessage::Data(buf,
+                                              edges,
+                                              DataType::Data,
+                                              data_type))
             .unwrap();
     }
     let edges = chunker.finish();
@@ -216,7 +222,10 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
     for &(_, ref sum) in &edges {
         index.append(&mut sum.clone());
     }
-    tx.send(ChunkAssemblerMessage::Data(vec![], edges, DataType::Data, data_type))
+    tx.send(ChunkAssemblerMessage::Data(vec![],
+                                          edges,
+                                          DataType::Data,
+                                          data_type))
         .unwrap();
 
     if index.len() > DIGEST_SIZE {
@@ -227,7 +236,8 @@ fn chunk_and_send_to_assembler<R: Read>(tx: &mpsc::SyncSender<ChunkAssemblerMess
         assert!(digest.len() == DIGEST_SIZE);
         let index_digest = quick_sha256(&digest);
         tx.send(ChunkAssemblerMessage::Data(digest.clone(),
-                                              vec![(digest.len(), index_digest.clone())],
+                                              vec![(digest.len(),
+                                                    index_digest.clone())],
                                               DataType::Index,
                                               DataType::Index))
             .unwrap();
@@ -262,10 +272,11 @@ impl Write for CounterWriter {
 
 /// Translates index stream into data stream
 ///
-/// This type implements `io::Write` and interprets what's writen to it as a stream of digests.
+/// This type implements `io::Write` and interprets what's written to it as a
+/// stream of digests.
 ///
-/// For every digest written to it, it will access the corresponding chunk and write it into
-/// `writer` that it wraps.
+/// For every digest written to it, it will access the corresponding chunk and
+/// write it into `writer` that it wraps.
 struct IndexTranslator<'a> {
     accessor: &'a ChunkAccessor,
     digest: Vec<u8>,
@@ -309,7 +320,8 @@ impl<'a> Write for IndexTranslator<'a> {
                                        sec_key,
                                        ref mut writer } = self;
             if let Some(ref mut writer) = *writer {
-                let mut traverser = ReadContext::new(Some(writer), data_type, sec_key);
+                let mut traverser =
+                    ReadContext::new(Some(writer), data_type, sec_key);
                 traverser.read_recursively(accessor, digest)?;
             } else {
                 accessor.touch(digest)?
@@ -325,7 +337,8 @@ impl<'a> Write for IndexTranslator<'a> {
 
 /// Read Context
 ///
-/// Information neccessary to complete given operation of reading given data in the repository.
+/// Information necessary to complete given operation of reading given data in
+/// the repository.
 struct ReadContext<'a> {
     /// Writer to write the data to; `None` will discard the data
     writer: Option<&'a mut Write>,
@@ -348,7 +361,10 @@ impl<'a> ReadContext<'a> {
         }
     }
 
-    fn on_index(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
+    fn on_index(&mut self,
+                accessor: &'a ChunkAccessor,
+                digest: &[u8])
+                -> Result<()> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec![];
         accessor.read_chunk_into(digest,
@@ -359,23 +375,36 @@ impl<'a> ReadContext<'a> {
 
         assert!(index_data.len() == DIGEST_SIZE);
 
-        let mut translator =
-            IndexTranslator::new(accessor, self.writer.take(), self.data_type, self.sec_key);
+        let mut translator = IndexTranslator::new(accessor,
+                                                  self.writer.take(),
+                                                  self.data_type,
+                                                  self.sec_key);
 
-        let mut sub_traverser = ReadContext::new(Some(&mut translator), DataType::Index, None);
+        let mut sub_traverser =
+            ReadContext::new(Some(&mut translator), DataType::Index, None);
         sub_traverser.read_recursively(accessor, &index_data)
     }
 
-    fn on_data(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
+    fn on_data(&mut self,
+               accessor: &'a ChunkAccessor,
+               digest: &[u8])
+               -> Result<()> {
         trace!("Traversing data: {}", digest.to_hex());
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(digest, DataType::Data, self.data_type, writer, self.sec_key)
+            accessor.read_chunk_into(digest,
+                                     DataType::Data,
+                                     self.data_type,
+                                     writer,
+                                     self.sec_key)
         } else {
             accessor.touch(digest)
         }
     }
 
-    fn read_recursively(&mut self, accessor: &'a ChunkAccessor, digest: &[u8]) -> Result<()> {
+    fn read_recursively(&mut self,
+                        accessor: &'a ChunkAccessor,
+                        digest: &[u8])
+                        -> Result<()> {
 
         let chunk_type = accessor.repo().chunk_type(digest)?;
 
@@ -407,7 +436,8 @@ trait ChunkAccessor {
     }
 }
 
-/// `ChunkAccessor` that just reads the chunks as requested, without doing anything
+/// `ChunkAccessor` that just reads the chunks as requested, without doing
+/// anything
 struct DefaultChunkAccessor<'a> {
     repo: &'a Repo,
 }
@@ -438,11 +468,15 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
             file.read_exact(&mut ephemeral_pub)?;
             file.read_to_end(&mut data)?;
-            let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
-            box_::open(&data, &nonce, &box_::PublicKey(ephemeral_pub), sec_key.unwrap())
-                .map_err(|_| {
+            let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
+                .unwrap();
+            box_::open(&data,
+                       &nonce,
+                       &box_::PublicKey(ephemeral_pub),
+                       sec_key.unwrap()).map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
-                                   format!("can't decrypt chunk file: {}", digest.to_hex()))
+                                   format!("can't decrypt chunk file: {}",
+                                           digest.to_hex()))
                 })?
         } else {
             file.read_to_end(&mut data)?;
@@ -451,7 +485,8 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
         let data = if data_type.should_compress() {
             let mut decompressor =
-                flate2::write::DeflateDecoder::new(Vec::with_capacity(data.len()));
+                flate2::write::DeflateDecoder::new(
+                    Vec::with_capacity(data.len()));
 
             decompressor.write_all(&data)?;
             decompressor.finish()?
@@ -565,7 +600,9 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             .read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
 
         if res.is_err() {
-            self.errors.borrow_mut().push((digest.to_owned(), res.err().unwrap()));
+            self.errors
+                .borrow_mut()
+                .push((digest.to_owned(), res.err().unwrap()));
         }
         Ok(())
     }
@@ -651,7 +688,10 @@ impl Repo {
     }
 
     /// Create new rdedup repository
-    pub fn init(repo_path: &Path, passphrase: &str, chunking: ChunkingAlgorithm) -> Result<Repo> {
+    pub fn init(repo_path: &Path,
+                passphrase: &str,
+                chunking: ChunkingAlgorithm)
+                -> Result<Repo> {
         info!("Init repo {}", repo_path.to_string_lossy());
 
         // Validate ChunkingAlgorithm
@@ -688,8 +728,8 @@ impl Repo {
         let version_int = version.parse::<u32>()
             .map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData,
-                               format!("can't parse version file; unsupported \
-                                        repo format version: {}",
+                               format!("can't parse version file; \
+                                        unsupported repo format version: {}",
                                        version))
             })?;
 
@@ -701,13 +741,13 @@ impl Repo {
                                               version,
                                               config::REPO_VERSION_CURRENT)));
         }
-        // This if statement triggers the absurd_extreme_comparisons because the minimum repo
-        // version is also the smallest value of a u32
+        // This if statement triggers the absurd_extreme_comparisons because the
+        // minimum repo version is also the smallest value of a u32
         if version_int < config::REPO_VERSION_LOWEST {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                                       format!("repo version {} lower than \
-                                               lowest supported {}; restore \
-                                               using older version?",
+                                               lowest supported {}; \
+                                               restore using older version?",
                                               version,
                                               config::REPO_VERSION_LOWEST)));
         }
@@ -730,7 +770,8 @@ impl Repo {
         info!("Open repo {}", repo_path.to_string_lossy());
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("repo not found: {}", repo_path.to_string_lossy())));
+                                  format!("repo not found: {}",
+                                          repo_path.to_string_lossy())));
         }
 
         let pubkey_path = config::pub_key_file_path(repo_path);
@@ -748,13 +789,14 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let pubkey_str = std::str::from_utf8(&buf).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not utf8")
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "pubkey data invalid: not utf8")
             })?;
-        let pubkey_bytes =
-            pubkey_str.from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "pubkey data invalid: not hex")
-                })?;
+        let pubkey_bytes = pubkey_str.from_hex()
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "pubkey data invalid: not hex")
+            })?;
         let pub_key = box_::PublicKey::from_slice(&pubkey_bytes).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "pubkey data invalid: can't convert to pubkey")
@@ -772,7 +814,8 @@ impl Repo {
         info!("Open repo {}", repo_path.to_string_lossy());
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("repo not found: {}", repo_path.to_string_lossy())));
+                                  format!("repo not found: {}",
+                                          repo_path.to_string_lossy())));
         }
 
         let version = Repo::read_and_validate_version(repo_path)?;
@@ -784,10 +827,12 @@ impl Repo {
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
         let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
                 io::Error::new(io::ErrorKind::InvalidData,
-                               format!("couldn't parse yaml: {}", e.to_string()))
+                               format!("couldn't parse yaml: {}",
+                                       e.to_string()))
             })?;
 
-        if let config::Encryption::Curve25519(encryption_config) = config.encryption {
+        if let config::Encryption::Curve25519(encryption_config) =
+            config.encryption {
             Ok(Repo {
                 path: repo_path.to_owned(),
                 pub_key: encryption_config.pub_key,
@@ -807,7 +852,10 @@ impl Repo {
         fs::remove_file(self.name_path(name))
     }
 
-    fn change_passphrase_v0(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
+    fn change_passphrase_v0(&self,
+                            seckey: &SecretKey,
+                            new_passphrase: &str)
+                            -> Result<()> {
         info!("Changing password");
         let _lock = self.lock_write()?;
 
@@ -818,12 +866,16 @@ impl Repo {
         let derived_key = derive_key(new_passphrase, &salt)?;
 
 
-        let encrypted_seckey = secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
+        let encrypted_seckey =
+            secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
 
         let seckey_path = config::sec_key_file_path(&self.path);
         let seckey_path_tmp = seckey_path.with_extension("tmp");
 
-        config::write_seckey_file(&seckey_path_tmp, &encrypted_seckey, &nonce, &salt)?;
+        config::write_seckey_file(&seckey_path_tmp,
+                                  &encrypted_seckey,
+                                  &nonce,
+                                  &salt)?;
 
         fs::rename(seckey_path_tmp, &seckey_path)?;
 
@@ -831,7 +883,10 @@ impl Repo {
     }
 
     /// Change the passphrase
-    pub fn change_passphrase(&self, seckey: &SecretKey, new_passphrase: &str) -> Result<()> {
+    pub fn change_passphrase(&self,
+                             seckey: &SecretKey,
+                             new_passphrase: &str)
+                             -> Result<()> {
         if self.version == 0 {
             self.change_passphrase_v0(seckey, new_passphrase)
         } else {
@@ -861,12 +916,16 @@ impl Repo {
         Ok(file)
     }
 
-    pub fn write<R: Read>(&self, name: &str, reader: &mut R) -> Result<WriteStats> {
+    pub fn write<R: Read>(&self,
+                          name: &str,
+                          reader: &mut R)
+                          -> Result<WriteStats> {
         info!("Write name {}", name);
         let _lock = self.lock_write()?;
 
         let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(CHANNEL_SIZE);
-        let (tx_to_compressor, compressor_rx) = mpsc::sync_channel(CHANNEL_SIZE);
+        let (tx_to_compressor, compressor_rx) =
+            mpsc::sync_channel(CHANNEL_SIZE);
         let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(CHANNEL_SIZE);
         let (tx_to_writer, writer_rx) = mpsc::sync_channel(CHANNEL_SIZE);
 
@@ -874,12 +933,16 @@ impl Repo {
         let mut joins = vec![];
         joins.push(thread::spawn({
             let self_clone = self.clone();
-            move || self_clone.chunk_assembler(assembler_rx, tx_to_compressor)
+            move || {
+                self_clone.chunk_assembler(assembler_rx, tx_to_compressor)
+            }
         }));
 
         joins.push(thread::spawn({
             let self_clone = self.clone();
-            move || self_clone.chunk_compressor(compressor_rx, tx_to_encrypter)
+            move || {
+                self_clone.chunk_compressor(compressor_rx, tx_to_encrypter)
+            }
         }));
 
         joins.push(thread::spawn({
@@ -888,11 +951,14 @@ impl Repo {
         }));
 
         let self_clone = self.clone();
-        let chunk_writer = thread::spawn(move || self_clone.chunk_writer(writer_rx));
+        let chunk_writer =
+            thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
 
-        let final_digest =
-            chunk_and_send_to_assembler(&tx_to_assembler, reader, DataType::Data, self.chunking)?;
+        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler,
+                                                       reader,
+                                                       DataType::Data,
+                                                       self.chunking)?;
 
         tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
         for join in joins.drain(..) {
@@ -904,14 +970,19 @@ impl Repo {
         Ok(write_stats)
     }
 
-    pub fn read<W: Write>(&self, name: &str, writer: &mut W, seckey: &SecretKey) -> Result<()> {
+    pub fn read<W: Write>(&self,
+                          name: &str,
+                          writer: &mut W,
+                          seckey: &SecretKey)
+                          -> Result<()> {
         info!("Read name {}", name);
         let digest = self.name_to_digest(name)?;
 
         let _lock = self.lock_read()?;
 
         let accessor = self.chunk_accessor();
-        let mut traverser = ReadContext::new(Some(writer), DataType::Data, Some(&seckey.0));
+        let mut traverser =
+            ReadContext::new(Some(writer), DataType::Data, Some(&seckey.0));
         traverser.read_recursively(&accessor, &digest)
     }
 
@@ -924,8 +995,9 @@ impl Repo {
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self);
         {
-            let mut traverser =
-                ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            let mut traverser = ReadContext::new(Some(&mut counter),
+                                                 DataType::Data,
+                                                 Some(&seckey.0));
             traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(DuResults {
@@ -934,7 +1006,10 @@ impl Repo {
         })
     }
 
-    pub fn verify(&self, name: &str, seckey: &SecretKey) -> Result<VerifyResults> {
+    pub fn verify(&self,
+                  name: &str,
+                  seckey: &SecretKey)
+                  -> Result<VerifyResults> {
         info!("verify name {}", name);
 
         let _lock = self.lock_read()?;
@@ -944,27 +1019,13 @@ impl Repo {
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self);
         {
-            let mut traverser =
-                ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
+            let mut traverser = ReadContext::new(Some(&mut counter),
+                                                 DataType::Data,
+                                                 Some(&seckey.0));
             traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(accessor.get_results())
     }
-
-    // pub fn du_by_digest(&self, digest: &[u8], seckey: &SecretKey) -> Result<u64> {
-    //
-    // let _lock = try!(self.lock_read());
-    //
-    // let mut counter = CounterWriter::new();
-    // {
-    // let accessor = self.chunk_accessor();
-    // let mut traverser = ReadContext::new(Some(&mut counter), DataType::Data, Some(&seckey.0));
-    // try!(traverser.read_recursively(&accessor, &digest));
-    // }
-    //
-    // Ok(counter.count)
-    // }
-    //
 
     fn read_hex_file(&self, path: &Path) -> Result<Vec<u8>> {
         let mut file = fs::File::open(&path)?;
@@ -973,13 +1034,14 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let str_ = std::str::from_utf8(&buf).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not utf8")
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "seckey data invalid: not utf8")
             })?;
-        let bytes =
-            str_.from_hex()
-                .map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "seckey data invalid: not hex")
-                })?;
+        let bytes = str_.from_hex()
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData,
+                               "seckey data invalid: not hex")
+            })?;
         Ok(bytes)
     }
 
@@ -995,7 +1057,8 @@ impl Repo {
         let secfile_bytes = self.read_hex_file(&seckey_path)?;
 
         const TOTAL_SECKEY_FILE_LEN: usize =
-            pwhash::SALTBYTES + secretbox::NONCEBYTES + secretbox::MACBYTES + box_::SECRETKEYBYTES;
+            pwhash::SALTBYTES + secretbox::NONCEBYTES + secretbox::MACBYTES +
+            box_::SECRETKEYBYTES;
         if secfile_bytes.len() != TOTAL_SECKEY_FILE_LEN {
             return Err(Error::new(io::ErrorKind::InvalidData,
                                   "seckey file is not of correct length"));
@@ -1012,13 +1075,15 @@ impl Repo {
 
         let derived_key = derive_key(passphrase, &salt)?;
 
-        let plain_seckey = secretbox::open(sealed_key, &nonce, &derived_key).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "can't decrypt key using given passphrase")
-            })?;
+        let plain_seckey =
+            secretbox::open(sealed_key, &nonce, &derived_key).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData,
+                                   "can't decrypt key using given passphrase")
+                })?;
         let sec_key = box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidData,
-                               "encrypted seckey data invalid: can't convert to seckey")
+                               "encrypted seckey data invalid: can't convert \
+                                to seckey")
             })?;
 
         Ok(sec_key)
@@ -1029,21 +1094,25 @@ impl Repo {
         let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
         let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
                 io::Error::new(io::ErrorKind::InvalidData,
-                               format!("couldn't parse yaml: {}", e.to_string()))
+                               format!("couldn't parse yaml: {}",
+                                       e.to_string()))
             })?;
 
         if let config::Encryption::Curve25519(enc) = config.encryption {
             let derived_key = derive_key(passphrase, &enc.salt)?;
 
-            let plain_seckey =
-                secretbox::open(&enc.sealed_sec_key, &enc.nonce, &derived_key).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData,
-                                       "can't decrypt key using given passphrase")
-                    })?;
-            let sec_key = box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+            let plain_seckey = secretbox::open(&enc.sealed_sec_key,
+                                               &enc.nonce,
+                                               &derived_key).map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
-                                   "encrypted seckey data invalid: can't convert to seckey")
+                                   "can't decrypt key using given passphrase")
                 })?;
+            let sec_key =
+                box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData,
+                                       "encrypted seckey data invalid: can't \
+                                        convert to seckey")
+                    })?;
 
 
 
@@ -1065,13 +1134,10 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed)
     }
 
-    fn chunk_assembler_handle_data_with_edges(&self,
-                                              tx: &mut mpsc::SyncSender<ChunkMessage>,
-                                              part: Vec<u8>,
-                                              mut edges: Vec<Edge>,
-                                              chunk_type: DataType,
-                                              data_type: DataType,
-                                              previous_parts: &mut Vec<Vec<u8>>) {
+    fn chunk_assembler_handle_data_with_edges(
+        &self, tx: &mut mpsc::SyncSender<ChunkMessage>, part: Vec<u8>, mut
+        edges: Vec<Edge>, chunk_type: DataType, data_type: DataType,
+        previous_parts: &mut Vec<Vec<u8>>) {
         let mut prev_ofs = 0;
         for (ofs, sha256) in edges.drain(..) {
             let path = self.chunk_path_by_digest(&sha256, chunk_type);
@@ -1084,7 +1150,10 @@ impl Repo {
                 if ofs != prev_ofs {
                     chunk_data.write_all(&part[prev_ofs..ofs]).unwrap();
                 }
-                tx.send(ChunkMessage::Data(chunk_data, sha256, chunk_type, data_type))
+                tx.send(ChunkMessage::Data(chunk_data,
+                                             sha256,
+                                             chunk_type,
+                                             data_type))
                     .unwrap();
 
             } else {
@@ -1112,16 +1181,20 @@ impl Repo {
                     assert!(previous_parts.is_empty());
                     return;
                 }
-                ChunkAssemblerMessage::Data(part, edges, chunk_type, data_type) => {
+                ChunkAssemblerMessage::Data(part,
+                                            edges,
+                                            chunk_type,
+                                            data_type) => {
                     if edges.is_empty() {
                         previous_parts.push(part)
                     } else {
-                        self.chunk_assembler_handle_data_with_edges(&mut tx,
-                                                                    part,
-                                                                    edges,
-                                                                    chunk_type,
-                                                                    data_type,
-                                                                    &mut previous_parts)
+                        self.chunk_assembler_handle_data_with_edges(
+                            &mut tx,
+                            part,
+                            edges,
+                            chunk_type,
+                            data_type,
+                            &mut previous_parts)
                     }
                 }
             }
@@ -1140,15 +1213,19 @@ impl Repo {
                 ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
                     let tx_data = if data_type.should_compress() {
                         let mut compressor =
-                            flate2::write::DeflateEncoder::new(Vec::with_capacity(data.len()),
-                                                               flate2::Compression::Default);
+                            flate2::write::DeflateEncoder::new(
+                                Vec::with_capacity(data.len()),
+                                flate2::Compression::Default);
 
                         compressor.write_all(&data).unwrap();
                         compressor.finish().unwrap()
                     } else {
                         data
                     };
-                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type))
+                    tx.send(ChunkMessage::Data(tx_data,
+                                                 sha256,
+                                                 chunk_type,
+                                                 data_type))
                         .unwrap();
                 }
             }
@@ -1169,10 +1246,15 @@ impl Repo {
                     let tx_data = if data_type.should_encrypt() {
                         let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
                         let pub_key = &self.pub_key;
-                        let nonce = box_::Nonce::from_slice(&sha256[0..box_::NONCEBYTES]).unwrap();
+                        let nonce =
+                            box_::Nonce::from_slice(&sha256[0..
+                                                     box_::NONCEBYTES])
+                                .unwrap();
 
-                        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-                        let cipher = box_::seal(&data, &nonce, pub_key, &ephemeral_sec);
+                        let (ephemeral_pub, ephemeral_sec) =
+                            box_::gen_keypair();
+                        let cipher =
+                            box_::seal(&data, &nonce, pub_key, &ephemeral_sec);
                         encrypted.write_all(&ephemeral_pub.0).unwrap();
                         encrypted.write_all(&cipher).unwrap();
                         encrypted
@@ -1180,7 +1262,10 @@ impl Repo {
                         data
                     };
 
-                    tx.send(ChunkMessage::Data(tx_data, sha256, chunk_type, data_type))
+                    tx.send(ChunkMessage::Data(tx_data,
+                                                 sha256,
+                                                 chunk_type,
+                                                 data_type))
                         .unwrap();
                 }
             }
@@ -1196,11 +1281,13 @@ impl Repo {
             new_chunks: 0,
         };
 
-        fn flush(queue: &mut VecDeque<File>, queue_paths: &mut HashSet<PathBuf>) {
+        fn flush(queue: &mut VecDeque<File>,
+                 queue_paths: &mut HashSet<PathBuf>) {
             while let Some(file) = queue.pop_front() {
                 file.sync_all().unwrap();
             }
-            // Run renames after data sync to mitigate data writes and metadata writes contention
+            // Run renames after data sync to mitigate data writes and metadata
+            // writes contention
             for path in queue_paths.drain() {
                 let tmp_path = path.with_extension("tmp");
                 fs::rename(&tmp_path, &path).unwrap();
@@ -1224,7 +1311,8 @@ impl Repo {
                         write_stats.new_bytes += data.len() as u64;
                         let tmp_path = path.with_extension("tmp");
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
-                        let mut chunk_file = fs::File::create(&tmp_path).unwrap();
+                        let mut chunk_file = fs::File::create(&tmp_path)
+                            .unwrap();
                         chunk_file.write_all(&data).unwrap();
 
                         // Queue chunk up for data sync and rename
@@ -1240,7 +1328,8 @@ impl Repo {
         debug!("Resolving name {}", name);
         let name_path = self.name_path(name);
         if !name_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound, "name file not found"));
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  "name file not found"));
         }
 
         let mut file = fs::File::open(&name_path)?;
@@ -1257,7 +1346,8 @@ impl Repo {
         let name_path = self.name_path(name);
 
         if name_path.exists() {
-            return Err(Error::new(io::ErrorKind::AlreadyExists, "name already exists"));
+            return Err(Error::new(io::ErrorKind::AlreadyExists,
+                                  "name already exists"));
         }
 
         let mut file = fs::File::create(&name_path)?;
@@ -1274,7 +1364,9 @@ impl Repo {
         reachable_digests.insert(digest.to_owned());
 
         let mut traverser = ReadContext::new(None, DataType::Data, None);
-        traverser.read_recursively(&self.recording_chunk_accessor(reachable_digests), digest)
+        traverser.read_recursively(
+            &self.recording_chunk_accessor(reachable_digests),
+            digest)
     }
 
     /// List all names
@@ -1311,7 +1403,9 @@ impl Repo {
                     // Make sure digest is the standard size
                     if digest.len() == DIGEST_SIZE {
                         info!("processing {}", name);
-                        self.reachable_recursively_insert(&digest, &mut reachable_digests)?;
+                        self.reachable_recursively_insert(
+                            &digest, &mut reachable_digests
+                            )?;
                     } else {
                         info!("skipped name {}", name);
                     }
@@ -1335,7 +1429,10 @@ impl Repo {
                        format!("chunk file missing: {}", digest.to_hex())))
     }
 
-    fn chunk_path_by_digest(&self, digest: &[u8], chunk_type: DataType) -> PathBuf {
+    fn chunk_path_by_digest(&self,
+                            digest: &[u8],
+                            chunk_type: DataType)
+                            -> PathBuf {
         let i_or_c = match chunk_type {
             DataType::Data => Path::new(config::DATA_SUBDIR),
             DataType::Index => Path::new(config::INDEX_SUBDIR),
@@ -1360,8 +1457,10 @@ impl Repo {
         let _lock = self.lock_write()?;
 
         let reachable = self.list_reachable_chunks().unwrap();
-        let index_chunks = StoredChunks::new(&self.index_dir_path(), DIGEST_SIZE)?;
-        let data_chunks = StoredChunks::new(&self.chunk_dir_path(), DIGEST_SIZE)?;
+        let index_chunks = StoredChunks::new(&self.index_dir_path(),
+                                             DIGEST_SIZE)?;
+        let data_chunks = StoredChunks::new(&self.chunk_dir_path(),
+                                            DIGEST_SIZE)?;
 
         let mut result = GcResults {
             chunks: 0,
