@@ -168,8 +168,8 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
-        //TODO: When stable we should use unwrap_or_default() instead
-        //See https://github.com/rust-lang/rust/issues/37516
+        // TODO: When stable we should use unwrap_or_default() instead
+        // See https://github.com/rust-lang/rust/issues/37516
         let mut dir_str: String = env::var("RDEDUP_DIR")
             .unwrap_or_else(|_| "".to_owned());
         let mut args = vec![];
@@ -253,7 +253,7 @@ impl Options {
     fn check_chunking(&self, size: u64) -> ChunkingAlgorithm {
         match self.chunking.to_lowercase().as_str() {
             "bup" => {
-                //Validate that the size provided works for the bup algorithm
+                // Validate that the size provided works for the bup algorithm
                 if !size.is_power_of_two() {
                     printerrln!("invalid chunk size provided for bup, must \
                                  be power of 2");
