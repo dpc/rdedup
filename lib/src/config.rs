@@ -190,7 +190,8 @@ impl MyTryFromBytes for Vec<u8> {
         Ok(Vec::from(slice))
     }
 }
-fn from_base64<T, D>(deserializer: &mut D) -> Result<T, D::Error>
+
+fn from_base64<T, D>(deserializer: D) -> Result<T, D::Error>
     where D: serde::Deserializer,
           T: MyTryFromBytes
 {
@@ -203,7 +204,7 @@ fn from_base64<T, D>(deserializer: &mut D) -> Result<T, D::Error>
         })
 }
 
-fn as_base64<T, S>(key: &T, serializer: &mut S) -> Result<(), S::Error>
+fn as_base64<T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>
     where T: AsRef<[u8]>,
           S: serde::Serializer
 {
@@ -225,10 +226,12 @@ pub struct Curve25519 {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
 /// ```ChunkingAlgorithm``` are the algorithms supported by rdedup
 pub enum ChunkingAlgorithm {
     /// ```Bup``` is the default algorithm, the chunk_bits value provided with bup is the bit shift
     ///to be used by rollsum. The valid range is between 10 and 30 (1KB to 1GB)
+    #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
 }
 /// Default implementation for the ```ChunkingAlgorithm```
@@ -248,12 +251,13 @@ impl ChunkingAlgorithm {
 
 /// Types of supported encryption
 #[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum Encryption {
     /// No encryption
     #[serde(rename = "none")]
     None,
     /// `Curve25519Blake2BSalsa20Poly1305`
-    #[serde(rename = "curve25519")]
+    #[serde(rename = "curve25519_blake2b_salsa20_poly1305")]
     Curve25519(Curve25519),
 }
 
