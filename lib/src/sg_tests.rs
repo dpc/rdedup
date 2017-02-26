@@ -76,8 +76,14 @@ fn test_chunker() {
                       Case {
                           input: vec![],
                           buf_size: 2,
+                          edges: vec![],
+                          result: "[[]]",
+                      },
+                      Case {
+                          input: vec![],
+                          buf_size: 2,
                           edges: vec![1, 2, 3, 4, 5, 6],
-                          result: "[]",
+                          result: "[[]]",
                       },
                       Case {
                           input: vec![0, 1],

@@ -232,6 +232,7 @@ pub struct Chunker<I, EF> {
     cur_buf_i: usize,
     cur_edge_i: usize,
     cur_sgbuf: SGBuf,
+    chunks_returned: usize,
     edge_finder: EF,
 }
 
@@ -244,6 +245,7 @@ impl<I, EF> Chunker<I, EF> {
             cur_buf_i: 0,
             cur_edge_i: 0,
             cur_sgbuf: SGBuf::new(),
+            chunks_returned: 0,
             edge_finder: edge_finder,
         }
     }
@@ -265,6 +267,7 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
                     self.cur_sgbuf.push(aref);
                     self.cur_edge_i += 1;
                     self.cur_buf_i = edge;
+                    self.chunks_returned += 1;
                     return Some(mem::replace(&mut self.cur_sgbuf,
                                              SGBuf::new()));
                 } else {
@@ -283,8 +286,15 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
                     Some((Arc::new(buf), edges))
                 } else {
                     if self.cur_sgbuf.is_empty() {
-                        return None;
+                        if self.chunks_returned == 0 {
+                            // at least one, zero sized chunk
+                            self.chunks_returned += 1;
+                            return Some(SGBuf::new());
+                        } else {
+                            return None;
+                        }
                     } else {
+                        self.chunks_returned += 1;
                         return Some(mem::replace(&mut self.cur_sgbuf,
                                                  SGBuf::new()));
                     }
