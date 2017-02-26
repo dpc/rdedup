@@ -182,7 +182,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     Ok(derived_key)
 }
 
-/// Store data, using ```input_f``` to get chunks of data
+/// Store data, using `input_f` to get chunks of data
 ///
 /// Return final digest
 fn chunk_and_send_to_assembler<R: Read>(

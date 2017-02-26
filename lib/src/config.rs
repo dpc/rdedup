@@ -240,7 +240,7 @@ pub enum ChunkingAlgorithm {
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
 }
-/// Default implementation for the ```ChunkingAlgorithm```
+/// Default implementation for the `ChunkingAlgorithm`
 impl Default for ChunkingAlgorithm {
     fn default() -> ChunkingAlgorithm {
         ChunkingAlgorithm::Bup { chunk_bits: 17 }
