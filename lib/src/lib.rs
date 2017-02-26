@@ -15,6 +15,8 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_yaml;
 extern crate base64;
+extern crate owning_ref;
+extern crate itertools;
 
 use crypto::digest::Digest;
 use crypto::sha2;
@@ -40,6 +42,8 @@ use iterators::StoredChunks;
 
 pub mod config;
 use config::ChunkingAlgorithm;
+
+mod sg;
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
@@ -120,7 +124,7 @@ impl Chunker {
         self.roll = rollsum::Bup::new_with_chunk_bits(self.chunk_bits);
     }
 
-    pub fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
+    fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
         let mut ofs: usize = 0;
         let len = buf.len();
         while ofs < len {
@@ -143,7 +147,7 @@ impl Chunker {
         mem::replace(&mut self.edges, vec![])
     }
 
-    pub fn finish(&mut self) -> Vec<Edge> {
+    fn finish(&mut self) -> Vec<Edge> {
         // Process the final chunk
         if self.bytes_chunk != 0 || self.bytes_total == 0 {
             self.edge_found(0);
