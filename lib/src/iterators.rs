@@ -5,7 +5,7 @@ use std::fs::ReadDir;
 use std::io::Result;
 use std::path::Path;
 
-/// ```StoredChunks``` is an iterator for the list of chunks stored in a path,
+/// `StoredChunks` is an iterator for the list of chunks stored in a path,
 /// it will crawl the directory structure looking for chunks that have valid
 /// digest sized elements as their name.  Invalid files with incorrect names
 /// will be ignored.
