@@ -8,7 +8,7 @@ use flate2;
 use owning_ref::ArcRef;
 use rollsum;
 use sha2;
-use sodiumoxide::crypto::{box_, pwhash, secretbox};
+use sodiumoxide::crypto::box_;
 use std::{io, mem};
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
@@ -153,8 +153,8 @@ impl SGBuf {
     }
     fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
         SGBuf(v.drain(..)
-            .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
-            .collect())
+                  .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
+                  .collect())
     }
 
     /// Calculate digest
@@ -199,8 +199,8 @@ impl SGBuf {
 
     pub fn encrypt(&self, pub_key: &box_::PublicKey, digest: &[u8]) -> SGBuf {
         let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
-        let nonce = box_::Nonce::from_slice(digest)
-            .expect("Nonce::from_slice failed");
+        let nonce =
+            box_::Nonce::from_slice(digest).expect("Nonce::from_slice failed");
 
         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
         let cipher =
@@ -227,7 +227,6 @@ impl DerefMut for SGBuf {
 
 pub struct Chunker<I, EF> {
     iter: I,
-    data_type: DataType,
     cur_buf_edges: Option<(Arc<Vec<u8>>, Vec<usize>)>,
     cur_buf_i: usize,
     cur_edge_i: usize,
@@ -237,10 +236,9 @@ pub struct Chunker<I, EF> {
 }
 
 impl<I, EF> Chunker<I, EF> {
-    pub fn new(iter: I, edge_finder: EF, data_type: DataType) -> Self {
+    pub fn new(iter: I, edge_finder: EF) -> Self {
         Chunker {
             iter: iter,
-            data_type: data_type,
             cur_buf_edges: None,
             cur_buf_i: 0,
             cur_edge_i: 0,
@@ -262,8 +260,11 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
                 self.cur_buf_edges.clone() {
                 if self.cur_edge_i < edges.len() {
                     let edge = edges[self.cur_edge_i];
-                    let aref = ArcRef::new(buf.clone())
-                        .map(|a| &a[self.cur_buf_i..edge]);
+                    let aref =
+                        ArcRef::new(buf.clone()).map(|a| {
+                                                         &a[self.cur_buf_i..
+                                                          edge]
+                                                     });
                     self.cur_sgbuf.push(aref);
                     self.cur_edge_i += 1;
                     self.cur_buf_i = edge;
@@ -303,71 +304,6 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
         }
     }
 }
-
-/*
-fn chunk_and_send_to_assembler<R: Read>(
-    tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
-    mut reader: &mut R,
-    data_type: DataType,
-    chunking_algo: ChunkingAlgorithm)
--> Result<Vec<u8>> {
-    let chunk_bits = match chunking_algo {
-        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-    };
-    let mut chunker = BupEdgeFinder::new(chunk_bits);
-
-    let mut index: Vec<u8> = vec![];
-    loop {
-        let mut buf = vec![0u8; BUFFER_SIZE];
-        let len = reader.read(&mut buf)?;
-
-        if len == 0 {
-            break;
-        }
-        buf.truncate(len);
-
-        let edges = chunker.input(&buf[..len]);
-
-        for &(_, ref sum) in &edges {
-            index.append(&mut sum.clone());
-        }
-        tx.send(ChunkAssemblerMessage::Data(buf,
-                                              edges,
-                                              DataType::Data,
-                                              data_type))
-            .unwrap();
-    }
-    let edges = chunker.finish();
-
-    for &(_, ref sum) in &edges {
-        index.append(&mut sum.clone());
-    }
-    tx.send(ChunkAssemblerMessage::Data(vec![],
-                                          edges,
-                                          DataType::Data,
-                                          data_type))
-        .unwrap();
-
-    if index.len() > DIGEST_SIZE {
-        let digest = chunk_and_send_to_assembler(tx,
-                                                 &mut io::Cursor::new(index),
-                                                 DataType::Index,
-                                                 chunking_algo)?;
-        assert!(digest.len() == DIGEST_SIZE);
-        let index_digest = quick_sha256(&digest);
-        tx.send(ChunkAssemblerMessage::Data(digest.clone(),
-                                              vec![(digest.len(),
-                                                    index_digest.clone())],
-                                              DataType::Index,
-                                              DataType::Index))
-            .unwrap();
-        Ok(index_digest)
-    } else {
-        Ok(index)
-    }
-}
-*/
-
 
 #[cfg(test)]
 include!("sg_tests.rs");

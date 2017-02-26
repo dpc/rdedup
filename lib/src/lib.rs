@@ -23,12 +23,11 @@ use crypto::sha2;
 
 use fs2::FileExt;
 
-use rollsum::Engine;
 use serialize::hex::{ToHex, FromHex};
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
-use std::{fs, mem, thread, io};
+use std::{fs, thread, io};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::fs::File;
@@ -67,13 +66,8 @@ impl DataType {
     }
 }
 
-enum ChunkAssemblerMessage {
-    // DataType in every Data is somewhat redundant...
-    Data(Vec<u8>, Vec<u8>, DataType, DataType),
-    Exit,
-}
 
-enum ChunkMessage {
+enum ChunkWriterMessage {
     // TODO: Make struct: data, sha, chunk_type, data_type
     Data(SGBuf, Vec<u8>, DataType, DataType),
     Exit,
@@ -107,74 +101,6 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
 
     Ok(derived_key)
 }
-
-/*
-/// Store data, using `input_f` to get chunks of data
-///
-/// Return final digest
-fn chunk_and_send_to_assembler<R: Read>(
-    tx: &mpsc::SyncSender<ChunkAssemblerMessage>,
-    mut reader: &mut R,
-    data_type: DataType,
-    chunking_algo: ChunkingAlgorithm)
--> Result<Vec<u8>>{
-    let chunk_bits = match chunking_algo {
-        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-    };
-    let mut chunker = Chunker::new(chunk_bits);
-
-    let mut index: Vec<u8> = vec![];
-    loop {
-        let mut buf = vec![0u8; BUFFER_SIZE];
-        let len = reader.read(&mut buf)?;
-
-        if len == 0 {
-            break;
-        }
-        buf.truncate(len);
-
-        let edges = chunker.input(&buf[..len]);
-
-        for &(_, ref sum) in &edges {
-            index.append(&mut sum.clone());
-        }
-        tx.send(ChunkAssemblerMessage::Data(buf,
-                                              edges,
-                                              DataType::Data,
-                                              data_type))
-            .unwrap();
-    }
-    let edges = chunker.finish();
-
-    for &(_, ref sum) in &edges {
-        index.append(&mut sum.clone());
-    }
-    tx.send(ChunkAssemblerMessage::Data(vec![],
-                                          edges,
-                                          DataType::Data,
-                                          data_type))
-        .unwrap();
-
-    if index.len() > DIGEST_SIZE {
-        let digest = chunk_and_send_to_assembler(tx,
-                                                 &mut io::Cursor::new(index),
-                                                 DataType::Index,
-                                                 chunking_algo)?;
-        assert!(digest.len() == DIGEST_SIZE);
-        let index_digest = quick_sha256(&digest);
-        tx.send(ChunkAssemblerMessage::Data(digest.clone(),
-                                              vec![(digest.len(),
-                                                    index_digest.clone())],
-                                              DataType::Index,
-                                              DataType::Index))
-            .unwrap();
-        Ok(index_digest)
-    } else {
-        Ok(index)
-    }
-}
-*/
-
 
 /// Writer that counts how many bytes were written to it
 struct CounterWriter {
@@ -850,15 +776,14 @@ impl Repo {
         (&self,
          sg_iter: I,
          data_type: DataType,
-         tx_to_writer: mpsc::SyncSender<ChunkMessage>)
-         -> io::Result<Vec<u8>> {
+         tx_to_writer: mpsc::SyncSender<ChunkWriterMessage>)
+-> io::Result<Vec<u8>>{
 
 
         let chunk_bits = match self.chunking {
             ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
         };
-        let chunker =
-            Chunker::new(sg_iter, BupEdgeFinder::new(chunk_bits), data_type);
+        let chunker = Chunker::new(sg_iter, BupEdgeFinder::new(chunk_bits));
 
         let mut digests: Vec<Vec<u8>> = chunker.map(|sg| {
 
@@ -873,10 +798,10 @@ impl Repo {
                 } else {
                     sg
                 };
-                tx_to_writer.send(ChunkMessage::Data(sg,
-                                             digest.clone(),
-                                             DataType::Data,
-                                             data_type))
+                tx_to_writer.send(ChunkWriterMessage::Data(sg,
+                                                           digest.clone(),
+                                                           DataType::Data,
+                                                           data_type))
                     .unwrap();
 
                 digest
@@ -887,13 +812,13 @@ impl Repo {
 
         if digests.len() > 1 {
             let digest = self.write_data(digests.drain(..),
-                            DataType::Index,
-                            tx_to_writer.clone())?;
+                                         DataType::Index,
+                                         tx_to_writer.clone())?;
 
             // Is this digest of digest really required?
             let index_digest = quick_sha256(&digest);
 
-            tx_to_writer.send(ChunkMessage::Data(SGBuf::from_single(digest),
+            tx_to_writer.send(ChunkWriterMessage::Data(SGBuf::from_single(digest),
                                          index_digest.clone(),
                                          DataType::Index,
                                          DataType::Index))
@@ -928,7 +853,7 @@ impl Repo {
 
 
 
-        tx_to_writer.send(ChunkMessage::Exit).unwrap();
+        tx_to_writer.send(ChunkWriterMessage::Exit).unwrap();
         let write_stats = chunk_writer.join().unwrap();
 
         self.store_digest_as_name(&final_digest, name)?;
@@ -1099,151 +1024,9 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed)
     }
 
-    /*
-    fn chunk_assembler_handle_data_with_edges(
-        &self, tx: &mut mpsc::SyncSender<ChunkMessage>, part: Vec<u8>, mut
-        edges: Vec<Edge>, chunk_type: DataType, data_type: DataType,
-previous_parts: &mut Vec<Vec<u8>>){
-        let mut prev_ofs = 0;
-        for (ofs, sha256) in edges.drain(..) {
-            let path = self.chunk_path_by_digest(&sha256, chunk_type);
-            if !path.exists() {
-                let mut chunk_data = Vec::with_capacity(BUFFER_SIZE);
-
-                for previous_part in previous_parts.drain(..) {
-                    chunk_data.write_all(&previous_part).unwrap();
-                }
-                if ofs != prev_ofs {
-                    chunk_data.write_all(&part[prev_ofs..ofs]).unwrap();
-                }
-                tx.send(ChunkMessage::Data(chunk_data,
-                                             sha256,
-                                             chunk_type,
-                                             data_type))
-                    .unwrap();
-
-            } else {
-                previous_parts.clear();
-            }
-            debug_assert!(previous_parts.is_empty());
-
-            prev_ofs = ofs;
-        }
-        if prev_ofs != part.len() {
-            let mut part = part;
-            previous_parts.push(part.split_off(prev_ofs))
-        }
-    }
-    */
-
-    /*
-    fn chunk_assembler(&self,
-                       rx: mpsc::Receiver<ChunkAssemblerMessage>,
-                       mut tx: mpsc::SyncSender<ChunkMessage>) {
-        let mut previous_parts = vec![];
-
-        loop {
-            match rx.recv().unwrap() {
-                ChunkAssemblerMessage::Exit => {
-                    tx.send(ChunkMessage::Exit).unwrap();
-                    assert!(previous_parts.is_empty());
-                    return;
-                }
-                ChunkAssemblerMessage::Data(part,
-                                            edges,
-                                            chunk_type,
-                                            data_type) => {
-                    if edges.is_empty() {
-                        previous_parts.push(part)
-                    } else {
-                        self.chunk_assembler_handle_data_with_edges(
-                            &mut tx,
-                            part,
-                            edges,
-                            chunk_type,
-                            data_type,
-                            &mut previous_parts)
-                    }
-                }
-            }
-        }
-    }
-    */
-
-    /*
-    fn chunk_compressor(&self,
-                        rx: mpsc::Receiver<ChunkMessage>,
-                        tx: mpsc::SyncSender<ChunkMessage>) {
-        loop {
-            match rx.recv().unwrap() {
-                ChunkMessage::Exit => {
-                    tx.send(ChunkMessage::Exit).unwrap();
-                    return;
-                }
-                ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
-                    let tx_data = if data_type.should_compress() {
-                        let mut compressor =
-                            flate2::write::DeflateEncoder::new(
-                                Vec::with_capacity(data.len()),
-                                flate2::Compression::Default);
-
-                        compressor.write_all(&data).unwrap();
-                        compressor.finish().unwrap()
-                    } else {
-                        data
-                    };
-                    tx.send(ChunkMessage::Data(tx_data,
-                                                 sha256,
-                                                 chunk_type,
-                                                 data_type))
-                        .unwrap();
-                }
-            }
-        }
-    }*/
-
-
-    /*
-    fn chunk_encrypter(&self,
-                       rx: mpsc::Receiver<ChunkMessage>,
-                       tx: mpsc::SyncSender<ChunkMessage>) {
-        loop {
-            match rx.recv().unwrap() {
-                ChunkMessage::Exit => {
-                    tx.send(ChunkMessage::Exit).unwrap();
-                    return;
-                }
-                ChunkMessage::Data(data, sha256, chunk_type, data_type) => {
-                    let tx_data = if data_type.should_encrypt() {
-                        let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
-                        let pub_key = &self.pub_key;
-                        let nonce =
-                            box_::Nonce::from_slice(&sha256[0..
-                                                     box_::NONCEBYTES])
-                                    .unwrap();
-
-                        let (ephemeral_pub, ephemeral_sec) =
-                            box_::gen_keypair();
-                        let cipher =
-                            box_::seal(&data, &nonce, pub_key, &ephemeral_sec);
-                        encrypted.write_all(&ephemeral_pub.0).unwrap();
-                        encrypted.write_all(&cipher).unwrap();
-                        encrypted
-                    } else {
-                        data
-                    };
-
-                    tx.send(ChunkMessage::Data(tx_data,
-                                                 sha256,
-                                                 chunk_type,
-                                                 data_type))
-                        .unwrap();
-                }
-            }
-        }
-    }*/
-
-    fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) -> WriteStats {
+    fn chunk_writer(&self,
+                    rx: mpsc::Receiver<ChunkWriterMessage>)
+                    -> WriteStats {
         let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
         // Cache paths to make sure we don't queue up an existing block
         let mut queue_paths: HashSet<PathBuf> = HashSet::new();
@@ -1266,11 +1049,11 @@ previous_parts: &mut Vec<Vec<u8>>){
         }
         loop {
             match rx.recv().unwrap() {
-                ChunkMessage::Exit => {
+                ChunkWriterMessage::Exit => {
                     flush(&mut queue, &mut queue_paths);
                     return write_stats;
                 }
-                ChunkMessage::Data(data, sha256, chunk_type, _) => {
+                ChunkWriterMessage::Data(data, sha256, chunk_type, _) => {
                     let path = self.chunk_path_by_digest(&sha256, chunk_type);
                     if !queue_paths.contains(&path) && !path.exists() {
                         if queue.len() == CHANNEL_SIZE {
