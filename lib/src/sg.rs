@@ -1,13 +1,14 @@
 //! Scattered-gathered buffers
 //!
 
-use DIGEST_SIZE;
+use {DIGEST_SIZE, BUFFER_SIZE};
 use DataType;
 use crypto::digest::Digest;
 use flate2;
 use owning_ref::ArcRef;
 use rollsum;
 use sha2;
+use sodiumoxide::crypto::{box_, pwhash, secretbox};
 use std::{io, mem};
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
@@ -19,7 +20,7 @@ pub trait EdgeFinder {
 }
 
 /// Finds edges using rolling sum
-struct BupEdgeFinder {
+pub struct BupEdgeFinder {
     chunk_bits: u32,
     roll: rollsum::Bup,
 }
@@ -53,7 +54,7 @@ impl EdgeFinder for BupEdgeFinder {
     }
 }
 
-struct ReaderVecIter<R: io::Read> {
+pub struct ReaderVecIter<R: io::Read> {
     reader: R,
     buf_size: usize,
 }
@@ -61,7 +62,7 @@ struct ReaderVecIter<R: io::Read> {
 impl<R> ReaderVecIter<R>
     where R: io::Read
 {
-    fn new(reader: R, buf_size: usize) -> Self {
+    pub fn new(reader: R, buf_size: usize) -> Self {
 
         ReaderVecIter {
             reader: reader,
@@ -92,13 +93,13 @@ impl<R> Iterator for ReaderVecIter<R>
 }
 
 
-struct WhileOk<I, E> {
+pub struct WhileOk<I, E> {
     e: Option<E>,
     i: I,
 }
 
 impl<I, E> WhileOk<I, E> {
-    fn new<O>(into_iter: I) -> WhileOk<I, E>
+    pub fn new<O>(into_iter: I) -> WhileOk<I, E>
         where I: Iterator<Item = Result<O, E>>
     {
 
@@ -129,7 +130,7 @@ impl<I, O, E> Iterator for WhileOk<I, E>
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct Chunk {
+pub struct Chunk {
     sg: SGBuf,
     chunk_type: DataType,
     data_type: DataType,
@@ -139,15 +140,15 @@ struct Chunk {
 ///
 /// A pice of data potentially scattered between
 /// multiple buffers.
-#[derive(Debug, PartialEq, Eq)]
-struct SGBuf(Vec<ArcRef<Vec<u8>, [u8]>>);
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct SGBuf(Vec<ArcRef<Vec<u8>, [u8]>>);
 
 
 impl SGBuf {
     fn new() -> Self {
         SGBuf(vec![])
     }
-    fn from_single(v: Vec<u8>) -> Self {
+    pub fn from_single(v: Vec<u8>) -> Self {
         SGBuf::from_vec(vec![v])
     }
     fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
@@ -156,7 +157,8 @@ impl SGBuf {
             .collect())
     }
 
-    fn calculate_digest(&self) -> Vec<u8> {
+    /// Calculate digest
+    pub fn calculate_digest(&self) -> Vec<u8> {
         let mut sha = sha2::Sha256::new();
 
         for sg_part in &self.0 {
@@ -169,7 +171,7 @@ impl SGBuf {
         sha256
     }
 
-    fn compress(&self) -> SGBuf {
+    pub fn compress(&self) -> SGBuf {
         let mut compressor =
             flate2::write::DeflateEncoder::new(vec![],
                                                flate2::Compression::Default);
@@ -179,6 +181,33 @@ impl SGBuf {
         }
 
         SGBuf::from_single(compressor.finish().unwrap())
+    }
+
+    fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {
+        match self.0.len() {
+            0 => ArcRef::new(Arc::new(vec![])).map(|v| &v[..]),
+            1 => self.0[0].clone(),
+            _ => {
+                let mut v = vec![];
+                for sg_part in &self.0 {
+                    v.write_all(&sg_part).unwrap();
+                }
+                ArcRef::new(Arc::new(v)).map(|v| &v[..])
+            }
+        }
+    }
+
+    pub fn encrypt(&self, pub_key: &box_::PublicKey, digest: &[u8]) -> SGBuf {
+        let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
+        let nonce = box_::Nonce::from_slice(digest)
+            .expect("Nonce::from_slice failed");
+
+        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
+        let cipher =
+            box_::seal(&self.to_linear(), &nonce, pub_key, &ephemeral_sec);
+        encrypted.write_all(&ephemeral_pub.0).unwrap();
+        encrypted.write_all(&cipher).unwrap();
+        SGBuf::from_single(encrypted)
     }
 }
 
@@ -196,7 +225,7 @@ impl DerefMut for SGBuf {
     }
 }
 
-struct Chunker<I, EF> {
+pub struct Chunker<I, EF> {
     iter: I,
     data_type: DataType,
     cur_buf_edges: Option<(Arc<Vec<u8>>, Vec<usize>)>,
@@ -227,7 +256,6 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            println!("{:?}; e_i: {}", self.cur_buf_edges, self.cur_edge_i);
             self.cur_buf_edges = if let Some((buf, edges)) =
                 self.cur_buf_edges.clone() {
                 if self.cur_edge_i < edges.len() {

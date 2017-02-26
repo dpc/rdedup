@@ -33,6 +33,7 @@ use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, Read, Write, Result, Error};
+use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
 use std::sync::mpsc;
@@ -44,13 +45,14 @@ pub mod config;
 use config::ChunkingAlgorithm;
 
 mod sg;
+use sg::*;
 
 const BUFFER_SIZE: usize = 16 * 1024;
 const CHANNEL_SIZE: usize = 128;
 const DIGEST_SIZE: usize = 32;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum DataType {
+pub enum DataType {
     Index,
     Data,
 }
@@ -67,96 +69,17 @@ impl DataType {
 
 enum ChunkAssemblerMessage {
     // DataType in every Data is somewhat redundant...
-    Data(Vec<u8>, Vec<Edge>, DataType, DataType),
+    Data(Vec<u8>, Vec<u8>, DataType, DataType),
     Exit,
 }
 
 enum ChunkMessage {
     // TODO: Make struct: data, sha, chunk_type, data_type
-    Data(Vec<u8>, Vec<u8>, DataType, DataType),
+    Data(SGBuf, Vec<u8>, DataType, DataType),
     Exit,
 }
 
-/// Edge: offset in the input and sha256 sum of the chunk
-type Edge = (usize, Vec<u8>);
-
-/// Finds edges using rolling sum
-struct Chunker {
-    chunk_bits: u32,
-    roll: rollsum::Bup,
-    sha256: sha2::Sha256,
-    bytes_total: usize,
-    bytes_chunk: usize,
-    chunks_total: usize,
-
-    edges: Vec<Edge>,
-}
-
-impl Chunker {
-    pub fn new(chunk_bits: u32) -> Self {
-        Chunker {
-            chunk_bits: chunk_bits,
-            roll: rollsum::Bup::new_with_chunk_bits(chunk_bits),
-            sha256: sha2::Sha256::new(),
-            bytes_total: 0,
-            bytes_chunk: 0,
-            chunks_total: 0,
-            edges: vec![],
-        }
-    }
-
-    fn edge_found(&mut self, input_ofs: usize) {
-        debug!("found edge at {}; sum: {:x}",
-               self.bytes_total,
-               self.roll.digest());
-
-        debug!("sha256 hash: {}", self.sha256.result_str());
-
-        let mut sha256 = vec![0u8; DIGEST_SIZE];
-        self.sha256.result(&mut sha256);
-
-        self.edges.push((input_ofs, sha256));
-
-        self.chunks_total += 1;
-        self.bytes_chunk = 0;
-
-        self.sha256.reset();
-        self.roll = rollsum::Bup::new_with_chunk_bits(self.chunk_bits);
-    }
-
-    fn input(&mut self, buf: &[u8]) -> Vec<Edge> {
-        let mut ofs: usize = 0;
-        let len = buf.len();
-        while ofs < len {
-            if let Some(count) = self.roll.find_chunk_edge(&buf[ofs..len]) {
-                self.sha256.input(&buf[ofs..ofs + count]);
-
-                ofs += count;
-
-                self.bytes_chunk += count;
-                self.bytes_total += count;
-                self.edge_found(ofs);
-            } else {
-                let count = len - ofs;
-                self.sha256.input(&buf[ofs..len]);
-                self.bytes_chunk += count;
-                self.bytes_total += count;
-                break;
-            }
-        }
-        mem::replace(&mut self.edges, vec![])
-    }
-
-    fn finish(&mut self) -> Vec<Edge> {
-        // Process the final chunk
-        if self.bytes_chunk != 0 || self.bytes_total == 0 {
-            self.edge_found(0);
-        }
-        mem::replace(&mut self.edges, vec![])
-    }
-}
-
-/// Convenient function to callculate sha256 for one continous data block
+/// Convenient function to calculate sha256 for one continuous data block
 fn quick_sha256(data: &[u8]) -> Vec<u8> {
 
     let mut sha256 = sha2::Sha256::new();
@@ -185,6 +108,7 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     Ok(derived_key)
 }
 
+/*
 /// Store data, using `input_f` to get chunks of data
 ///
 /// Return final digest
@@ -249,6 +173,7 @@ fn chunk_and_send_to_assembler<R: Read>(
         Ok(index)
     }
 }
+*/
 
 
 /// Writer that counts how many bytes were written to it
@@ -921,6 +846,66 @@ impl Repo {
         Ok(file)
     }
 
+    fn write_data<I: Iterator<Item = Vec<u8>>>
+        (&self,
+         sg_iter: I,
+         data_type: DataType,
+         tx_to_writer: mpsc::SyncSender<ChunkMessage>)
+         -> io::Result<Vec<u8>> {
+
+
+        let chunk_bits = match self.chunking {
+            ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+        };
+        let chunker =
+            Chunker::new(sg_iter, BupEdgeFinder::new(chunk_bits), data_type);
+
+        let mut digests: Vec<Vec<u8>> = chunker.map(|sg| {
+
+                let digest = sg.calculate_digest();
+                let sg = if data_type.should_compress() {
+                    sg.compress()
+                } else {
+                    sg
+                };
+                let sg = if data_type.should_encrypt() {
+                    sg.encrypt(&self.pub_key, &digest[0..box_::NONCEBYTES])
+                } else {
+                    sg
+                };
+                tx_to_writer.send(ChunkMessage::Data(sg,
+                                             digest.clone(),
+                                             DataType::Data,
+                                             data_type))
+                    .unwrap();
+
+                digest
+            })
+            .collect();
+
+
+
+        if digests.len() > 1 {
+            let digest = self.write_data(digests.drain(..),
+                            DataType::Index,
+                            tx_to_writer.clone())?;
+
+            // Is this digest of digest really required?
+            let index_digest = quick_sha256(&digest);
+
+            tx_to_writer.send(ChunkMessage::Data(SGBuf::from_single(digest),
+                                         index_digest.clone(),
+                                         DataType::Index,
+                                         DataType::Index))
+                .unwrap();
+            Ok(index_digest)
+
+        } else {
+            Ok(digests[0].clone())
+        }
+
+    }
+
     pub fn write<R: Read>(&self,
                           name: &str,
                           reader: &mut R)
@@ -928,47 +913,22 @@ impl Repo {
         info!("Write name {}", name);
         let _lock = self.lock_write()?;
 
-        let (tx_to_assembler, assembler_rx) = mpsc::sync_channel(CHANNEL_SIZE);
-        let (tx_to_compressor, compressor_rx) =
-            mpsc::sync_channel(CHANNEL_SIZE);
-        let (tx_to_encrypter, encrypter_rx) = mpsc::sync_channel(CHANNEL_SIZE);
-        let (tx_to_writer, writer_rx) = mpsc::sync_channel(CHANNEL_SIZE);
-
-
-        let mut joins = vec![];
-        joins.push(thread::spawn({
-            let self_clone = self.clone();
-            move || {
-                self_clone.chunk_assembler(assembler_rx, tx_to_compressor)
-            }
-        }));
-
-        joins.push(thread::spawn({
-            let self_clone = self.clone();
-            move || {
-                self_clone.chunk_compressor(compressor_rx, tx_to_encrypter)
-            }
-        }));
-
-        joins.push(thread::spawn({
-            let self_clone = self.clone();
-            move || self_clone.chunk_encrypter(encrypter_rx, tx_to_writer)
-        }));
-
         let self_clone = self.clone();
+        let (tx_to_writer, writer_rx) = mpsc::sync_channel(CHANNEL_SIZE);
         let chunk_writer =
             thread::spawn(move || self_clone.chunk_writer(writer_rx));
 
+        let r2vi = ReaderVecIter::new(reader, BUFFER_SIZE);
+        let mut while_ok = WhileOk::new(r2vi);
 
-        let final_digest = chunk_and_send_to_assembler(&tx_to_assembler,
-                                                       reader,
-                                                       DataType::Data,
-                                                       self.chunking)?;
+        let final_digest =
+            self.write_data(&mut while_ok,
+                            DataType::Data,
+                            tx_to_writer.clone())?;
 
-        tx_to_assembler.send(ChunkAssemblerMessage::Exit).unwrap();
-        for join in joins.drain(..) {
-            join.join().unwrap();
-        }
+
+
+        tx_to_writer.send(ChunkMessage::Exit).unwrap();
         let write_stats = chunk_writer.join().unwrap();
 
         self.store_digest_as_name(&final_digest, name)?;
@@ -1139,6 +1099,7 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed)
     }
 
+    /*
     fn chunk_assembler_handle_data_with_edges(
         &self, tx: &mut mpsc::SyncSender<ChunkMessage>, part: Vec<u8>, mut
         edges: Vec<Edge>, chunk_type: DataType, data_type: DataType,
@@ -1173,7 +1134,9 @@ previous_parts: &mut Vec<Vec<u8>>){
             previous_parts.push(part.split_off(prev_ofs))
         }
     }
+    */
 
+    /*
     fn chunk_assembler(&self,
                        rx: mpsc::Receiver<ChunkAssemblerMessage>,
                        mut tx: mpsc::SyncSender<ChunkMessage>) {
@@ -1205,7 +1168,9 @@ previous_parts: &mut Vec<Vec<u8>>){
             }
         }
     }
+    */
 
+    /*
     fn chunk_compressor(&self,
                         rx: mpsc::Receiver<ChunkMessage>,
                         tx: mpsc::SyncSender<ChunkMessage>) {
@@ -1235,9 +1200,10 @@ previous_parts: &mut Vec<Vec<u8>>){
                 }
             }
         }
-    }
+    }*/
 
 
+    /*
     fn chunk_encrypter(&self,
                        rx: mpsc::Receiver<ChunkMessage>,
                        tx: mpsc::SyncSender<ChunkMessage>) {
@@ -1275,7 +1241,7 @@ previous_parts: &mut Vec<Vec<u8>>){
                 }
             }
         }
-    }
+    }*/
 
     fn chunk_writer(&self, rx: mpsc::Receiver<ChunkMessage>) -> WriteStats {
         let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
@@ -1318,7 +1284,9 @@ previous_parts: &mut Vec<Vec<u8>>){
                         fs::create_dir_all(path.parent().unwrap()).unwrap();
                         let mut chunk_file = fs::File::create(&tmp_path)
                             .unwrap();
-                        chunk_file.write_all(&data).unwrap();
+                        for data_part in data.iter() {
+                            chunk_file.write_all(&data_part).unwrap();
+                        }
 
                         // Queue chunk up for data sync and rename
                         queue_paths.insert(path);
