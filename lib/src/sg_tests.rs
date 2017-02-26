@@ -109,8 +109,7 @@ fn test_chunker() {
         let mut while_ok = WhileOk::new(r2vi);
 
         let chunker = Chunker::new(&mut while_ok,
-                                   TestEdgeFinder::new(case.edges.clone()),
-                                   DataType::Data);
+                                   TestEdgeFinder::new(case.edges.clone()));
         let v: Vec<Vec<u8>> = chunker.map(|ch| {
                 let v: Vec<u8> = ch.iter()
                     .flat_map(|arcref| (**arcref).to_owned())
