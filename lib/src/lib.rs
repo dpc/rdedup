@@ -16,7 +16,6 @@ extern crate serde_derive;
 extern crate serde_yaml;
 extern crate base64;
 extern crate owning_ref;
-extern crate itertools;
 
 use crypto::digest::Digest;
 use crypto::sha2;
@@ -772,6 +771,15 @@ impl Repo {
         Ok(file)
     }
 
+    /// Write a chunk of data to the repo.
+    ///
+    /// * `sg_iter` - is an iterator yielding `SGBuf` - chunks of data to chunk,
+    /// potentially compress and encrypt, then write.
+    ///
+    // TODO: Instead of sending chunks to send through the channel, it
+    // would be better to return then from map and use iterative approach
+    // as well. However it's best for read and write thread to work on separate
+    // threads as well.
     fn write_data<I: Iterator<Item = Vec<u8>>>
         (&self,
          sg_iter: I,
@@ -785,6 +793,9 @@ impl Repo {
         };
         let chunker = Chunker::new(sg_iter, BupEdgeFinder::new(chunk_bits));
 
+        // TODO: Make this map run in paralel
+        // http://stackoverflow.com/questions/42476389/
+        // how-to-parallely-map-on-a-custom-single-threaded-iterator-in-rust
         let mut digests: Vec<Vec<u8>> = chunker.map(|sg| {
 
                 let digest = sg.calculate_digest();
@@ -815,7 +826,6 @@ impl Repo {
                                          DataType::Index,
                                          tx_to_writer.clone())?;
 
-            // Is this digest of digest really required?
             let index_digest = quick_sha256(&digest);
 
             tx_to_writer.send(ChunkWriterMessage::Data(SGBuf::from_single(digest),
