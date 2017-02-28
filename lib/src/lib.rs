@@ -16,23 +16,26 @@ extern crate serde_derive;
 extern crate serde_yaml;
 extern crate base64;
 extern crate owning_ref;
+extern crate two_lock_queue;
+extern crate num_cpus;
+extern crate crossbeam;
 
 use crypto::digest::Digest;
 use crypto::sha2;
-
 use fs2::FileExt;
 
 use serialize::hex::{ToHex, FromHex};
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
-use std::{fs, thread, io};
+use std::{fs, thread, io, result};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, Read, Write, Result, Error};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use std::sync::mpsc;
 
@@ -46,7 +49,6 @@ mod sg;
 use sg::*;
 
 const BUFFER_SIZE: usize = 16 * 1024;
-const CHANNEL_SIZE: usize = 128;
 const DIGEST_SIZE: usize = 32;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -66,10 +68,10 @@ impl DataType {
 }
 
 
-enum ChunkWriterMessage {
-    // TODO: Make struct: data, sha, chunk_type, data_type
-    Data(SGBuf, Vec<u8>, DataType, DataType),
-    Exit,
+struct ChunkWriterMessage {
+    sg: SGBuf,
+    digest: Vec<u8>,
+    chunk_type: DataType,
 }
 
 /// Convenient function to calculate sha256 for one continuous data block
@@ -776,98 +778,160 @@ impl Repo {
     /// * `sg_iter` - is an iterator yielding `SGBuf` - chunks of data to chunk,
     /// potentially compress and encrypt, then write.
     ///
-    // TODO: Instead of sending chunks to send through the channel, it
-    // would be better to return then from map and use iterative approach
-    // as well. However it's best for read and write thread to work on separate
-    // threads as well.
-    fn write_data<I: Iterator<Item = Vec<u8>>>
+    fn write_data<I: IntoIterator<Item = Vec<u8>> + Send>
         (&self,
          sg_iter: I,
          data_type: DataType,
-         tx_to_writer: mpsc::SyncSender<ChunkWriterMessage>)
--> io::Result<Vec<u8>>{
+         writer_tx: mpsc::SyncSender<ChunkWriterMessage>)
+         -> io::Result<Vec<u8>>
+        where I::IntoIter: Send
+    {
 
 
         let chunk_bits = match self.chunking {
             ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
         };
-        let chunker = Chunker::new(sg_iter, BupEdgeFinder::new(chunk_bits));
+        let chunker = Chunker::new(sg_iter.into_iter(),
+                                   BupEdgeFinder::new(chunk_bits));
 
-        // TODO: Make this map run in paralel
-        // http://stackoverflow.com/questions/42476389/
-        // how-to-parallely-map-on-a-custom-single-threaded-iterator-in-rust
-        let mut digests: Vec<Vec<u8>> = chunker.map(|sg| {
+        let num_threads = num_cpus::get();
 
-                let digest = sg.calculate_digest();
-                let sg = if data_type.should_compress() {
-                    sg.compress()
+        // mpmc queue used  as spmc fan-out
+        let (in_tx, in_rx) = two_lock_queue::channel(num_threads);
+        // standard mpsc used for fan-in
+        let (out_tx, out_rx) = mpsc::sync_channel(num_threads);
+
+
+        let mut handles = Vec::new();
+        for _ in 0..num_threads {
+            let self_clone = self.clone();
+            let rx = in_rx.clone();
+            let writer_tx = writer_tx.clone();
+            let tx = out_tx.clone();
+            handles.push(thread::spawn(move || loop {
+                let i_sg: result::Result<(usize, SGBuf), _> = rx.recv();
+                if let Ok((i, sg)) = i_sg {
+                    let digest = sg.calculate_digest();
+                    let sg = if data_type.should_compress() {
+                        sg.compress()
+                    } else {
+                        sg
+                    };
+                    let sg = if data_type.should_encrypt() {
+                        sg.encrypt(&self_clone.pub_key,
+                                   &digest[0..box_::NONCEBYTES])
+                    } else {
+                        sg
+                    };
+                    writer_tx.send(ChunkWriterMessage {
+                            sg: sg,
+                            digest: digest.clone(),
+                            chunk_type: DataType::Data,
+                        })
+                        .unwrap();
+
+                    tx.send((i, digest))
+                        .unwrap();
                 } else {
-                    sg
-                };
-                let sg = if data_type.should_encrypt() {
-                    sg.encrypt(&self.pub_key, &digest[0..box_::NONCEBYTES])
-                } else {
-                    sg
-                };
-                tx_to_writer.send(ChunkWriterMessage::Data(sg,
-                                                           digest.clone(),
-                                                           DataType::Data,
-                                                           data_type))
-                    .unwrap();
+                    return;
+                }
+            }));
+        }
+        drop(out_tx);
+        drop(in_rx);
 
-                digest
-            })
-            .collect();
+        // TODO: Instead of using collecting whole index and then writing it,
+        // use a priority queue on the sender side (with some `condvar`
+        // for back-pressure, to write index at the same time as data.
+        // Reuse the processing worker pool.
+        let mut digests: Vec<(usize, Vec<u8>)> = crossbeam::scope(|scope| {
+            let j_out = scope.spawn(move || out_rx.iter().collect());
+            let _j_in = scope.spawn(move || {
+                chunker.enumerate()
+                    .map(|i_sg| in_tx.send(i_sg).unwrap())
+                    .count();
+                drop(in_tx);
+            });
+            j_out.join()
+        });
 
 
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        digests.sort_by_key(|k| k.0);
 
         if digests.len() > 1 {
-            let digest = self.write_data(digests.drain(..),
+            let digest = self.write_data(Box::new(digests.drain(..)
+                                                      .map(|i_sg| {
+                                                               i_sg.1
+                                                           })) as
+                                         Box<Iterator<Item = Vec<u8>> + Send>,
                                          DataType::Index,
-                                         tx_to_writer.clone())?;
+                                         writer_tx.clone())?;
 
             let index_digest = quick_sha256(&digest);
 
-            tx_to_writer.send(ChunkWriterMessage::Data(SGBuf::from_single(digest),
-                                         index_digest.clone(),
-                                         DataType::Index,
-                                         DataType::Index))
+            writer_tx.send(ChunkWriterMessage {
+                               sg: SGBuf::from_single(digest),
+                               digest: index_digest.clone(),
+                               chunk_type: DataType::Index,
+                           })
                 .unwrap();
             Ok(index_digest)
 
         } else {
-            Ok(digests[0].clone())
+            Ok(digests[0].1.clone())
         }
 
     }
 
-    pub fn write<R: Read>(&self,
-                          name: &str,
-                          reader: &mut R)
-                          -> Result<WriteStats> {
+    /// Number of threads to use to parallelize CPU-intense part of
+    /// the workload.
+    fn write_cpu_thread_num(&self) -> usize {
+        num_cpus::get()
+    }
+
+    pub fn write<R: Read + Send>(&self,
+                                 name: &str,
+                                 reader: R)
+                                 -> Result<WriteStats> {
         info!("Write name {}", name);
         let _lock = self.lock_write()?;
 
-        let self_clone = self.clone();
-        let (tx_to_writer, writer_rx) = mpsc::sync_channel(CHANNEL_SIZE);
-        let chunk_writer =
-            thread::spawn(move || self_clone.chunk_writer(writer_rx));
+        let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
-        let r2vi = ReaderVecIter::new(reader, BUFFER_SIZE);
-        let mut while_ok = WhileOk::new(r2vi);
+            let (writer_tx, writer_rx) =
+                mpsc::sync_channel(self.write_cpu_thread_num());
+            let writer = scope.spawn(move || self.chunk_writer(writer_rx));
 
-        let final_digest =
-            self.write_data(&mut while_ok,
-                            DataType::Data,
-                            tx_to_writer.clone())?;
+            let r2vi = ReaderVecIter::new(reader, BUFFER_SIZE);
+            let mut while_ok = WhileOk::new(r2vi);
+
+            let (tx, rx) = mpsc::sync_channel(self.write_cpu_thread_num());
+            let _j_in = scope.spawn(move || {
+                (&mut while_ok).map(|buf| tx.send(buf).unwrap()).count();
+            });
+
+            let write_data_thread =
+                scope.spawn({
+                                let writer_tx = writer_tx.clone();
+                                move || {
+                                    self.write_data(rx,
+                                                    DataType::Data,
+                                                    writer_tx)
+                                }
+                            });
+            let final_digest = write_data_thread.join();
+            drop(writer_tx);
+            let writer_stats = writer.join();
+            (final_digest, writer_stats)
+        });
 
 
-
-        tx_to_writer.send(ChunkWriterMessage::Exit).unwrap();
-        let write_stats = chunk_writer.join().unwrap();
-
-        self.store_digest_as_name(&final_digest, name)?;
-        Ok(write_stats)
+        self.store_digest_as_name(&final_digest?, name)?;
+        Ok(writer_stats)
     }
 
     pub fn read<W: Write>(&self,
@@ -1037,57 +1101,108 @@ impl Repo {
     fn chunk_writer(&self,
                     rx: mpsc::Receiver<ChunkWriterMessage>)
                     -> WriteStats {
-        let mut queue: VecDeque<(File)> = VecDeque::with_capacity(CHANNEL_SIZE);
-        // Cache paths to make sure we don't queue up an existing block
-        let mut queue_paths: HashSet<PathBuf> = HashSet::new();
         let mut write_stats = WriteStats {
             new_bytes: 0,
             new_chunks: 0,
         };
 
-        fn flush(queue: &mut VecDeque<File>,
-                 queue_paths: &mut HashSet<PathBuf>) {
-            while let Some(file) = queue.pop_front() {
-                file.sync_all().unwrap();
-            }
-            // Run renames after data sync to mitigate data writes and metadata
-            // writes contention
-            for path in queue_paths.drain() {
-                let tmp_path = path.with_extension("tmp");
-                fs::rename(&tmp_path, &path).unwrap();
+        let mut queue: VecDeque<(File, PathBuf)> = VecDeque::with_capacity(512);
+        let in_progress: Arc<Mutex<HashSet<PathBuf>>> =
+            Arc::new(Mutex::new(HashSet::new()));
+
+        fn flush_one(queue: &mut VecDeque<(File, PathBuf)>,
+                     tx: &two_lock_queue::Sender<(File, PathBuf)>) {
+            if let Some(file_and_path) = queue.pop_front() {
+                tx.send(file_and_path).unwrap()
             }
         }
-        loop {
-            match rx.recv().unwrap() {
-                ChunkWriterMessage::Exit => {
-                    flush(&mut queue, &mut queue_paths);
-                    return write_stats;
-                }
-                ChunkWriterMessage::Data(data, sha256, chunk_type, _) => {
-                    let path = self.chunk_path_by_digest(&sha256, chunk_type);
-                    if !queue_paths.contains(&path) && !path.exists() {
-                        if queue.len() == CHANNEL_SIZE {
-                            flush(&mut queue, &mut queue_paths);
+
+        fn flush_all(queue: &mut VecDeque<(File, PathBuf)>,
+                     tx: &two_lock_queue::Sender<(File, PathBuf)>) {
+            while !queue.is_empty() {
+                flush_one(queue, tx);
+            }
+        }
+
+        crossbeam::scope(|scope| {
+            // Unlike CPU-intense workload, it's hard to come up with one
+            // formula for best number of `fdatasync` threads for everyone.
+            // Each buffer is blocked on one chunk, so the longer the chunks,
+            // the less threads are needed to saturate the disk and so on. Some
+            // form of run-time scaling would be best. I picked some reasonable
+            // that also works well for me with defaults. --dpc
+            let thread_num = 2 * self.write_cpu_thread_num();
+
+            let (pool_tx, pool_rx) = two_lock_queue::channel(thread_num);
+            for _ in 0..thread_num {
+                // let self_clone = self.clone();
+                let pool_rx: two_lock_queue::Receiver<(File, PathBuf)> =
+                    pool_rx.clone();
+                let in_progress = in_progress.clone();
+                scope.spawn({
+                                move || {
+
+                        // Cache paths to make sure we don't queue up an
+                        // existing
+                        // block
+                        loop {
+                            if let Ok((file, path)) = pool_rx.recv() {
+
+                                let tmp_path = path.with_extension("tmp");
+
+                                file.sync_data().unwrap();
+                                fs::rename(&tmp_path, &path).unwrap();
+                                in_progress.lock().unwrap().remove(&path);
+
+                            } else {
+                                break;
+                            }
                         }
+                    }
+                            });
+            }
+            drop(pool_rx);
+
+            loop {
+                match rx.recv() {
+                    Err(_) => {
+
+                        flush_all(&mut queue, &pool_tx);
+                        break;
+                    }
+                    Ok(ChunkWriterMessage { sg, digest, chunk_type }) => {
+                        let path =
+                            self.chunk_path_by_digest(&digest, chunk_type);
+                        if !path.exists() &&
+                           !in_progress.lock().unwrap().contains(&path) {
 
 
-                        write_stats.new_chunks += 1;
-                        write_stats.new_bytes += data.len() as u64;
-                        let tmp_path = path.with_extension("tmp");
-                        fs::create_dir_all(path.parent().unwrap()).unwrap();
-                        let mut chunk_file = fs::File::create(&tmp_path)
-                            .unwrap();
-                        for data_part in data.iter() {
-                            chunk_file.write_all(&data_part).unwrap();
+                            if queue.len() == queue.capacity() {
+                                flush_one(&mut queue, &pool_tx);
+                            }
+
+                            let tmp_path = path.with_extension("tmp");
+                            fs::create_dir_all(path.parent().unwrap()).unwrap();
+                            let mut chunk_file = fs::File::create(&tmp_path)
+                                .unwrap();
+                            for data_part in sg.iter() {
+                                chunk_file.write_all(&data_part).unwrap();
+                                write_stats.new_bytes += data_part.len() as u64;
+                            }
+                            write_stats.new_chunks += 1;
+
+                            // Queue chunk up for data sync and rename
+                            in_progress.lock().unwrap().insert(path.clone());
+                            queue.push_back((chunk_file, path));
                         }
-
-                        // Queue chunk up for data sync and rename
-                        queue_paths.insert(path);
-                        queue.push_back(chunk_file);
                     }
                 }
             }
-        }
+
+            drop(pool_tx);
+        });
+
+        return write_stats;
     }
 
     fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
