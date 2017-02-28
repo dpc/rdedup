@@ -28,6 +28,9 @@ serde_derive = "0.9"
 serde_yaml = "0.6"
 base64 = "0.4.0"
 owning_ref = "0.2.4"
+two-lock-queue = "0.1.0"
+num_cpus = "1.2.1"
+crossbeam = "0.2.10"
 
 [dev-dependencies]
 rand = "0.3.14"
