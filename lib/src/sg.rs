@@ -1,7 +1,7 @@
 //! Scattered-gathered buffers
 //!
 
-use {DIGEST_SIZE, BUFFER_SIZE};
+use DIGEST_SIZE;
 use DataType;
 use crypto::digest::Digest;
 use flate2;
@@ -157,6 +157,14 @@ impl SGBuf {
                   .collect())
     }
 
+    pub fn total_len(&self) -> usize {
+        let mut size = 0;
+        for sg_part in &self.0 {
+            size += sg_part.len();
+        }
+        size
+    }
+
     /// Calculate digest
     pub fn calculate_digest(&self) -> Vec<u8> {
         let mut sha = sha2::Sha256::new();
@@ -173,7 +181,7 @@ impl SGBuf {
 
     pub fn compress(&self) -> SGBuf {
         let mut compressor =
-            flate2::write::DeflateEncoder::new(vec![],
+            flate2::write::DeflateEncoder::new(Vec::with_capacity(self.total_len()),
                                                flate2::Compression::Default);
 
         for sg_part in &self.0 {
@@ -188,7 +196,7 @@ impl SGBuf {
             0 => ArcRef::new(Arc::new(vec![])).map(|v| &v[..]),
             1 => self.0[0].clone(),
             _ => {
-                let mut v = vec![];
+                let mut v = Vec::with_capacity(self.total_len());
                 for sg_part in &self.0 {
                     v.write_all(&sg_part).unwrap();
                 }
@@ -198,16 +206,13 @@ impl SGBuf {
     }
 
     pub fn encrypt(&self, pub_key: &box_::PublicKey, digest: &[u8]) -> SGBuf {
-        let mut encrypted = Vec::with_capacity(BUFFER_SIZE);
         let nonce =
             box_::Nonce::from_slice(digest).expect("Nonce::from_slice failed");
 
         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
         let cipher =
             box_::seal(&self.to_linear(), &nonce, pub_key, &ephemeral_sec);
-        encrypted.write_all(&ephemeral_pub.0).unwrap();
-        encrypted.write_all(&cipher).unwrap();
-        SGBuf::from_single(encrypted)
+        SGBuf::from_vec(vec![ephemeral_pub.0.to_vec(), cipher])
     }
 }
 
