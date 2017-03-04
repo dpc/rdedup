@@ -48,7 +48,9 @@ use config::ChunkingAlgorithm;
 mod sg;
 use sg::*;
 
-const BUFFER_SIZE: usize = 16 * 1024;
+const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
+// TODO: Parametrize over repo chunk size
+const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
 const DIGEST_SIZE: usize = 32;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -317,7 +319,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = fs::File::open(path)?;
-        let mut data = Vec::with_capacity(BUFFER_SIZE);
+        let mut data = Vec::with_capacity(ACCESSOR_BUFFER_SIZE);
 
         let data = if data_type.should_encrypt() {
             let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
@@ -906,7 +908,7 @@ impl Repo {
                 mpsc::sync_channel(self.write_cpu_thread_num());
             let writer = scope.spawn(move || self.chunk_writer(writer_rx));
 
-            let r2vi = ReaderVecIter::new(reader, BUFFER_SIZE);
+            let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
             let mut while_ok = WhileOk::new(r2vi);
 
             let (tx, rx) = mpsc::sync_channel(self.write_cpu_thread_num());
@@ -1131,7 +1133,7 @@ impl Repo {
             // the less threads are needed to saturate the disk and so on. Some
             // form of run-time scaling would be best. I picked some reasonable
             // that also works well for me with defaults. --dpc
-            let thread_num = 2 * self.write_cpu_thread_num();
+            let thread_num = 4 * self.write_cpu_thread_num();
 
             let (pool_tx, pool_rx) = two_lock_queue::channel(thread_num);
             for _ in 0..thread_num {
