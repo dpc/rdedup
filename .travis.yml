@@ -1,8 +1,8 @@
 language: rust
 cache: cargo
 rust:
-# - stable
-# - beta
+  - stable
+  - beta
   - nightly
 script:
   - export PATH=$PATH:~/.cargo/bin
