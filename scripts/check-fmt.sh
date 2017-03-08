@@ -8,3 +8,4 @@ if [ -s fmt-diff.patch ]; then
   exit -1
 fi
 rm fmt-diff.patch
+exit 0
