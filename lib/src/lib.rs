@@ -1,4 +1,3 @@
-#![feature(proc_macro)]
 
 extern crate rollsum;
 extern crate crypto;
