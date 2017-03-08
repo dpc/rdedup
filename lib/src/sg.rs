@@ -181,8 +181,9 @@ impl SGBuf {
 
     pub fn compress(&self) -> SGBuf {
         let mut compressor =
-            flate2::write::DeflateEncoder::new(Vec::with_capacity(self.total_len()),
-                                               flate2::Compression::Default);
+            flate2::write::DeflateEncoder::new(
+                Vec::with_capacity(self.total_len()),
+                flate2::Compression::Default);
 
         for sg_part in &self.0 {
             compressor.write_all(&sg_part).unwrap();
