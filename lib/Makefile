@@ -42,7 +42,7 @@ bench:
 
 .PHONY: travistest
 travistest:
-	for i in `seq 10`; do make test || exit 1 ; done
+	for i in `seq 2`; do make test || exit 1 ; done
 
 .PHONY: longtest
 longtest:
