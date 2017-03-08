@@ -17,9 +17,9 @@ pub struct StoredChunks {
 impl StoredChunks {
     pub fn new(root: &Path, digest_size: usize) -> Result<StoredChunks> {
         Ok(StoredChunks {
-            dirs: vec![fs::read_dir(root)?],
-            digest_size: digest_size,
-        })
+               dirs: vec![fs::read_dir(root)?],
+               digest_size: digest_size,
+           })
     }
 }
 
@@ -28,7 +28,10 @@ impl Iterator for StoredChunks {
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
         while !self.dirs.is_empty() {
-            let entry = match self.dirs.last_mut().unwrap().next() {
+            let entry = match self.dirs
+                      .last_mut()
+                      .unwrap()
+                      .next() {
                 Some(Ok(entry)) => entry,
                 Some(Err(error)) => return Some(Err(error)),
                 None => {

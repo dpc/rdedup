@@ -189,7 +189,7 @@ fn chunk_and_send_to_assembler<R: Read>(
     mut reader: &mut R,
     data_type: DataType,
     chunking_algo: ChunkingAlgorithm)
--> Result<Vec<u8>> {
+-> Result<Vec<u8>>{
     let chunk_bits = match chunking_algo {
         ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
     };
@@ -367,10 +367,10 @@ impl<'a> ReadContext<'a> {
         trace!("Traversing index: {}", digest.to_hex());
         let mut index_data = vec![];
         accessor.read_chunk_into(digest,
-                             DataType::Index,
-                             DataType::Index,
-                             &mut index_data,
-                             self.sec_key)?;
+                                 DataType::Index,
+                                 DataType::Index,
+                                 &mut index_data,
+                                 self.sec_key)?;
 
         assert!(index_data.len() == DIGEST_SIZE);
 
@@ -595,13 +595,15 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer, sec_key);
+        let res = self.raw.read_chunk_into(digest,
+                                           chunk_type,
+                                           data_type,
+                                           writer,
+                                           sec_key);
 
         if res.is_err() {
-            self.errors
-                .borrow_mut()
-                .push((digest.to_owned(), res.err().unwrap()));
+            self.errors.borrow_mut().push((digest.to_owned(),
+                                           res.err().unwrap()));
         }
         Ok(())
     }
@@ -726,11 +728,11 @@ impl Repo {
         reader.read_line(&mut version)?;
         let version_int = version.parse::<u32>()
             .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               format!("can't parse version file; \
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        format!("can't parse version file; \
                                         unsupported repo format version: {}",
-                                       version))
-            })?;
+                                                version))
+                     })?;
 
 
         if version_int > config::REPO_VERSION_CURRENT {
@@ -788,25 +790,25 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let pubkey_str = std::str::from_utf8(&buf).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "pubkey data invalid: not utf8")
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        "pubkey data invalid: not utf8")
+                     })?;
         let pubkey_bytes = pubkey_str.from_hex()
             .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "pubkey data invalid: not hex")
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        "pubkey data invalid: not hex")
+                     })?;
         let pub_key = box_::PublicKey::from_slice(&pubkey_bytes).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidData,
                                "pubkey data invalid: can't convert to pubkey")
             })?;
 
         Ok(Repo {
-            path: repo_path.to_owned(),
-            pub_key: pub_key,
-            version: version_int,
-            chunking: ChunkingAlgorithm::default(),
-        })
+               path: repo_path.to_owned(),
+               pub_key: pub_key,
+               version: version_int,
+               chunking: ChunkingAlgorithm::default(),
+           })
     }
 
     pub fn open(repo_path: &Path) -> Result<Repo> {
@@ -825,19 +827,19 @@ impl Repo {
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
         let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               format!("couldn't parse yaml: {}",
-                                       e.to_string()))
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        format!("couldn't parse yaml: {}",
+                                                e.to_string()))
+                     })?;
 
         if let config::Encryption::Curve25519(encryption_config) =
             config.encryption {
             Ok(Repo {
-                path: repo_path.to_owned(),
-                pub_key: encryption_config.pub_key,
-                version: version,
-                chunking: config.chunking.unwrap_or_default(),
-            })
+                   path: repo_path.to_owned(),
+                   pub_key: encryption_config.pub_key,
+                   version: version,
+                   chunking: config.chunking.unwrap_or_default(),
+               })
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData,
                                "Repo without encryptin not supported yet"))
@@ -1000,9 +1002,9 @@ impl Repo {
             traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(DuResults {
-            chunks: accessor.get_results().scanned,
-            bytes: counter.count,
-        })
+               chunks: accessor.get_results().scanned,
+               bytes: counter.count,
+           })
     }
 
     pub fn verify(&self,
@@ -1033,14 +1035,14 @@ impl Repo {
         file.read_to_end(&mut buf)?;
 
         let str_ = std::str::from_utf8(&buf).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "seckey data invalid: not utf8")
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        "seckey data invalid: not utf8")
+                     })?;
         let bytes = str_.from_hex()
             .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "seckey data invalid: not hex")
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        "seckey data invalid: not hex")
+                     })?;
         Ok(bytes)
     }
 
@@ -1092,10 +1094,10 @@ impl Repo {
 
         let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
         let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               format!("couldn't parse yaml: {}",
-                                       e.to_string()))
-            })?;
+                         io::Error::new(io::ErrorKind::InvalidData,
+                                        format!("couldn't parse yaml: {}",
+                                                e.to_string()))
+                     })?;
 
         if let config::Encryption::Curve25519(enc) = config.encryption {
             let derived_key = derive_key(passphrase, &enc.salt)?;
@@ -1136,7 +1138,7 @@ impl Repo {
     fn chunk_assembler_handle_data_with_edges(
         &self, tx: &mut mpsc::SyncSender<ChunkMessage>, part: Vec<u8>, mut
         edges: Vec<Edge>, chunk_type: DataType, data_type: DataType,
-        previous_parts: &mut Vec<Vec<u8>>) {
+previous_parts: &mut Vec<Vec<u8>>){
         let mut prev_ofs = 0;
         for (ofs, sha256) in edges.drain(..) {
             let path = self.chunk_path_by_digest(&sha256, chunk_type);
@@ -1248,7 +1250,7 @@ impl Repo {
                         let nonce =
                             box_::Nonce::from_slice(&sha256[0..
                                                      box_::NONCEBYTES])
-                                .unwrap();
+                                    .unwrap();
 
                         let (ephemeral_pub, ephemeral_sec) =
                             box_::gen_keypair();

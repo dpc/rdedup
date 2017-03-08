@@ -22,9 +22,9 @@ const DIGEST_SIZE: usize = 32;
 fn rand_tmp_dir() -> path::PathBuf {
     // TODO: Use $TMP or something?
     path::PathBuf::from("/tmp/rdedup-tests").join(rand::thread_rng()
-        .gen_ascii_chars()
-        .take(20)
-        .collect::<String>())
+                                                      .gen_ascii_chars()
+                                                      .take(20)
+                                                      .collect::<String>())
 }
 
 fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
@@ -94,10 +94,7 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng()
-        .gen_iter()
-        .take(len)
-        .collect::<Vec<u8>>()
+    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -163,8 +160,8 @@ fn random_sanity() {
             .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     for i in 0..10 {
-        let mut data = ExampleDataGen::new(rand::weak_rng()
-            .gen_range(0, 10 * 1024));
+        let mut data =
+            ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
         let name = format!("{:x}", i);
         repo.write(&name, &mut data).unwrap();
         names.push((name, data.finish()));
@@ -227,7 +224,7 @@ fn change_passphrase() {
         let repo = lib::Repo::init(dir_path,
                                    prev_passphrase,
                                    ChunkingAlgorithm::default())
-            .unwrap();
+                .unwrap();
         repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
     }
 

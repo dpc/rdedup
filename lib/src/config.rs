@@ -123,16 +123,16 @@ pub fn write_config_v1(repo_path: &Path,
     let config = Repo {
         version: 1,
         encryption: Encryption::Curve25519(Curve25519 {
-            sealed_sec_key: sealed_sk,
-            pub_key: *pk,
-            nonce: nonce,
-            salt: salt,
-        }),
+                                               sealed_sec_key: sealed_sk,
+                                               pub_key: *pk,
+                                               nonce: nonce,
+                                               salt: salt,
+                                           }),
         chunking: Some(chunking),
     };
 
-    let config_str = serde_yaml::to_string(&config)
-        .expect("yaml serialization failed");
+    let config_str =
+        serde_yaml::to_string(&config).expect("yaml serialization failed");
 
     let config_path = config_yml_file_path(repo_path);
     let config_path_tmp = config_path.with_extension("tmp");
@@ -199,14 +199,14 @@ fn from_base64<T, D>(deserializer: D) -> Result<T, D::Error>
     use serde::de::Error;
     String::deserialize(deserializer)
         .and_then(|string| {
-            base64::decode(&string)
+                      base64::decode(&string)
                 .map_err(|err| Error::custom(err.to_string()))
-        })
+                  })
         .and_then(|ref bytes| {
-            T::try_from(bytes).map_err(|err| {
+                      T::try_from(bytes).map_err(|err| {
                 Error::custom(format!("{}", &err as &::std::error::Error))
             })
-        })
+                  })
 }
 
 fn as_base64<T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>

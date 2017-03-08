@@ -170,8 +170,8 @@ impl Options {
     fn new() -> Self {
         // TODO: When stable we should use unwrap_or_default() instead
         // See https://github.com/rust-lang/rust/issues/37516
-        let mut dir_str: String = env::var("RDEDUP_DIR")
-            .unwrap_or_else(|_| "".to_owned());
+        let mut dir_str: String =
+            env::var("RDEDUP_DIR").unwrap_or_else(|_| "".to_owned());
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
@@ -183,8 +183,9 @@ impl Options {
             let mut ap = argparse::ArgumentParser::new();
             use argparse::*;
             ap.set_description("rdedup");
-            ap.refer(&mut dir_str)
-                .add_option(&["-d", "--dir"], Store, "destination dir");
+            ap.refer(&mut dir_str).add_option(&["-d", "--dir"],
+                                              Store,
+                                              "destination dir");
             ap.refer(&mut add_newline)
                 .add_option(&["-n", "--add-newline"],
                             StoreTrue,
@@ -197,10 +198,12 @@ impl Options {
                 .add_option(&["--chunk-size"],
                             Store,
                             "chunking size, default: 128k");
-            ap.refer(&mut command)
-                .add_argument("command", Store, r#"command to run"#);
-            ap.refer(&mut args)
-                .add_argument("arguments", List, r#"arguments for command"#);
+            ap.refer(&mut command).add_argument("command",
+                                                Store,
+                                                r#"command to run"#);
+            ap.refer(&mut args).add_argument("arguments",
+                                             List,
+                                             r#"arguments for command"#);
 
             ap.add_option(&["-V", "--version"],
                           Print(env!("CARGO_PKG_VERSION").to_string()),
