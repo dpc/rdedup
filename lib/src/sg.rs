@@ -138,7 +138,7 @@ pub struct Chunk {
 
 /// Scattered-gathered buffer
 ///
-/// A pice of data potentially scattered between
+/// A piece of data potentially scattered between
 /// multiple buffers.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SGBuf(Vec<ArcRef<Vec<u8>, [u8]>>);
