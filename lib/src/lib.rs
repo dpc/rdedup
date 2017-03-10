@@ -105,6 +105,22 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     Ok(derived_key)
 }
 
+/// Returns the path where the chunk should be located
+fn chunk_path_by_digest(repo_dir: &Path,
+                        digest: &[u8],
+                        chunk_type: DataType)
+                        -> PathBuf {
+    let i_or_c = match chunk_type {
+        DataType::Data => Path::new(config::DATA_SUBDIR),
+        DataType::Index => Path::new(config::INDEX_SUBDIR),
+    };
+
+    repo_dir.join(i_or_c)
+        .join(&digest[0..1].to_hex())
+        .join(digest[1..2].to_hex())
+        .join(&digest.to_hex())
+}
+
 /// Writer that counts how many bytes were written to it
 struct CounterWriter {
     count: u64,
@@ -805,33 +821,39 @@ impl Repo {
 
 
         let mut handles = Vec::new();
+        let repo_dir = Arc::new(self.path.clone());
         for _ in 0..num_threads {
             let self_clone = self.clone();
             let rx = in_rx.clone();
             let writer_tx = writer_tx.clone();
             let tx = out_tx.clone();
+            let repo_dir = repo_dir.clone();
             handles.push(thread::spawn(move || loop {
                 let i_sg: result::Result<(usize, SGBuf), _> = rx.recv();
                 if let Ok((i, sg)) = i_sg {
                     let digest = sg.calculate_digest();
-                    let sg = if data_type.should_compress() {
-                        sg.compress()
-                    } else {
-                        sg
-                    };
-                    let sg = if data_type.should_encrypt() {
-                        sg.encrypt(&self_clone.pub_key,
-                                   &digest[0..box_::NONCEBYTES])
-                    } else {
-                        sg
-                    };
-                    writer_tx.send(ChunkWriterMessage {
-                            sg: sg,
-                            digest: digest.clone(),
-                            chunk_type: DataType::Data,
-                        })
-                        .unwrap();
-
+                    let chunk_path = chunk_path_by_digest(&repo_dir,
+                                                          &digest,
+                                                          DataType::Data);
+                    if !chunk_path.exists() {
+                        let sg = if data_type.should_compress() {
+                            sg.compress()
+                        } else {
+                            sg
+                        };
+                        let sg = if data_type.should_encrypt() {
+                            sg.encrypt(&self_clone.pub_key,
+                                       &digest[0..box_::NONCEBYTES])
+                        } else {
+                            sg
+                        };
+                        writer_tx.send(ChunkWriterMessage {
+                                sg: sg,
+                                digest: digest.clone(),
+                                chunk_type: DataType::Data,
+                            })
+                            .unwrap();
+                    }
                     tx.send((i, digest))
                         .unwrap();
                 } else {
@@ -1316,16 +1338,7 @@ impl Repo {
                             digest: &[u8],
                             chunk_type: DataType)
                             -> PathBuf {
-        let i_or_c = match chunk_type {
-            DataType::Data => Path::new(config::DATA_SUBDIR),
-            DataType::Index => Path::new(config::INDEX_SUBDIR),
-        };
-
-        self.path
-            .join(i_or_c)
-            .join(&digest[0..1].to_hex())
-            .join(digest[1..2].to_hex())
-            .join(&digest.to_hex())
+        chunk_path_by_digest(&self.path, digest, chunk_type)
     }
 
     fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
