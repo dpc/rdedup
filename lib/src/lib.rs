@@ -30,7 +30,7 @@ use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
 use std::{fs, thread, io, result};
 use std::cell::RefCell;
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, Read, Write, Result, Error};
 use std::iter::Iterator;
@@ -1126,10 +1126,8 @@ impl Repo {
                     rx: two_lock_queue::Receiver<ChunkWriterMessage>)
                     -> WriteStats {
 
-        const QUEUE_MAX: usize = 128;
         struct Shared {
             write_stats: WriteStats,
-            queue: VecDeque<(File, PathBuf)>,
             in_progress: HashSet<PathBuf>,
         }
 
@@ -1138,7 +1136,6 @@ impl Repo {
                                                  new_bytes: 0,
                                                  new_chunks: 0,
                                              },
-                                             queue: Default::default(),
                                              in_progress: Default::default(),
                                          }));
 
@@ -1151,19 +1148,6 @@ impl Repo {
                 .unwrap()
                 .in_progress
                 .remove(&path);
-        }
-
-        fn flush_all(shared: &Arc<Mutex<Shared>>) {
-            loop {
-                let mut sh = shared.lock().unwrap();
-
-                if sh.queue.is_empty() {
-                    break;
-                }
-                let (file, path) = sh.queue.pop_front().unwrap();
-                drop(sh);
-                flush_one(shared, file, path);
-            }
         }
 
         crossbeam::scope(|scope| {
@@ -1222,24 +1206,16 @@ impl Repo {
                             bytes_written += data_part.len() as u64;
                         }
 
-                        loop {
-                            let mut sh = shared.lock().unwrap();
+                        flush_one(&shared, chunk_file, path);
 
-                            if sh.queue.len() < QUEUE_MAX {
-                                sh.write_stats.new_bytes += bytes_written;
-                                sh.write_stats.new_chunks += 1;
-                                sh.queue.push_back((chunk_file, path));
-                                break;
-                            }
+                        let mut sh = shared.lock().unwrap();
 
-                            let (prev_file, prev_path) =
-                                sh.queue.pop_front().unwrap();
-                            drop(sh);
-                            flush_one(&shared, prev_file, prev_path);
-                        }
+                        sh.write_stats.new_bytes += bytes_written;
+                        sh.write_stats.new_chunks += 1;
+
+                        drop(sh);
                     }
                                     Err(_) => {
-                        flush_all(&shared);
                         break;
                     }
                                 }
