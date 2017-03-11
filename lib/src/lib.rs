@@ -800,7 +800,7 @@ impl Repo {
         (&self,
          sg_iter: I,
          data_type: DataType,
-         writer_tx: mpsc::SyncSender<ChunkWriterMessage>)
+         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>)
          -> io::Result<Vec<u8>>
         where I::IntoIter: Send
     {
@@ -927,7 +927,7 @@ impl Repo {
         let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
             let (writer_tx, writer_rx) =
-                mpsc::sync_channel(self.write_cpu_thread_num());
+                two_lock_queue::channel(4 * self.write_cpu_thread_num());
             let writer = scope.spawn(move || self.chunk_writer(writer_rx));
 
             let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
@@ -1123,28 +1123,46 @@ impl Repo {
     }
 
     fn chunk_writer(&self,
-                    rx: mpsc::Receiver<ChunkWriterMessage>)
+                    rx: two_lock_queue::Receiver<ChunkWriterMessage>)
                     -> WriteStats {
-        let mut write_stats = WriteStats {
-            new_bytes: 0,
-            new_chunks: 0,
-        };
 
-        let mut queue: VecDeque<(File, PathBuf)> = VecDeque::with_capacity(512);
-        let in_progress: Arc<Mutex<HashSet<PathBuf>>> =
-            Arc::new(Mutex::new(HashSet::new()));
-
-        fn flush_one(queue: &mut VecDeque<(File, PathBuf)>,
-                     tx: &two_lock_queue::Sender<(File, PathBuf)>) {
-            if let Some(file_and_path) = queue.pop_front() {
-                tx.send(file_and_path).unwrap()
-            }
+        const QUEUE_MAX: usize = 128;
+        struct Shared {
+            write_stats: WriteStats,
+            queue: VecDeque<(File, PathBuf)>,
+            in_progress: HashSet<PathBuf>,
         }
 
-        fn flush_all(queue: &mut VecDeque<(File, PathBuf)>,
-                     tx: &two_lock_queue::Sender<(File, PathBuf)>) {
-            while !queue.is_empty() {
-                flush_one(queue, tx);
+        let shared = Arc::new(Mutex::new(Shared {
+                                             write_stats: WriteStats {
+                                                 new_bytes: 0,
+                                                 new_chunks: 0,
+                                             },
+                                             queue: Default::default(),
+                                             in_progress: Default::default(),
+                                         }));
+
+        fn flush_one(shared: &Arc<Mutex<Shared>>, file: File, path: PathBuf) {
+            let tmp_path = path.with_extension("tmp");
+
+            file.sync_data().unwrap();
+            fs::rename(&tmp_path, &path).unwrap();
+            shared.lock()
+                .unwrap()
+                .in_progress
+                .remove(&path);
+        }
+
+        fn flush_all(shared: &Arc<Mutex<Shared>>) {
+            loop {
+                let mut sh = shared.lock().unwrap();
+
+                if sh.queue.is_empty() {
+                    break;
+                }
+                let (file, path) = sh.queue.pop_front().unwrap();
+                drop(sh);
+                flush_one(shared, file, path);
             }
         }
 
@@ -1157,76 +1175,82 @@ impl Repo {
             // that also works well for me with defaults. --dpc
             let thread_num = 4 * self.write_cpu_thread_num();
 
-            let (pool_tx, pool_rx) = two_lock_queue::channel(thread_num);
             for _ in 0..thread_num {
                 // let self_clone = self.clone();
-                let pool_rx: two_lock_queue::Receiver<(File, PathBuf)> =
-                    pool_rx.clone();
-                let in_progress = in_progress.clone();
-                scope.spawn({
-                                move || {
-
-                        // Cache paths to make sure we don't queue up an
-                        // existing
-                        // block
-                        loop {
-                            if let Ok((file, path)) = pool_rx.recv() {
-
-                                let tmp_path = path.with_extension("tmp");
-
-                                file.sync_data().unwrap();
-                                fs::rename(&tmp_path, &path).unwrap();
-                                in_progress.lock().unwrap().remove(&path);
-
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                            });
-            }
-            drop(pool_rx);
-
-            loop {
-                match rx.recv() {
-                    Err(_) => {
-
-                        flush_all(&mut queue, &pool_tx);
-                        break;
-                    }
-                    Ok(ChunkWriterMessage { sg, digest, chunk_type }) => {
+                let rx = rx.clone();
+                let shared = shared.clone();
+                scope.spawn(move || loop {
+                                match rx.recv() {
+                                    Ok(msg) => {
+                        let ChunkWriterMessage { sg, digest, chunk_type } = msg;
                         let path =
                             self.chunk_path_by_digest(&digest, chunk_type);
-                        if !path.exists() &&
-                           !in_progress.lock().unwrap().contains(&path) {
 
+                        // check `in_progress` and add atomically
+                        // if not already there
+                        {
+                            let mut sh = shared.lock().unwrap();
 
-                            if queue.len() == queue.capacity() {
-                                flush_one(&mut queue, &pool_tx);
+                            if sh.in_progress.contains(&path) {
+                                continue;
+                            } else {
+                                sh.in_progress.insert(path.clone());
+                            }
+                        }
+
+                        // check if exists on disk
+                        // remove from `in_progress` if it does
+                        if path.exists() {
+                            let mut sh = shared.lock().unwrap();
+                            sh.in_progress.remove(&path);
+                            continue;
+                        }
+
+                        // write file to disk
+                        let tmp_path = path.with_extension("tmp");
+                        // Workaround
+                        // https://github.com/rust-lang/rust/issues/33707
+                        let _ = fs::create_dir_all(path.parent().unwrap());
+
+                        fs::create_dir_all(path.parent().unwrap()).unwrap();
+                        let mut chunk_file = fs::File::create(&tmp_path)
+                            .unwrap();
+
+                        let mut bytes_written = 0;
+                        for data_part in sg.iter() {
+                            chunk_file.write_all(&data_part).unwrap();
+                            bytes_written += data_part.len() as u64;
+                        }
+
+                        loop {
+                            let mut sh = shared.lock().unwrap();
+
+                            if sh.queue.len() < QUEUE_MAX {
+                                sh.write_stats.new_bytes += bytes_written;
+                                sh.write_stats.new_chunks += 1;
+                                sh.queue.push_back((chunk_file, path));
+                                break;
                             }
 
-                            let tmp_path = path.with_extension("tmp");
-                            fs::create_dir_all(path.parent().unwrap()).unwrap();
-                            let mut chunk_file = fs::File::create(&tmp_path)
-                                .unwrap();
-                            for data_part in sg.iter() {
-                                chunk_file.write_all(&data_part).unwrap();
-                                write_stats.new_bytes += data_part.len() as u64;
-                            }
-                            write_stats.new_chunks += 1;
-
-                            // Queue chunk up for data sync and rename
-                            in_progress.lock().unwrap().insert(path.clone());
-                            queue.push_back((chunk_file, path));
+                            let (prev_file, prev_path) =
+                                sh.queue.pop_front().unwrap();
+                            drop(sh);
+                            flush_one(&shared, prev_file, prev_path);
                         }
                     }
-                }
+                                    Err(_) => {
+                        flush_all(&shared);
+                        break;
+                    }
+                                }
+                            });
             }
-
-            drop(pool_tx);
+            drop(rx);
         });
 
-        return write_stats;
+        let sh = shared.lock().unwrap();
+
+        sh.write_stats.clone()
     }
 
     fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
