@@ -31,7 +31,6 @@ use sodiumoxide::crypto::{box_, pwhash, secretbox};
 use std::{fs, thread, io, result};
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::fs::File;
 use std::io::{BufRead, Read, Write, Result, Error};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
@@ -1139,17 +1138,6 @@ impl Repo {
                                              in_progress: Default::default(),
                                          }));
 
-        fn flush_one(shared: &Arc<Mutex<Shared>>, file: File, path: PathBuf) {
-            let tmp_path = path.with_extension("tmp");
-
-            file.sync_data().unwrap();
-            fs::rename(&tmp_path, &path).unwrap();
-            shared.lock()
-                .unwrap()
-                .in_progress
-                .remove(&path);
-        }
-
         crossbeam::scope(|scope| {
             // Unlike CPU-intense workload, it's hard to come up with one
             // formula for best number of `fdatasync` threads for everyone.
@@ -1206,10 +1194,14 @@ impl Repo {
                             bytes_written += data_part.len() as u64;
                         }
 
-                        flush_one(&shared, chunk_file, path);
+                        let tmp_path = path.with_extension("tmp");
+
+                        chunk_file.sync_data().unwrap();
+                        fs::rename(&tmp_path, &path).unwrap();
 
                         let mut sh = shared.lock().unwrap();
 
+                        sh.in_progress.remove(&path);
                         sh.write_stats.new_bytes += bytes_written;
                         sh.write_stats.new_chunks += 1;
 
