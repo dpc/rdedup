@@ -168,10 +168,7 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
-        // TODO: When stable we should use unwrap_or_default() instead
-        // See https://github.com/rust-lang/rust/issues/37516
-        let mut dir_str: String =
-            env::var("RDEDUP_DIR").unwrap_or_else(|_| "".to_owned());
+        let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_default();
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
