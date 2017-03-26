@@ -8,6 +8,7 @@ use crypto::sha2;
 use iterators::StoredChunks;
 use rand::{self, Rng};
 use serialize::hex::ToHex;
+
 use std::{io, cmp};
 
 use std::collections::HashSet;
@@ -28,10 +29,13 @@ fn rand_tmp_dir() -> path::PathBuf {
 }
 
 fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
-    info!("List stored chunks");
     let mut digests = HashSet::new();
-    let index_chunks = StoredChunks::new(&repo.index_dir_path(), DIGEST_SIZE)?;
-    let data_chunks = StoredChunks::new(&repo.chunk_dir_path(), DIGEST_SIZE)?;
+    let index_chunks = StoredChunks::new(&repo.index_dir_path(),
+                                         DIGEST_SIZE,
+                                         repo.log.clone())?;
+    let data_chunks = StoredChunks::new(&repo.chunk_dir_path(),
+                                        DIGEST_SIZE,
+                                        repo.log.clone())?;
     for digest in index_chunks.chain(data_chunks) {
         let digest = digest.unwrap();
         digests.insert(digest);
