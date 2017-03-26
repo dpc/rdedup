@@ -1,5 +1,7 @@
 use serialize::hex::FromHex;
 
+use slog::Logger;
+
 use std::fs;
 use std::fs::ReadDir;
 use std::io::Result;
@@ -12,13 +14,18 @@ use std::path::Path;
 pub struct StoredChunks {
     dirs: Vec<ReadDir>,
     digest_size: usize,
+    log: Logger,
 }
 
 impl StoredChunks {
-    pub fn new(root: &Path, digest_size: usize) -> Result<StoredChunks> {
+    pub fn new(root: &Path,
+               digest_size: usize,
+               log: Logger)
+               -> Result<StoredChunks> {
         Ok(StoredChunks {
                dirs: vec![fs::read_dir(root)?],
                digest_size: digest_size,
+               log: log,
            })
     }
 }
@@ -41,7 +48,7 @@ impl Iterator for StoredChunks {
             };
             let entry_path = entry.path();
             let entry_path_str = entry_path.to_string_lossy();
-            trace!("Looking at {}", entry_path_str);
+            trace!(self.log, "`StoredChunks` looking at path"; "path" => %entry_path_str);
             if entry_path.is_dir() {
                 match fs::read_dir(&entry_path) {
                     Ok(entries) => self.dirs.push(entries),
@@ -57,11 +64,11 @@ impl Iterator for StoredChunks {
                     if digest.len() == self.digest_size {
                         return Some(Ok(digest));
                     }
-                    trace!("skipping {}", entry_path_str);
+                    trace!(self.log, "skipping"; "path" => %entry_path_str);
                     // Maybe we should remove this file? It is not a valid chunk
                     // file.
                 }
-                Err(e) => trace!("skipping {}, error {}", entry_path_str, e),
+                Err(e) => trace!(self.log, "skipping"; "path" => %entry_path_str, "error" => %e),
             }
         }
         None

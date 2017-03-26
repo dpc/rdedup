@@ -1,10 +1,6 @@
 PKG_NAME=$(shell grep name Cargo.toml | head -n 1 | awk -F\" '{print $2}')
 DOCS_DEFAULT_MODULE=$(PKG_NAME)
-ifeq (, $(shell which cargo-check 2> /dev/null))
-DEFAULT_TARGET=build
-else
-DEFAULT_TARGET=build
-endif
+DEFAULT_TARGET=check
 
 default: $(DEFAULT_TARGET)
 
