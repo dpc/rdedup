@@ -4,11 +4,16 @@ extern crate argparse;
 extern crate env_logger;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
+#[macro_use]
+extern crate slog;
+extern crate slog_term;
+extern crate slog_async;
 
 
 use lib::Repo;
 use lib::config::ChunkingAlgorithm;
 use serialize::hex::ToHex;
+use slog::Drain;
 use std::{io, process, env};
 use std::path;
 use std::str::FromStr;
@@ -164,6 +169,7 @@ struct Options {
     usage: String,
     chunk_size: String,
     chunking: String,
+    debug_level: u32,
 }
 
 impl Options {
@@ -175,6 +181,7 @@ impl Options {
         let mut add_newline = false;
         let mut chunk_size: String = "128k".to_owned();
         let mut chunking: String = "bup".to_owned();
+        let mut debug_level = 0u32;
 
         {
             let mut ap = argparse::ArgumentParser::new();
@@ -195,6 +202,9 @@ impl Options {
                 .add_option(&["--chunk-size"],
                             Store,
                             "chunking size, default: 128k");
+            ap.refer(&mut debug_level).add_option(&["-D", "--debug"],
+                                                  IncrBy(1),
+                                                  "increase debug level");
             ap.refer(&mut command).add_argument("command",
                                                 Store,
                                                 r#"command to run"#);
@@ -220,6 +230,7 @@ impl Options {
             usage: String::from_utf8_lossy(&usage).to_string(),
             chunk_size: chunk_size,
             chunking: chunking,
+            debug_level: debug_level,
         }
     }
 
@@ -314,6 +325,21 @@ impl Options {
 }
 
 fn run(options: &Options) -> io::Result<()> {
+    let log = match options.debug_level {
+        0 => slog::Logger::root(slog::Discard, o!()),
+        dl => {
+            let level = match dl {
+                0 => unreachable!(),
+                1 => slog::Level::Info,
+                2 => slog::Level::Debug,
+                _ => slog::Level::Trace,
+            };
+            let drain = slog_term::term_compact();
+            let drain = slog_async::Async::default(drain.fuse());
+            let drain = slog::LevelFilter::new(drain, level);
+            slog::Logger::root(drain.fuse(), o!())
+        }
+    };
     match options.check_command() {
         Command::Help => {
             options.print_usage();
@@ -321,7 +347,7 @@ fn run(options: &Options) -> io::Result<()> {
         Command::Store => {
             let name = options.check_name();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
             let stats = try!(repo.write(&name, &mut io::stdin()));
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
@@ -329,14 +355,14 @@ fn run(options: &Options) -> io::Result<()> {
         Command::Load => {
             let name = options.check_name();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
             let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
             try!(repo.read(&name, &mut io::stdout(), &seckey));
         }
         Command::ChangePassphrase => {
             let dir = options.check_dir();
-            let repo = Repo::open(&dir)?;
+            let repo = Repo::open(&dir, log)?;
             let pass = read_passphrase(options);
             let seckey = repo.get_seckey(&pass)?;
             let pass = read_new_passphrase();
@@ -345,7 +371,7 @@ fn run(options: &Options) -> io::Result<()> {
         Command::Remove => {
             let names = options.get_names();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
             for name in &names {
                 try!(repo.rm(&name));
             }
@@ -355,12 +381,12 @@ fn run(options: &Options) -> io::Result<()> {
             let chunking = options.check_chunking(size);
             let dir = options.check_dir();
             let pass = read_new_passphrase();
-            try!(Repo::init(&dir, &pass, chunking));
+            try!(Repo::init(&dir, &pass, chunking, log));
         }
         Command::DU => {
             let name = options.check_name();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
             let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
 
@@ -372,7 +398,7 @@ fn run(options: &Options) -> io::Result<()> {
             options.check_no_arguments();
             let dir = options.check_dir();
 
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
 
             let result = try!(repo.gc());
             println!("Removed {} chunks", result.chunks);
@@ -381,7 +407,7 @@ fn run(options: &Options) -> io::Result<()> {
         Command::List => {
             options.check_no_arguments();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
 
             for name in try!(repo.list_names()) {
                 println!("{}", name);
@@ -390,7 +416,7 @@ fn run(options: &Options) -> io::Result<()> {
         Command::Verify => {
             let name = options.check_name();
             let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir));
+            let repo = try!(Repo::open(&dir, log));
             let pass = read_passphrase(options);
             let seckey = try!(repo.get_seckey(&pass));
 

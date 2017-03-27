@@ -49,6 +49,9 @@ use config::ChunkingAlgorithm;
 mod sg;
 use sg::*;
 
+mod timestat;
+use timestat::PipelinePerf;
+
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
 const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
@@ -562,7 +565,13 @@ impl Repo {
 
     /// Old repository config creation, should not be used anymore
     /// other than backward compatibility testing purposes
-    pub fn init_v0(repo_path: &Path, passphrase: &str) -> Result<Repo> {
+    pub fn init_v0<L>(repo_path: &Path,
+                      passphrase: &str,
+                      log: L)
+                      -> Result<Repo>
+        where L: Into<Option<Logger>>
+    {
+        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
 
@@ -574,16 +583,20 @@ impl Repo {
             pub_key: pk,
             version: 0,
             chunking: ChunkingAlgorithm::default(),
-            log: Logger::root(slog::Discard, o!()),
+            log: log,
         };
         Ok(repo)
     }
 
     /// Create new rdedup repository
-    pub fn init(repo_path: &Path,
-                passphrase: &str,
-                chunking: ChunkingAlgorithm)
-                -> Result<Repo> {
+    pub fn init<L>(repo_path: &Path,
+                   passphrase: &str,
+                   chunking: ChunkingAlgorithm,
+                   log: L)
+                   -> Result<Repo>
+        where L: Into<Option<Logger>>
+    {
+        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
         // Validate ChunkingAlgorithm
         if !chunking.valid() {
             return Err(Error::new(io::ErrorKind::InvalidInput,
@@ -601,7 +614,7 @@ impl Repo {
             pub_key: pk,
             version: config::REPO_VERSION_CURRENT,
             chunking: chunking,
-            log: Logger::root(slog::Discard, o!()),
+            log: log,
         };
 
         Ok(repo)
@@ -657,7 +670,10 @@ impl Repo {
         Ok(SecretKey(sec_key))
     }
 
-    pub fn open_v0(repo_path: &Path) -> Result<Repo> {
+    pub fn open_v0<L>(repo_path: &Path, log: L) -> Result<Repo>
+        where L: Into<Option<Logger>>
+    {
+        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("repo not found: {}",
@@ -697,11 +713,14 @@ impl Repo {
                pub_key: pub_key,
                version: version_int,
                chunking: ChunkingAlgorithm::default(),
-               log: Logger::root(slog::Discard, o!()),
+               log: log,
            })
     }
 
-    pub fn open(repo_path: &Path) -> Result<Repo> {
+    pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
+        where L: Into<Option<Logger>>
+    {
+        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("repo not found: {}",
@@ -711,7 +730,7 @@ impl Repo {
         let version = Repo::read_and_validate_version(repo_path)?;
 
         if version == 0 {
-            return Repo::open_v0(repo_path);
+            return Repo::open_v0(repo_path, log);
         }
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
@@ -728,20 +747,12 @@ impl Repo {
                    pub_key: encryption_config.pub_key,
                    version: version,
                    chunking: config.chunking.unwrap_or_default(),
-                   log: Logger::root(slog::Discard, o!()),
+                   log: log,
                })
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData,
                                "Repo without encryptin not supported yet"))
         }
-    }
-
-    /// Set a custom `Logger`
-    ///
-    /// This can be used to retrieve and process some logging/debug information
-    /// about inner-workings of the ibrary
-    pub fn set_logger(mut self, log: slog::Logger) {
-        self.log = log;
     }
 
     /// Remove a stored name from repo
@@ -826,8 +837,6 @@ impl Repo {
          -> io::Result<Vec<u8>>
         where I::IntoIter: Send
     {
-
-
         let chunk_bits = match self.chunking {
             ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
         };
@@ -850,8 +859,12 @@ impl Repo {
             let writer_tx = writer_tx.clone();
             let tx = out_tx.clone();
             let repo_dir = repo_dir.clone();
+            let mut bench = PipelinePerf::new("chunk-processing",
+                                              self.log.clone());
             handles.push(thread::spawn(move || loop {
-                let i_sg: result::Result<(usize, SGBuf), _> = rx.recv();
+                let i_sg: result::Result<(usize, SGBuf), _> =
+                    bench.input(|| rx.recv());
+
                 if let Ok((i, sg)) = i_sg {
                     let digest = sg.calculate_digest();
                     let chunk_path = chunk_path_by_digest(&repo_dir,
@@ -859,25 +872,34 @@ impl Repo {
                                                           DataType::Data);
                     if !chunk_path.exists() {
                         let sg = if data_type.should_compress() {
-                            sg.compress()
+                            bench.inside(||
+                                         sg.compress()
+                                        )
                         } else {
                             sg
                         };
                         let sg = if data_type.should_encrypt() {
-                            sg.encrypt(&self_clone.pub_key,
-                                       &digest[0..box_::NONCEBYTES])
+                            bench.inside(||
+                                         sg.encrypt(&self_clone.pub_key,
+                                                    &digest[0..box_::NONCEBYTES]
+                                                    )
+                                        )
                         } else {
                             sg
                         };
+
+                        bench.output(||
                         writer_tx.send(ChunkWriterMessage {
                                 sg: sg,
                                 digest: digest.clone(),
                                 chunk_type: DataType::Data,
                             })
-                            .unwrap();
+                            .unwrap());
                     }
-                    tx.send((i, digest))
-                        .unwrap();
+                    bench.output(||
+                             tx.send((i, digest))
+                             .unwrap()
+                            );
                 } else {
                     return;
                 }
@@ -943,13 +965,14 @@ impl Repo {
                                  name: &str,
                                  reader: R)
                                  -> Result<WriteStats> {
-        info!(self.log, "Writing name"; "name" => name);
+        info!(self.log, "Writing data"; "name" => name);
         let _lock = self.lock_write()?;
 
         let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
             let (writer_tx, writer_rx) =
                 two_lock_queue::channel(4 * self.write_cpu_thread_num());
+
             let writer = scope.spawn(move || self.chunk_writer(writer_rx));
 
             let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
@@ -957,7 +980,15 @@ impl Repo {
 
             let (tx, rx) = mpsc::sync_channel(self.write_cpu_thread_num());
             let _j_in = scope.spawn(move || {
-                (&mut while_ok).map(|buf| tx.send(buf).unwrap()).count();
+                let mut bench = PipelinePerf::new("input-reader",
+                                                  self.log.clone());
+                loop {
+                    if let Some(sg) = bench.input(|| while_ok.next()) {
+                        bench.output(|| tx.send(sg).unwrap())
+                    } else {
+                        break;
+                    }
+                }
             });
 
             let write_data_thread =
@@ -1174,8 +1205,11 @@ impl Repo {
                 // let self_clone = self.clone();
                 let rx = rx.clone();
                 let shared = shared.clone();
+
+                let mut bench = PipelinePerf::new("chunk-writer",
+                                                  self.log.clone());
                 scope.spawn(move || loop {
-                                match rx.recv() {
+                                match bench.input(|| rx.recv()) {
                                     Ok(msg) => {
                         let ChunkWriterMessage { sg, digest, chunk_type } = msg;
                         let path =
@@ -1212,14 +1246,16 @@ impl Repo {
                             .unwrap();
 
                         let mut bytes_written = 0;
-                        for data_part in sg.iter() {
-                            chunk_file.write_all(&data_part).unwrap();
-                            bytes_written += data_part.len() as u64;
-                        }
+                        bench.inside(|| for data_part in sg.iter() {
+                                         chunk_file.write_all(&data_part)
+                                             .unwrap();
+                                         bytes_written += data_part.len() as
+                                                          u64;
+                                     });
 
                         let tmp_path = path.with_extension("tmp");
 
-                        chunk_file.sync_data().unwrap();
+                        bench.output(|| chunk_file.sync_data().unwrap());
                         fs::rename(&tmp_path, &path).unwrap();
 
                         let mut sh = shared.lock().unwrap();
