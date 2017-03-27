@@ -48,7 +48,8 @@ impl Iterator for StoredChunks {
             };
             let entry_path = entry.path();
             let entry_path_str = entry_path.to_string_lossy();
-            trace!(self.log, "`StoredChunks` looking at path"; "path" => %entry_path_str);
+            trace!(self.log, "`StoredChunks` looking at path";
+                   "path" => %entry_path_str);
             if entry_path.is_dir() {
                 match fs::read_dir(&entry_path) {
                     Ok(entries) => self.dirs.push(entries),
@@ -68,7 +69,10 @@ impl Iterator for StoredChunks {
                     // Maybe we should remove this file? It is not a valid chunk
                     // file.
                 }
-                Err(e) => trace!(self.log, "skipping"; "path" => %entry_path_str, "error" => %e),
+                Err(e) => {
+                    trace!(self.log, "skipping";
+                                 "path" => %entry_path_str, "error" => %e)
+                }
             }
         }
         None

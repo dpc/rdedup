@@ -116,8 +116,10 @@ fn wipe(repo: &lib::Repo) {
 
 #[test]
 fn zero_size() {
-    let repo =
-        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+    let repo = lib::Repo::init(&rand_tmp_dir(),
+                               PASS,
+                               ChunkingAlgorithm::default(),
+                               None)
             .unwrap();
 
     let seckey = repo.get_seckey(PASS).unwrap();
@@ -135,8 +137,10 @@ fn zero_size() {
 
 #[test]
 fn byte_size() {
-    let repo =
-        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+    let repo = lib::Repo::init(&rand_tmp_dir(),
+                               PASS,
+                               ChunkingAlgorithm::default(),
+                               None)
             .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let tests = [0u8, 1, 13, 255];
