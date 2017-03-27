@@ -825,11 +825,7 @@ impl Repo {
     }
 
     /// Write a chunk of data to the repo.
-    ///
-    /// * `sg_iter` - is an iterator yielding `SGBuf` - chunks of data to chunk,
-    /// potentially compress and encrypt, then write.
-    ///
-    fn process_write_data<I: IntoIterator<Item = Vec<u8>> + Send>
+    fn process_data_thread<I: IntoIterator<Item = Vec<u8>> + Send>
         (&self,
          input_data_iter: I,
          data_type: DataType,
@@ -837,16 +833,13 @@ impl Repo {
          -> io::Result<Vec<u8>>
         where I::IntoIter: Send
     {
-        let chunk_bits = match self.chunking {
-            ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-        };
 
         let num_threads = num_cpus::get();
 
         // mpmc queue used  as spmc fan-out
         let (in_tx, in_rx) = two_lock_queue::channel(num_threads);
         // standard mpsc used for fan-in
-        let (out_tx, out_rx) = mpsc::sync_channel(num_threads);
+        let (digests_tx, digests_rx) = mpsc::sync_channel(num_threads);
 
 
         let mut handles = Vec::new();
@@ -855,7 +848,7 @@ impl Repo {
             let self_clone = self.clone();
             let rx = in_rx.clone();
             let writer_tx = writer_tx.clone();
-            let tx = out_tx.clone();
+            let tx = digests_tx.clone();
             let repo_dir = repo_dir.clone();
             let mut bench = PipelinePerf::new("chunk-processing",
                                               self.log.clone());
@@ -903,7 +896,7 @@ impl Repo {
                 }
             }));
         }
-        drop(out_tx);
+        drop(digests_tx);
         drop(in_rx);
 
         // TODO: Instead of using collecting whole index and then writing it,
@@ -911,10 +904,14 @@ impl Repo {
         // for back-pressure, to write index at the same time as data.
         // Reuse the processing worker pool.
         let mut digests: Vec<(usize, Vec<u8>)> = crossbeam::scope(|scope| {
-            let j_out = scope.spawn(move || out_rx.iter().collect());
+            let j_out = scope.spawn(move || digests_rx.iter().collect());
             let _j_in = scope.spawn(move || {
 
                 let mut bench = PipelinePerf::new("chunker", self.log.clone());
+
+                let chunk_bits = match self.chunking {
+                    ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+                };
 
                 let chunker = Chunker::new(input_data_iter.into_iter(),
                                            BupEdgeFinder::new(chunk_bits));
@@ -942,11 +939,13 @@ impl Repo {
 
         if digests.len() > 1 {
             let digest =
-                self.process_write_data(Box::new(digests.drain(..)
-                                                     .map(|i_sg| i_sg.1)) as
-                                        Box<Iterator<Item = Vec<u8>> + Send>,
-                                        DataType::Index,
-                                        writer_tx.clone())?;
+                self.process_data_thread(Box::new(digests.drain(..)
+                                                      .map(|i_sg| {
+                                                               i_sg.1
+                                                           })) as
+                                         Box<Iterator<Item = Vec<u8>> + Send>,
+                                         DataType::Index,
+                                         writer_tx.clone())?;
 
             let index_digest = quick_sha256(&digest);
 
@@ -970,47 +969,58 @@ impl Repo {
         num_cpus::get()
     }
 
-    pub fn write<R: Read + Send>(&self,
-                                 name: &str,
-                                 reader: R)
-                                 -> Result<WriteStats> {
+    fn input_reader_thread<R>(&self,
+                              reader: R,
+                              chunker_tx: mpsc::SyncSender<Vec<u8>>)
+        where R: Read + Send
+    {
+        let mut bench = PipelinePerf::new("input-reader", self.log.clone());
+
+        let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
+        let mut while_ok = WhileOk::new(r2vi);
+
+        loop {
+            if let Some(buf) = bench.input(|| while_ok.next()) {
+                bench.output(|| chunker_tx.send(buf).unwrap())
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn write<R>(&self, name: &str, reader: R) -> Result<WriteStats>
+        where R: Read + Send
+    {
         info!(self.log, "Writing data"; "name" => name);
         let _lock = self.lock_write()?;
 
+        let (writer_tx, writer_rx) =
+            two_lock_queue::channel(4 * self.write_cpu_thread_num());
+
+        let (chunker_tx, chunker_rx) =
+            mpsc::sync_channel(self.write_cpu_thread_num());
+
+
         let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
-            let (writer_tx, writer_rx) =
-                two_lock_queue::channel(4 * self.write_cpu_thread_num());
-
-            let (process_tx, process_rx) =
-                mpsc::sync_channel(self.write_cpu_thread_num());
-
-            let writer = scope.spawn(move || self.chunk_writer(writer_rx));
-
-            let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
-            let mut while_ok = WhileOk::new(r2vi);
-
             let _j_in = scope.spawn(move || {
-                let mut bench = PipelinePerf::new("input-reader",
-                                                  self.log.clone());
-                loop {
-                    if let Some(sg) = bench.input(|| while_ok.next()) {
-                        bench.output(|| process_tx.send(sg).unwrap())
-                    } else {
-                        break;
-                    }
-                }
-            });
+                                        self.input_reader_thread(reader,
+                                                                 chunker_tx)
+                                    });
 
             let write_data_thread =
                 scope.spawn({
                                 let writer_tx = writer_tx.clone();
                                 move || {
-                                    self.process_write_data(process_rx,
-                                                            DataType::Data,
-                                                            writer_tx)
+                                    self.process_data_thread(chunker_rx,
+                                                             DataType::Data,
+                                                             writer_tx)
                                 }
                             });
+
+            let writer =
+                scope.spawn(move || self.chunk_writer_thread(writer_rx));
+
             let final_digest = write_data_thread.join();
             drop(writer_tx);
             let writer_stats = writer.join();
@@ -1186,9 +1196,9 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed)
     }
 
-    fn chunk_writer(&self,
-                    rx: two_lock_queue::Receiver<ChunkWriterMessage>)
-                    -> WriteStats {
+    fn chunk_writer_thread(&self,
+                           rx: two_lock_queue::Receiver<ChunkWriterMessage>)
+                           -> WriteStats {
 
         struct Shared {
             write_stats: WriteStats,
