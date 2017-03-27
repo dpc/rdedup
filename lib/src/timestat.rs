@@ -2,7 +2,7 @@ use slog::Logger;
 use std::time;
 
 
-pub fn measure<F, R>(time: &mut time::Duration, f: F) -> R
+fn measure<F, R>(time: &mut time::Duration, f: F) -> R
     where F: FnOnce() -> R
 {
     let start = time::Instant::now();
@@ -16,6 +16,8 @@ pub fn measure<F, R>(time: &mut time::Duration, f: F) -> R
     r
 }
 
+/// Collects total time spent in different
+/// parts of a pipeline (waiting for input, processing, sending output)
 pub struct PipelinePerf {
     input_time: time::Duration,
     output_time: time::Duration,

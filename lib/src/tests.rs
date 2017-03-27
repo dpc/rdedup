@@ -163,8 +163,10 @@ fn byte_size() {
 fn random_sanity() {
     let mut names = vec![];
 
-    let repo =
-        lib::Repo::init(&rand_tmp_dir(), PASS, ChunkingAlgorithm::default())
+    let repo = lib::Repo::init(&rand_tmp_dir(),
+                               PASS,
+                               ChunkingAlgorithm::default(),
+                               None)
             .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     for i in 0..10 {
@@ -231,13 +233,14 @@ fn change_passphrase() {
     {
         let repo = lib::Repo::init(dir_path,
                                    prev_passphrase,
-                                   ChunkingAlgorithm::default())
+                                   ChunkingAlgorithm::default(),
+                                   None)
                 .unwrap();
         repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
     }
 
     for p in &["a", "", "foo", "bar"] {
-        let repo = lib::Repo::open(dir_path).unwrap();
+        let repo = lib::Repo::open(dir_path, None).unwrap();
         let seckey = repo.get_seckey(&prev_passphrase).unwrap();
         repo.change_passphrase(&seckey, p).unwrap();
         prev_passphrase = p;
@@ -245,7 +248,7 @@ fn change_passphrase() {
 
 
     {
-        let repo = lib::Repo::open(dir_path).unwrap();
+        let repo = lib::Repo::open(dir_path, None).unwrap();
         let seckey = repo.get_seckey(&prev_passphrase).unwrap();
         let mut data_after = vec![];
         repo.read("data", &mut data_after, &seckey).unwrap();
@@ -253,15 +256,16 @@ fn change_passphrase() {
         assert_eq!(data_before, data_after);
     }
 
-    let repo = lib::Repo::open(dir_path).unwrap();
+    let repo = lib::Repo::open(dir_path, None).unwrap();
     wipe(&repo);
 }
 
 #[test]
 fn verify_name() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default())
-        .unwrap();
+    let repo =
+        lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default(), None)
+            .unwrap();
     let seckey = repo.get_seckey(PASS).unwrap();
     let data = rand_data(1024);
     {
@@ -306,13 +310,13 @@ fn migration_v0_to_v1() {
     let data_before = rand_data(1024);
 
     {
-        let repo = lib::Repo::init_v0(dir_path, prev_passphrase).unwrap();
+        let repo = lib::Repo::init_v0(dir_path, prev_passphrase, None).unwrap();
         repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
     }
 
     {
         let p = "bar";
-        let repo = lib::Repo::open(dir_path).unwrap();
+        let repo = lib::Repo::open(dir_path, None).unwrap();
         let seckey = repo.get_seckey(&prev_passphrase).unwrap();
         repo.change_passphrase(&seckey, p).unwrap();
         prev_passphrase = p;
@@ -320,7 +324,7 @@ fn migration_v0_to_v1() {
 
 
     {
-        let repo = lib::Repo::open(dir_path).unwrap();
+        let repo = lib::Repo::open(dir_path, None).unwrap();
         let seckey = repo.get_seckey(&prev_passphrase).unwrap();
         let mut data_after = vec![];
         repo.read("data", &mut data_after, &seckey).unwrap();
@@ -328,15 +332,16 @@ fn migration_v0_to_v1() {
         assert_eq!(data_before, data_after);
     }
 
-    let repo = lib::Repo::open(dir_path).unwrap();
+    let repo = lib::Repo::open(dir_path, None).unwrap();
     wipe(&repo);
 }
 
 #[test]
 fn test_stored_chunks_iter() {
     let dir_path = rand_tmp_dir();
-    let repo = lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default())
-        .unwrap();
+    let repo =
+        lib::Repo::init(&dir_path, PASS, ChunkingAlgorithm::default(), None)
+            .unwrap();
     let data = rand_data(1024 * 1024);
 
     repo.write("data", &mut io::Cursor::new(&data)).unwrap();
@@ -388,7 +393,8 @@ fn test_custom_chunking_size() {
         let chunking = ChunkingAlgorithm::Bup { chunk_bits: bits };
         {
 
-            let result = lib::Repo::init(&dir_path, PASS, chunking.clone());
+            let result =
+                lib::Repo::init(&dir_path, PASS, chunking.clone(), None);
             if bits < 10 || bits > 30 {
                 if result.is_err() {
                     continue;
@@ -399,7 +405,7 @@ fn test_custom_chunking_size() {
                 panic!("expected Ok, but got {:}", result.err().unwrap());
             }
         }
-        let repo = lib::Repo::open(&dir_path).unwrap();
+        let repo = lib::Repo::open(&dir_path, None).unwrap();
         assert_eq!(chunking, repo.chunking);
         wipe(&repo);
     }

@@ -29,7 +29,7 @@ use slog::Logger;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
-use std::{fs, thread, io, result};
+use std::{fs, io};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error as StdErrorError;
@@ -543,6 +543,10 @@ pub struct Repo {
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
+type ProcessMsg = ((usize, SGBuf),
+                   mpsc::SyncSender<(usize, Vec<u8>)>,
+                   DataType);
+
 impl Repo {
     fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
         if repo_path.exists() {
@@ -824,128 +828,112 @@ impl Repo {
         Ok(file)
     }
 
+
+    fn process_chunks_thread(
+        &self,
+         process_rx : two_lock_queue::Receiver<ProcessMsg>,
+         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
+){
+
+        let mut bench = PipelinePerf::new("chunk-processing", self.log.clone());
+        loop {
+            let input = bench.input(|| process_rx.recv());
+
+            if let Ok(input) = input {
+                let ((i, sg), digests_tx, data_type) = input;
+
+                let digest = sg.calculate_digest();
+                let chunk_path =
+                    chunk_path_by_digest(&self.path, &digest, DataType::Data);
+                if !chunk_path.exists() {
+                    let sg = if data_type.should_compress() {
+                        bench.inside(|| sg.compress())
+                    } else {
+                        sg
+                    };
+                    let sg = if data_type.should_encrypt() {
+                        bench.inside(|| {
+                                         sg.encrypt(&self.pub_key,
+                                                    &digest[0..
+                                                     box_::NONCEBYTES])
+                                     })
+                    } else {
+                        sg
+                    };
+
+                    bench.output(|| {
+                        writer_tx.send(ChunkWriterMessage {
+                                           sg: sg,
+                                           digest: digest.clone(),
+                                           chunk_type: DataType::Data,
+                                       })
+                            .unwrap()
+                    });
+                }
+                bench.output(|| digests_tx.send((i, digest)).unwrap());
+            } else {
+                return;
+            }
+        }
+    }
     /// Write a chunk of data to the repo.
-    fn process_data_thread<I: IntoIterator<Item = Vec<u8>> + Send>
+    fn chunk_and_write_data_thread<I: IntoIterator<Item = Vec<u8>> + Send>
         (&self,
          input_data_iter: I,
-         data_type: DataType,
-         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>)
+         process_tx: two_lock_queue::Sender<ProcessMsg>,
+         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
+         data_type: DataType)
          -> io::Result<Vec<u8>>
         where I::IntoIter: Send
     {
-
-        let num_threads = num_cpus::get();
-
-        // mpmc queue used  as spmc fan-out
-        let (in_tx, in_rx) = two_lock_queue::channel(num_threads);
-        // standard mpsc used for fan-in
-        let (digests_tx, digests_rx) = mpsc::sync_channel(num_threads);
-
-
-        let mut handles = Vec::new();
-        let repo_dir = Arc::new(self.path.clone());
-        for _ in 0..num_threads {
-            let self_clone = self.clone();
-            let rx = in_rx.clone();
-            let writer_tx = writer_tx.clone();
-            let tx = digests_tx.clone();
-            let repo_dir = repo_dir.clone();
-            let mut bench = PipelinePerf::new("chunk-processing",
-                                              self.log.clone());
-            handles.push(thread::spawn(move || loop {
-                let i_sg: result::Result<(usize, SGBuf), _> =
-                    bench.input(|| rx.recv());
-
-                if let Ok((i, sg)) = i_sg {
-                    let digest = sg.calculate_digest();
-                    let chunk_path = chunk_path_by_digest(&repo_dir,
-                                                          &digest,
-                                                          DataType::Data);
-                    if !chunk_path.exists() {
-                        let sg = if data_type.should_compress() {
-                            bench.inside(||
-                                         sg.compress()
-                                        )
-                        } else {
-                            sg
-                        };
-                        let sg = if data_type.should_encrypt() {
-                            bench.inside(||
-                                         sg.encrypt(&self_clone.pub_key,
-                                                    &digest[0..box_::NONCEBYTES]
-                                                    )
-                                        )
-                        } else {
-                            sg
-                        };
-
-                        bench.output(||
-                        writer_tx.send(ChunkWriterMessage {
-                                sg: sg,
-                                digest: digest.clone(),
-                                chunk_type: DataType::Data,
-                            })
-                            .unwrap());
-                    }
-                    bench.output(||
-                             tx.send((i, digest))
-                             .unwrap()
-                            );
-                } else {
-                    return;
-                }
-            }));
-        }
-        drop(digests_tx);
-        drop(in_rx);
+        let (digests_tx, digests_rx) = mpsc::sync_channel(num_cpus::get());
 
         // TODO: Instead of using collecting whole index and then writing it,
         // use a priority queue on the sender side (with some `condvar`
         // for back-pressure, to write index at the same time as data.
-        // Reuse the processing worker pool.
-        let mut digests: Vec<(usize, Vec<u8>)> = crossbeam::scope(|scope| {
-            let j_out = scope.spawn(move || digests_rx.iter().collect());
-            let _j_in = scope.spawn(move || {
+        let mut digests: Vec<(usize, Vec<u8>)> =
+            crossbeam::scope(|scope| {
+                let process_tx = process_tx.clone();
+                scope.spawn(move || {
 
-                let mut bench = PipelinePerf::new("chunker", self.log.clone());
+                    let mut bench = PipelinePerf::new("chunker", self.log.clone());
 
-                let chunk_bits = match self.chunking {
-                    ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-                };
+                    let chunk_bits = match self.chunking {
+                        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+                    };
 
-                let chunker = Chunker::new(input_data_iter.into_iter(),
-                                           BupEdgeFinder::new(chunk_bits));
+                    let chunker = Chunker::new(input_data_iter.into_iter(),
+                    BupEdgeFinder::new(chunk_bits));
 
-                let mut data = chunker.enumerate();
+                    let mut data = chunker.enumerate();
 
-                loop {
-                    if let Some(i_sg) = bench.input(|| data.next()) {
-                        bench.output(|| in_tx.send(i_sg).unwrap())
-                    } else {
-                        break;
+                    loop {
+                        if let Some(i_sg) = bench.inside(|| data.next()) {
+                            bench.output(|| {
+                                process_tx.send((i_sg, digests_tx.clone(), data_type)).unwrap()
+                            })
+                        } else {
+                            break;
+                        }
                     }
-                }
-                drop(in_tx);
+                    drop(digests_tx);
+                });
+
+                let j_out = scope.spawn(move || digests_rx.iter().collect());
+                j_out.join()
             });
-            j_out.join()
-        });
-
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
 
         digests.sort_by_key(|k| k.0);
 
         if digests.len() > 1 {
             let digest =
-                self.process_data_thread(Box::new(digests.drain(..)
-                                                      .map(|i_sg| {
-                                                               i_sg.1
-                                                           })) as
-                                         Box<Iterator<Item = Vec<u8>> + Send>,
-                                         DataType::Index,
-                                         writer_tx.clone())?;
+                self.chunk_and_write_data_thread(Box::new(digests.drain(..)
+                                                    .map(|i_sg| i_sg.1)) as
+                                       Box<Iterator<Item = Vec<u8>> + Send>,
+                                       process_tx,
+                                       writer_tx.clone(),
+                                       DataType::Index,
+                                       )?;
 
             let index_digest = quick_sha256(&digest);
 
@@ -994,35 +982,46 @@ impl Repo {
         info!(self.log, "Writing data"; "name" => name);
         let _lock = self.lock_write()?;
 
+        let num_threads = num_cpus::get();
         let (writer_tx, writer_rx) =
             two_lock_queue::channel(4 * self.write_cpu_thread_num());
 
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
+        // mpmc queue used  as spmc fan-out
+        let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
+
+
 
         let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
-            let _j_in = scope.spawn(move || {
-                                        self.input_reader_thread(reader,
-                                                                 chunker_tx)
-                                    });
+            scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
 
-            let write_data_thread =
-                scope.spawn({
-                                let writer_tx = writer_tx.clone();
-                                move || {
-                                    self.process_data_thread(chunker_rx,
-                                                             DataType::Data,
-                                                             writer_tx)
-                                }
+
+            for _ in 0..num_threads {
+                let process_rx = process_rx.clone();
+                let writer_tx = writer_tx.clone();
+                scope.spawn(move || {
+                                self.process_chunks_thread(process_rx,
+                                                           writer_tx)
+                            });
+            }
+            drop(process_rx);
+
+            let chunk_and_write =
+                scope.spawn(move || {
+                                self.chunk_and_write_data_thread(chunker_rx,
+                                                                 process_tx,
+                                                                 writer_tx,
+                                                                 DataType::Data)
                             });
 
             let writer =
                 scope.spawn(move || self.chunk_writer_thread(writer_rx));
 
-            let final_digest = write_data_thread.join();
-            drop(writer_tx);
+            let final_digest = chunk_and_write.join();
+
             let writer_stats = writer.join();
             (final_digest, writer_stats)
         });
