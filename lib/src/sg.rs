@@ -170,7 +170,7 @@ impl SGBuf {
         let mut sha = sha2::Sha256::new();
 
         for sg_part in &self.0 {
-            sha.input(&sg_part);
+            sha.input(sg_part);
         }
 
         let mut sha256 = vec![0u8; DIGEST_SIZE];
@@ -186,7 +186,7 @@ impl SGBuf {
                 flate2::Compression::Default);
 
         for sg_part in &self.0 {
-            compressor.write_all(&sg_part).unwrap();
+            compressor.write_all(sg_part).unwrap();
         }
 
         SGBuf::from_single(compressor.finish().unwrap())
@@ -199,7 +199,7 @@ impl SGBuf {
             _ => {
                 let mut v = Vec::with_capacity(self.total_len());
                 for sg_part in &self.0 {
-                    v.write_all(&sg_part).unwrap();
+                    v.write_all(sg_part).unwrap();
                 }
                 ArcRef::new(Arc::new(v)).map(|v| &v[..])
             }
@@ -280,32 +280,27 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
                 } else {
                     if self.cur_buf_i != buf.len() {
                         let aref = ArcRef::new(buf.clone())
-                            .map(|a| &a[self.cur_buf_i..]);
+                                .map(|a| &a[self.cur_buf_i..]);
                         self.cur_sgbuf.push(aref);
                     }
                     self.cur_buf_i = 0;
                     None
                 }
-            } else {
-                if let Some(buf) = self.iter.next() {
-                    self.cur_edge_i = 0;
-                    let edges = self.edge_finder.find_edges(&buf[..]);
-                    Some((Arc::new(buf), edges))
+            } else if let Some(buf) = self.iter.next() {
+                self.cur_edge_i = 0;
+                let edges = self.edge_finder.find_edges(&buf[..]);
+                Some((Arc::new(buf), edges))
+            } else if self.cur_sgbuf.is_empty() {
+                if self.chunks_returned == 0 {
+                    // at least one, zero sized chunk
+                    self.chunks_returned += 1;
+                    return Some(SGBuf::new());
                 } else {
-                    if self.cur_sgbuf.is_empty() {
-                        if self.chunks_returned == 0 {
-                            // at least one, zero sized chunk
-                            self.chunks_returned += 1;
-                            return Some(SGBuf::new());
-                        } else {
-                            return None;
-                        }
-                    } else {
-                        self.chunks_returned += 1;
-                        return Some(mem::replace(&mut self.cur_sgbuf,
-                                                 SGBuf::new()));
-                    }
+                    return None;
                 }
+            } else {
+                self.chunks_returned += 1;
+                return Some(mem::replace(&mut self.cur_sgbuf, SGBuf::new()));
             }
         }
     }

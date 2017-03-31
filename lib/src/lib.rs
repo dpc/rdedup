@@ -262,7 +262,7 @@ impl<'a> ReadContext<'a> {
                              &mut index_data,
                              self.sec_key)?;
 
-        assert!(index_data.len() == DIGEST_SIZE);
+        assert_eq!(index_data.len(), DIGEST_SIZE);
 
         let mut translator = IndexTranslator::new(accessor,
                                                   self.writer.take(),
@@ -571,12 +571,13 @@ impl Repo {
                       -> Result<Repo>
         where L: Into<Option<Logger>>
     {
-        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
 
         let (pk, sk) = box_::gen_keypair();
-        config::write_config_v0(repo_path, pk, sk, passphrase)?;
+        config::write_config_v0(repo_path, pk, &sk, passphrase)?;
 
         let repo = Repo {
             path: repo_path.to_owned(),
@@ -596,7 +597,8 @@ impl Repo {
                    -> Result<Repo>
         where L: Into<Option<Logger>>
     {
-        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
         // Validate ChunkingAlgorithm
         if !chunking.valid() {
             return Err(Error::new(io::ErrorKind::InvalidInput,
@@ -673,7 +675,8 @@ impl Repo {
     pub fn open_v0<L>(repo_path: &Path, log: L) -> Result<Repo>
         where L: Into<Option<Logger>>
     {
-        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("repo not found: {}",
@@ -720,7 +723,8 @@ impl Repo {
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
         where L: Into<Option<Logger>>
     {
-        let log = log.into().unwrap_or(Logger::root(slog::Discard, o!()));
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
         if !repo_path.exists() {
             return Err(Error::new(io::ErrorKind::NotFound,
                                   format!("repo not found: {}",
@@ -855,18 +859,15 @@ impl Repo {
 
                 let mut data = chunker.enumerate();
 
-                loop {
-                    if let Some(i_sg) = bench.inside(|| data.next()) {
-                        bench.output(|| {
-                                         process_tx
-                                             .send((i_sg,
-                                                    digests_tx.clone(),
-                                                    data_type))
-                                             .unwrap()
-                                     })
-                    } else {
-                        break;
-                    }
+
+                while let Some(i_sg) = bench.inside(|| data.next()) {
+                    bench.output(|| {
+                                     process_tx
+                                         .send((i_sg,
+                                                digests_tx.clone(),
+                                                data_type))
+                                         .unwrap()
+                                 })
                 }
                 drop(digests_tx);
             });
@@ -920,12 +921,8 @@ impl Repo {
         let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
         let mut while_ok = WhileOk::new(r2vi);
 
-        loop {
-            if let Some(buf) = bench.input(|| while_ok.next()) {
-                bench.output(|| chunker_tx.send(buf).unwrap())
-            } else {
-                break;
-            }
+        while let Some(buf) = bench.input(|| while_ok.next()) {
+            bench.output(|| chunker_tx.send(buf).unwrap())
         }
     }
 
@@ -1085,7 +1082,7 @@ impl Repo {
             secfile_bytes.split_at(box_::SECRETKEYBYTES + secretbox::MACBYTES);
         let (nonce, rest) = rest.split_at(secretbox::NONCEBYTES);
         let (salt, rest) = rest.split_at(pwhash::SALTBYTES);
-        assert!(rest.len() == 0);
+        assert_eq!(rest.len(), 0);
 
         let salt = pwhash::Salt::from_slice(salt).unwrap();
         let nonce = secretbox::Nonce::from_slice(nonce).unwrap();

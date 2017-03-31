@@ -71,69 +71,61 @@ impl ChunkWriterThread {
     pub fn run(&self) {
         let mut bench = PipelinePerf::new("chunk-writer", self.log.clone());
 
-        loop {
-            match bench.input(|| self.rx.recv()) {
-                Ok(msg) => {
-                    let ChunkWriterMessage {
-                        sg,
-                        digest,
-                        chunk_type,
-                    } = msg;
-                    let path =
-                        self.repo.chunk_path_by_digest(&digest, chunk_type);
+        while let Ok(msg) = bench.input(|| self.rx.recv()) {
+            let ChunkWriterMessage {
+                sg,
+                digest,
+                chunk_type,
+            } = msg;
+            let path = self.repo.chunk_path_by_digest(&digest, chunk_type);
 
-                    // check `in_progress` and add atomically
-                    // if not already there
-                    {
-                        let mut sh = self.shared.inner.lock().unwrap();
+            // check `in_progress` and add atomically
+            // if not already there
+            {
+                let mut sh = self.shared.inner.lock().unwrap();
 
-                        if sh.in_progress.contains(&path) {
-                            continue;
-                        } else {
-                            sh.in_progress.insert(path.clone());
-                        }
-                    }
-
-                    // check if exists on disk
-                    // remove from `in_progress` if it does
-                    if path.exists() {
-                        let mut sh = self.shared.inner.lock().unwrap();
-                        sh.in_progress.remove(&path);
-                        continue;
-                    }
-
-                    // write file to disk
-                    let tmp_path = path.with_extension("tmp");
-                    // Workaround
-                    // https://github.com/rust-lang/rust/issues/33707
-                    let _ = fs::create_dir_all(path.parent().unwrap());
-
-                    fs::create_dir_all(path.parent().unwrap()).unwrap();
-                    let mut chunk_file = fs::File::create(&tmp_path).unwrap();
-
-                    let mut bytes_written = 0;
-                    bench.inside(|| for data_part in sg.iter() {
-                                     chunk_file.write_all(&data_part).unwrap();
-                                     bytes_written += data_part.len() as u64;
-                                 });
-
-                    let tmp_path = path.with_extension("tmp");
-
-                    bench.output(|| chunk_file.sync_data().unwrap());
-                    fs::rename(&tmp_path, &path).unwrap();
-
-                    let mut sh = self.shared.inner.lock().unwrap();
-
-                    sh.in_progress.remove(&path);
-                    sh.write_stats.new_bytes += bytes_written;
-                    sh.write_stats.new_chunks += 1;
-
-                    drop(sh);
-                }
-                Err(_) => {
-                    break;
+                if sh.in_progress.contains(&path) {
+                    continue;
+                } else {
+                    sh.in_progress.insert(path.clone());
                 }
             }
+
+            // check if exists on disk
+            // remove from `in_progress` if it does
+            if path.exists() {
+                let mut sh = self.shared.inner.lock().unwrap();
+                sh.in_progress.remove(&path);
+                continue;
+            }
+
+            // write file to disk
+            let tmp_path = path.with_extension("tmp");
+            // Workaround
+            // https://github.com/rust-lang/rust/issues/33707
+            let _ = fs::create_dir_all(path.parent().unwrap());
+
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let mut chunk_file = fs::File::create(&tmp_path).unwrap();
+
+            let mut bytes_written = 0;
+            bench.inside(|| for data_part in sg.iter() {
+                             chunk_file.write_all(data_part).unwrap();
+                             bytes_written += data_part.len() as u64;
+                         });
+
+            let tmp_path = path.with_extension("tmp");
+
+            bench.output(|| chunk_file.sync_data().unwrap());
+            fs::rename(&tmp_path, &path).unwrap();
+
+            let mut sh = self.shared.inner.lock().unwrap();
+
+            sh.in_progress.remove(&path);
+            sh.write_stats.new_bytes += bytes_written;
+            sh.write_stats.new_chunks += 1;
+
+            drop(sh);
         }
     }
 }

@@ -76,7 +76,7 @@ pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
 
 pub fn write_config_v0(repo_path: &Path,
                        pk: box_::PublicKey,
-                       sk: box_::SecretKey,
+                       sk: &box_::SecretKey,
                        passphrase: &str)
                        -> super::Result<()> {
     {
