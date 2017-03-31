@@ -74,17 +74,18 @@ impl ChunkWriterThread {
         loop {
             match bench.input(|| self.rx.recv()) {
                 Ok(msg) => {
-                    let ChunkWriterMessage { sg, digest, chunk_type } = msg;
+                    let ChunkWriterMessage {
+                        sg,
+                        digest,
+                        chunk_type,
+                    } = msg;
                     let path =
                         self.repo.chunk_path_by_digest(&digest, chunk_type);
 
                     // check `in_progress` and add atomically
                     // if not already there
                     {
-                        let mut sh = self.shared
-                            .inner
-                            .lock()
-                            .unwrap();
+                        let mut sh = self.shared.inner.lock().unwrap();
 
                         if sh.in_progress.contains(&path) {
                             continue;
@@ -96,10 +97,7 @@ impl ChunkWriterThread {
                     // check if exists on disk
                     // remove from `in_progress` if it does
                     if path.exists() {
-                        let mut sh = self.shared
-                            .inner
-                            .lock()
-                            .unwrap();
+                        let mut sh = self.shared.inner.lock().unwrap();
                         sh.in_progress.remove(&path);
                         continue;
                     }
@@ -124,10 +122,7 @@ impl ChunkWriterThread {
                     bench.output(|| chunk_file.sync_data().unwrap());
                     fs::rename(&tmp_path, &path).unwrap();
 
-                    let mut sh = self.shared
-                        .inner
-                        .lock()
-                        .unwrap();
+                    let mut sh = self.shared.inner.lock().unwrap();
 
                     sh.in_progress.remove(&path);
                     sh.write_stats.new_bytes += bytes_written;

@@ -35,10 +35,7 @@ impl Iterator for StoredChunks {
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
         while !self.dirs.is_empty() {
-            let entry = match self.dirs
-                      .last_mut()
-                      .unwrap()
-                      .next() {
+            let entry = match self.dirs.last_mut().unwrap().next() {
                 Some(Ok(entry)) => entry,
                 Some(Err(error)) => return Some(Err(error)),
                 None => {

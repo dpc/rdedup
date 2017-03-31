@@ -187,9 +187,8 @@ impl Options {
             let mut ap = argparse::ArgumentParser::new();
             use argparse::*;
             ap.set_description("rdedup");
-            ap.refer(&mut dir_str).add_option(&["-d", "--dir"],
-                                              Store,
-                                              "destination dir");
+            ap.refer(&mut dir_str)
+                .add_option(&["-d", "--dir"], Store, "destination dir");
             ap.refer(&mut add_newline)
                 .add_option(&["-n", "--add-newline"],
                             StoreTrue,
@@ -202,15 +201,14 @@ impl Options {
                 .add_option(&["--chunk-size"],
                             Store,
                             "chunking size, default: 128k");
-            ap.refer(&mut debug_level).add_option(&["-D", "--debug"],
-                                                  IncrBy(1),
-                                                  "increase debug level");
-            ap.refer(&mut command).add_argument("command",
-                                                Store,
-                                                r#"command to run"#);
-            ap.refer(&mut args).add_argument("arguments",
-                                             List,
-                                             r#"arguments for command"#);
+            ap.refer(&mut debug_level)
+                .add_option(&["-D", "--debug"],
+                            IncrBy(1),
+                            "increase debug level");
+            ap.refer(&mut command)
+                .add_argument("command", Store, r#"command to run"#);
+            ap.refer(&mut args)
+                .add_argument("arguments", List, r#"arguments for command"#);
 
             ap.add_option(&["-V", "--version"],
                           Print(env!("CARGO_PKG_VERSION").to_string()),

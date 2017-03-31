@@ -118,7 +118,8 @@ fn chunk_path_by_digest(repo_dir: &Path,
         DataType::Index => Path::new(config::INDEX_SUBDIR),
     };
 
-    repo_dir.join(i_or_c)
+    repo_dir
+        .join(i_or_c)
         .join(&digest[0..1].to_hex())
         .join(digest[1..2].to_hex())
         .join(&digest.to_hex())
@@ -193,12 +194,14 @@ impl<'a> Write for IndexTranslator<'a> {
             let needs = DIGEST_SIZE - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
-            let &mut IndexTranslator { accessor,
-                                       ref mut digest,
-                                       data_type,
-                                       sec_key,
-                                       ref mut writer,
-                                       .. } = self;
+            let &mut IndexTranslator {
+                         accessor,
+                         ref mut digest,
+                         data_type,
+                         sec_key,
+                         ref mut writer,
+                         ..
+                     } = self;
             if let Some(ref mut writer) = *writer {
                 let mut traverser = ReadContext::new(Some(writer),
                                                      data_type,
@@ -254,10 +257,10 @@ impl<'a> ReadContext<'a> {
         trace!(self.log, "Traversing index"; "digest" => digest.to_hex());
         let mut index_data = vec![];
         accessor.read_chunk_into(digest,
-                                 DataType::Index,
-                                 DataType::Index,
-                                 &mut index_data,
-                                 self.sec_key)?;
+                             DataType::Index,
+                             DataType::Index,
+                             &mut index_data,
+                             self.sec_key)?;
 
         assert!(index_data.len() == DIGEST_SIZE);
 
@@ -435,7 +438,8 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
                        sec_key: Option<&box_::SecretKey>)
                        -> Result<()> {
         self.touch(digest)?;
-        self.raw.read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
+        self.raw
+            .read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
     }
 }
 
@@ -485,15 +489,18 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw.read_chunk_into(digest,
-                                           chunk_type,
-                                           data_type,
-                                           writer,
-                                           sec_key);
+        let res =
+            self.raw
+                .read_chunk_into(digest,
+                                 chunk_type,
+                                 data_type,
+                                 writer,
+                                 sec_key);
 
         if res.is_err() {
-            self.errors.borrow_mut().push((digest.to_owned(),
-                                           res.err().unwrap()));
+            self.errors
+                .borrow_mut()
+                .push((digest.to_owned(), res.err().unwrap()));
         }
         Ok(())
     }
@@ -833,37 +840,40 @@ impl Repo {
         // TODO: Instead of using collecting whole index and then writing it,
         // use a priority queue on the sender side (with some `condvar`
         // for back-pressure, to write index at the same time as data.
-        let mut digests: Vec<(usize, Vec<u8>)> =
-            crossbeam::scope(|scope| {
-                let process_tx = process_tx.clone();
-                scope.spawn(move || {
+        let mut digests: Vec<(usize, Vec<u8>)> = crossbeam::scope(|scope| {
+            let process_tx = process_tx.clone();
+            scope.spawn(move || {
 
-                    let mut bench = PipelinePerf::new("chunker", self.log.clone());
+                let mut bench = PipelinePerf::new("chunker", self.log.clone());
 
-                    let chunk_bits = match self.chunking {
-                        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-                    };
+                let chunk_bits = match self.chunking {
+                    ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+                };
 
-                    let chunker = Chunker::new(input_data_iter.into_iter(),
-                    BupEdgeFinder::new(chunk_bits));
+                let chunker = Chunker::new(input_data_iter.into_iter(),
+                                           BupEdgeFinder::new(chunk_bits));
 
-                    let mut data = chunker.enumerate();
+                let mut data = chunker.enumerate();
 
-                    loop {
-                        if let Some(i_sg) = bench.inside(|| data.next()) {
-                            bench.output(|| {
-                                process_tx.send((i_sg, digests_tx.clone(), data_type)).unwrap()
-                            })
-                        } else {
-                            break;
-                        }
+                loop {
+                    if let Some(i_sg) = bench.inside(|| data.next()) {
+                        bench.output(|| {
+                                         process_tx
+                                             .send((i_sg,
+                                                    digests_tx.clone(),
+                                                    data_type))
+                                             .unwrap()
+                                     })
+                    } else {
+                        break;
                     }
-                    drop(digests_tx);
-                });
-
-                let j_out = scope.spawn(move || digests_rx.iter().collect());
-                j_out.join()
+                }
+                drop(digests_tx);
             });
+
+            let j_out = scope.spawn(move || digests_rx.iter().collect());
+            j_out.join()
+        });
 
         digests.sort_by_key(|k| k.0);
 
@@ -879,11 +889,12 @@ impl Repo {
 
             let index_digest = quick_sha256(&digest);
 
-            writer_tx.send(ChunkWriterMessage {
-                               sg: SGBuf::from_single(digest),
-                               digest: index_digest.clone(),
-                               chunk_type: DataType::Index,
-                           })
+            writer_tx
+                .send(ChunkWriterMessage {
+                          sg: SGBuf::from_single(digest),
+                          digest: index_digest.clone(),
+                          chunk_type: DataType::Index,
+                      })
                 .unwrap();
             Ok(index_digest)
 
@@ -946,7 +957,9 @@ impl Repo {
                 let writer_tx = writer_tx.clone();
                 scope.spawn(move || {
                                 let processor =
-                        ChunkProcessor::new(self.clone(), process_rx, writer_tx);
+                                    ChunkProcessor::new(self.clone(),
+                                                        process_rx,
+                                                        writer_tx);
                                 processor.run();
                             });
             }
@@ -1159,7 +1172,9 @@ impl Repo {
                 let shared = shared.clone();
                 scope.spawn(move || {
                                 let thread =
-                        ChunkWriterThread::new(self.clone(), shared, rx);
+                                    ChunkWriterThread::new(self.clone(),
+                                                           shared,
+                                                           rx);
                                 thread.run();
                             });
             }
@@ -1210,9 +1225,9 @@ impl Repo {
 
         let mut traverser =
             ReadContext::new(None, DataType::Data, None, self.log.clone());
-        traverser.read_recursively(
-            &self.recording_chunk_accessor(reachable_digests),
-            digest)
+        traverser
+            .read_recursively(&self.recording_chunk_accessor(reachable_digests),
+                              digest)
     }
 
     /// List all names

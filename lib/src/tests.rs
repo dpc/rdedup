@@ -98,7 +98,10 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::weak_rng()
+        .gen_iter()
+        .take(len)
+        .collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -236,7 +239,8 @@ fn change_passphrase() {
                                    ChunkingAlgorithm::default(),
                                    None)
                 .unwrap();
-        repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
+        repo.write("data", &mut io::Cursor::new(&data_before))
+            .unwrap();
     }
 
     for p in &["a", "", "foo", "bar"] {
@@ -311,7 +315,8 @@ fn migration_v0_to_v1() {
 
     {
         let repo = lib::Repo::init_v0(dir_path, prev_passphrase, None).unwrap();
-        repo.write("data", &mut io::Cursor::new(&data_before)).unwrap();
+        repo.write("data", &mut io::Cursor::new(&data_before))
+            .unwrap();
     }
 
     {
@@ -363,7 +368,8 @@ fn test_stored_chunks_iter() {
 
     // Add a second name to the repo and compare chunks
     let data2 = rand_data(1024 * 1024);
-    repo.write("data2", &mut io::Cursor::new(&data2)).unwrap();
+    repo.write("data2", &mut io::Cursor::new(&data2))
+        .unwrap();
     let chunks_from_indexes2 = repo.list_reachable_chunks().unwrap();
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
     assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
@@ -371,12 +377,16 @@ fn test_stored_chunks_iter() {
     // Remove the second name and make sure the difference
     repo.rm("data2").unwrap();
     let chunks_from_indexes3 = repo.list_reachable_chunks().unwrap();
-    assert_eq!(chunks_from_indexes3.difference(&chunks_from_indexes).count(),
+    assert_eq!(chunks_from_indexes3
+                   .difference(&chunks_from_indexes)
+                   .count(),
                0);
     // Chunks from iterator should equal the list from both names before the
     // removal
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes2.difference(&chunks_from_iter).count(),
+    assert_eq!(chunks_from_indexes2
+                   .difference(&chunks_from_iter)
+                   .count(),
                0);
 
     repo.gc().unwrap();
