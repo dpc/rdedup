@@ -1,4 +1,4 @@
-use super::{WriteStats, SGBuf, DataType, PipelinePerf, Repo};
+use super::{SGBuf, DataType, PipelinePerf, Repo};
 use slog::Logger;
 use std::collections::HashSet;
 use std::fs;
@@ -7,6 +7,11 @@ use std::path::PathBuf;
 use std::sync::{Mutex, Arc};
 use two_lock_queue;
 
+#[derive(Clone, Debug)]
+pub struct WriteStats {
+    pub new_chunks: usize,
+    pub new_bytes: u64,
+}
 pub struct ChunkWriterMessage {
     pub sg: SGBuf,
     pub digest: Vec<u8>,
@@ -52,15 +57,14 @@ pub struct ChunkWriterThread {
 impl ChunkWriterThread {
     pub fn new(repo: Repo,
                shared: ChunkWriterShared,
-               rx: two_lock_queue::Receiver<ChunkWriterMessage>,
-               log: Logger)
+               rx: two_lock_queue::Receiver<ChunkWriterMessage>)
                -> Self {
 
         ChunkWriterThread {
+            log: repo.log.clone(),
             repo: repo,
             shared: shared,
             rx: rx,
-            log: log,
         }
     }
 

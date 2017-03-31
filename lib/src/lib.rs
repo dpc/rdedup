@@ -54,6 +54,9 @@ use timestat::PipelinePerf;
 mod chunk_writer;
 use chunk_writer::*;
 
+mod chunk_processor;
+use chunk_processor::*;
+
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
 const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
@@ -510,11 +513,6 @@ pub struct DuResults {
     pub chunks: usize,
     pub bytes: u64,
 }
-#[derive(Clone, Debug)]
-pub struct WriteStats {
-    pub new_chunks: usize,
-    pub new_bytes: u64,
-}
 
 
 /// Rdedup repository
@@ -537,10 +535,6 @@ pub struct Repo {
 
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
-
-type ProcessMsg = ((usize, SGBuf),
-                   mpsc::SyncSender<(usize, Vec<u8>)>,
-                   DataType);
 
 impl Repo {
     fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
@@ -824,58 +818,11 @@ impl Repo {
     }
 
 
-    fn process_chunks_thread(
-        &self,
-         process_rx : two_lock_queue::Receiver<ProcessMsg>,
-         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
-){
-
-        let mut bench = PipelinePerf::new("chunk-processing", self.log.clone());
-        loop {
-            let input = bench.input(|| process_rx.recv());
-
-            if let Ok(input) = input {
-                let ((i, sg), digests_tx, data_type) = input;
-
-                let digest = sg.calculate_digest();
-                let chunk_path =
-                    chunk_path_by_digest(&self.path, &digest, DataType::Data);
-                if !chunk_path.exists() {
-                    let sg = if data_type.should_compress() {
-                        bench.inside(|| sg.compress())
-                    } else {
-                        sg
-                    };
-                    let sg = if data_type.should_encrypt() {
-                        bench.inside(|| {
-                                         sg.encrypt(&self.pub_key,
-                                                    &digest[0..
-                                                     box_::NONCEBYTES])
-                                     })
-                    } else {
-                        sg
-                    };
-
-                    bench.output(|| {
-                        writer_tx.send(ChunkWriterMessage {
-                                           sg: sg,
-                                           digest: digest.clone(),
-                                           chunk_type: DataType::Data,
-                                       })
-                            .unwrap()
-                    });
-                }
-                bench.output(|| digests_tx.send((i, digest)).unwrap());
-            } else {
-                return;
-            }
-        }
-    }
     /// Write a chunk of data to the repo.
     fn chunk_and_write_data_thread<I: IntoIterator<Item = Vec<u8>> + Send>
         (&self,
          input_data_iter: I,
-         process_tx: two_lock_queue::Sender<ProcessMsg>,
+         process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
          writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
          data_type: DataType)
          -> io::Result<Vec<u8>>
@@ -998,8 +945,9 @@ impl Repo {
                 let process_rx = process_rx.clone();
                 let writer_tx = writer_tx.clone();
                 scope.spawn(move || {
-                                self.process_chunks_thread(process_rx,
-                                                           writer_tx)
+                                let processor =
+                        ChunkProcessor::new(self.clone(), process_rx, writer_tx);
+                                processor.run();
                             });
             }
             drop(process_rx);
@@ -1210,12 +1158,10 @@ impl Repo {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 scope.spawn(move || {
-                    let thread = ChunkWriterThread::new(self.clone(),
-                                                        shared,
-                                                        rx,
-                                                        self.log.clone());
-                    thread.run();
-                });
+                                let thread =
+                        ChunkWriterThread::new(self.clone(), shared, rx);
+                                thread.run();
+                            });
             }
             drop(rx);
         });
