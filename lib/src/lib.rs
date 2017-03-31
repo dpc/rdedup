@@ -36,7 +36,6 @@ use std::error::Error as StdErrorError;
 use std::io::{BufRead, Read, Write, Result, Error};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use std::sync::mpsc;
 
@@ -51,6 +50,9 @@ use sg::*;
 
 mod timestat;
 use timestat::PipelinePerf;
+
+mod chunk_writer;
+use chunk_writer::*;
 
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
@@ -72,13 +74,6 @@ impl DataType {
     fn should_encrypt(&self) -> bool {
         *self == DataType::Data
     }
-}
-
-
-struct ChunkWriterMessage {
-    sg: SGBuf,
-    digest: Vec<u8>,
-    chunk_type: DataType,
 }
 
 /// Convenient function to calculate sha256 for one continuous data block
@@ -1199,18 +1194,7 @@ impl Repo {
                            rx: two_lock_queue::Receiver<ChunkWriterMessage>)
                            -> WriteStats {
 
-        struct Shared {
-            write_stats: WriteStats,
-            in_progress: HashSet<PathBuf>,
-        }
-
-        let shared = Arc::new(Mutex::new(Shared {
-                                             write_stats: WriteStats {
-                                                 new_bytes: 0,
-                                                 new_chunks: 0,
-                                             },
-                                             in_progress: Default::default(),
-                                         }));
+        let shared = ChunkWriterShared::new();
 
         crossbeam::scope(|scope| {
             // Unlike CPU-intense workload, it's hard to come up with one
@@ -1225,79 +1209,19 @@ impl Repo {
                 // let self_clone = self.clone();
                 let rx = rx.clone();
                 let shared = shared.clone();
-
-                let mut bench = PipelinePerf::new("chunk-writer",
-                                                  self.log.clone());
-                scope.spawn(move || loop {
-                                match bench.input(|| rx.recv()) {
-                                    Ok(msg) => {
-                        let ChunkWriterMessage { sg, digest, chunk_type } = msg;
-                        let path =
-                            self.chunk_path_by_digest(&digest, chunk_type);
-
-                        // check `in_progress` and add atomically
-                        // if not already there
-                        {
-                            let mut sh = shared.lock().unwrap();
-
-                            if sh.in_progress.contains(&path) {
-                                continue;
-                            } else {
-                                sh.in_progress.insert(path.clone());
-                            }
-                        }
-
-                        // check if exists on disk
-                        // remove from `in_progress` if it does
-                        if path.exists() {
-                            let mut sh = shared.lock().unwrap();
-                            sh.in_progress.remove(&path);
-                            continue;
-                        }
-
-                        // write file to disk
-                        let tmp_path = path.with_extension("tmp");
-                        // Workaround
-                        // https://github.com/rust-lang/rust/issues/33707
-                        let _ = fs::create_dir_all(path.parent().unwrap());
-
-                        fs::create_dir_all(path.parent().unwrap()).unwrap();
-                        let mut chunk_file = fs::File::create(&tmp_path)
-                            .unwrap();
-
-                        let mut bytes_written = 0;
-                        bench.inside(|| for data_part in sg.iter() {
-                                         chunk_file.write_all(&data_part)
-                                             .unwrap();
-                                         bytes_written += data_part.len() as
-                                                          u64;
-                                     });
-
-                        let tmp_path = path.with_extension("tmp");
-
-                        bench.output(|| chunk_file.sync_data().unwrap());
-                        fs::rename(&tmp_path, &path).unwrap();
-
-                        let mut sh = shared.lock().unwrap();
-
-                        sh.in_progress.remove(&path);
-                        sh.write_stats.new_bytes += bytes_written;
-                        sh.write_stats.new_chunks += 1;
-
-                        drop(sh);
-                    }
-                                    Err(_) => {
-                        break;
-                    }
-                                }
-                            });
+                scope.spawn(move || {
+                    let thread = ChunkWriterThread::new(self.clone(),
+                                                        shared,
+                                                        rx,
+                                                        self.log.clone());
+                    thread.run();
+                });
             }
             drop(rx);
         });
 
-        let sh = shared.lock().unwrap();
 
-        sh.write_stats.clone()
+        shared.get_stats()
     }
 
     fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
