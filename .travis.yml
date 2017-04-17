@@ -6,7 +6,7 @@ rust:
   - nightly
 script:
   - export PATH=$PATH:~/.cargo/bin
-  - ./scripts/check-fmt.sh
+# - disabled unti fmt stabilized: ./scripts/check-fmt.sh
   - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
   - make all
   - make travistest
