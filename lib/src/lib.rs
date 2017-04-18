@@ -890,12 +890,13 @@ impl Repo {
             if let Some(second_digest) = digests_rx.next() {
                 let mut two_first = vec![first_digest, second_digest];
                 let digest =
-                    self.chunk_and_write_data_thread(Box::new(two_first.drain(..).chain(digests_rx)
-                                                              .map(|i_sg| i_sg)),
-                                                     process_tx,
-                                                     writer_tx.clone(),
-                                                     DataType::Index,
-                                                     )?;
+                    self.chunk_and_write_data_thread(
+                        Box::new(two_first.drain(..).chain(digests_rx)
+                                 .map(|i_sg| i_sg)),
+                                 process_tx,
+                                 writer_tx.clone(),
+                                 DataType::Index,
+                                 )?;
 
                 let index_digest = quick_sha256(&digest);
 
@@ -973,10 +974,11 @@ impl Repo {
 
             let chunk_and_write =
                 scope.spawn(move || {
-                                self.chunk_and_write_data_thread(Box::new(chunker_rx.into_iter()),
-                                                                 process_tx,
-                                                                 writer_tx,
-                                                                 DataType::Data)
+                                self.chunk_and_write_data_thread(
+                                    Box::new(chunker_rx.into_iter()),
+                                    process_tx,
+                                    writer_tx,
+                                    DataType::Data)
                             });
 
             let writer =
