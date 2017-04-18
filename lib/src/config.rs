@@ -85,7 +85,8 @@ pub fn write_config_v0(repo_path: &Path,
         let mut pubkey_file = fs::File::create(pubkey_path)?;
 
 
-        (&mut pubkey_file as &mut Write).write_all(pk.0.to_hex().as_bytes())?;
+        (&mut pubkey_file as &mut Write)
+            .write_all(pk.0.to_hex().as_bytes())?;
         pubkey_file.flush()?;
     }
     {
@@ -139,7 +140,8 @@ pub fn write_config_v1(repo_path: &Path,
     let mut config_file = fs::File::create(&config_path_tmp)?;
 
 
-    (&mut config_file as &mut Write).write_all(config_str.as_bytes())?;
+    (&mut config_file as &mut Write)
+        .write_all(config_str.as_bytes())?;
     config_file.flush()?;
     config_file.sync_data()?;
 

@@ -175,6 +175,7 @@ struct Options {
 impl Options {
     fn new() -> Self {
         let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_default();
+        println!("{}", dir_str);
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
@@ -219,6 +220,7 @@ impl Options {
 
             ap.print_help("rdedup", &mut usage).unwrap();
         }
+        println!("{}", dir_str);
 
         Options {
             dir_str: dir_str,

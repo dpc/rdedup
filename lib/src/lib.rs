@@ -57,6 +57,9 @@ use chunk_writer::*;
 mod chunk_processor;
 use chunk_processor::*;
 
+mod sorting_recv;
+use sorting_recv::SortingIterator;
+
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
 const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
@@ -256,7 +259,8 @@ impl<'a> ReadContext<'a> {
                 -> Result<()> {
         trace!(self.log, "Traversing index"; "digest" => digest.to_hex());
         let mut index_data = vec![];
-        accessor.read_chunk_into(digest,
+        accessor
+            .read_chunk_into(digest,
                              DataType::Index,
                              DataType::Index,
                              &mut index_data,
@@ -631,7 +635,8 @@ impl Repo {
         let mut reader = io::BufReader::new(&mut file);
         let mut version = String::new();
         reader.read_line(&mut version)?;
-        let version_int = version.parse::<u32>()
+        let version_int = version
+            .parse::<u32>()
             .map_err(|_| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         format!("can't parse version file; \
@@ -697,11 +702,13 @@ impl Repo {
         let mut buf = vec![];
         file.read_to_end(&mut buf)?;
 
-        let pubkey_str = std::str::from_utf8(&buf).map_err(|_| {
+        let pubkey_str = std::str::from_utf8(&buf)
+            .map_err(|_| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         "pubkey data invalid: not utf8")
                      })?;
-        let pubkey_bytes = pubkey_str.from_hex()
+        let pubkey_bytes = pubkey_str
+            .from_hex()
             .map_err(|_| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         "pubkey data invalid: not hex")
@@ -738,7 +745,8 @@ impl Repo {
         }
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
-        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+        let config: config::Repo = serde_yaml::from_reader(file)
+            .map_err(|e| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         format!("couldn't parse yaml: {}",
                                                 e.to_string()))
@@ -830,79 +838,80 @@ impl Repo {
 
 
     /// Write a chunk of data to the repo.
-    fn chunk_and_write_data_thread<I: IntoIterator<Item = Vec<u8>> + Send>
-        (&self,
-         input_data_iter: I,
+    fn chunk_and_write_data_thread<'a>
+        (&'a self,
+         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
          process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
          writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
          data_type: DataType)
          -> io::Result<Vec<u8>>
-        where I::IntoIter: Send
     {
         let (digests_tx, digests_rx) = mpsc::sync_channel(num_cpus::get());
 
         // TODO: Instead of using collecting whole index and then writing it,
         // use a priority queue on the sender side (with some `condvar`
         // for back-pressure, to write index at the same time as data.
-        let mut digests: Vec<(usize, Vec<u8>)> = crossbeam::scope(|scope| {
-            let process_tx = process_tx.clone();
-            scope.spawn(move || {
+        crossbeam::scope(|scope| {
+            scope.spawn({
+                            let process_tx = process_tx.clone();
+                            move || {
 
-                let mut bench = PipelinePerf::new("chunker", self.log.clone());
+                    let mut bench = PipelinePerf::new("chunker",
+                                                      self.log.clone());
 
-                let chunk_bits = match self.chunking {
-                    ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
-                };
+                    let chunk_bits = match self.chunking {
+                        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+                    };
 
-                let chunker = Chunker::new(input_data_iter.into_iter(),
-                                           BupEdgeFinder::new(chunk_bits));
+                    let chunker = Chunker::new(input_data_iter.into_iter(),
+                                               BupEdgeFinder::new(chunk_bits));
 
-                let mut data = chunker.enumerate();
+                    let mut data = chunker.enumerate();
 
 
-                while let Some(i_sg) = bench.inside(|| data.next()) {
-                    bench.output(|| {
-                                     process_tx
-                                         .send((i_sg,
-                                                digests_tx.clone(),
-                                                data_type))
-                                         .unwrap()
-                                 })
+                    while let Some(i_sg) = bench.inside(|| data.next()) {
+                        bench.output(|| {
+                                         process_tx
+                                             .send((i_sg,
+                                                    digests_tx.clone(),
+                                                    data_type))
+                                             .expect("process_tx.send(...)")
+                                     })
+                    }
+                    drop(digests_tx);
                 }
-                drop(digests_tx);
-            });
+                        });
 
-            let j_out = scope.spawn(move || digests_rx.iter().collect());
-            j_out.join()
-        });
+            let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
 
-        digests.sort_by_key(|k| k.0);
+            let first_digest =
+                digests_rx.next().expect("At least one index digest");
 
-        if digests.len() > 1 {
-            let digest =
-                self.chunk_and_write_data_thread(Box::new(digests.drain(..)
-                                                    .map(|i_sg| i_sg.1)) as
-                                       Box<Iterator<Item = Vec<u8>> + Send>,
-                                       process_tx,
-                                       writer_tx.clone(),
-                                       DataType::Index,
-                                       )?;
+            if let Some(second_digest) = digests_rx.next() {
+                let mut two_first = vec![first_digest, second_digest];
+                let digest =
+                    self.chunk_and_write_data_thread(Box::new(two_first.drain(..).chain(digests_rx)
+                                                              .map(|i_sg| i_sg)),
+                                                     process_tx,
+                                                     writer_tx.clone(),
+                                                     DataType::Index,
+                                                     )?;
 
-            let index_digest = quick_sha256(&digest);
+                let index_digest = quick_sha256(&digest);
 
-            writer_tx
-                .send(ChunkWriterMessage {
-                          sg: SGBuf::from_single(digest),
-                          digest: index_digest.clone(),
-                          chunk_type: DataType::Index,
-                      })
-                .unwrap();
-            Ok(index_digest)
+                writer_tx
+                    .send(ChunkWriterMessage {
+                              sg: SGBuf::from_single(digest),
+                              digest: index_digest.clone(),
+                              chunk_type: DataType::Index,
+                          })
+                    .expect("writer_tx.send(...)");
+                Ok(index_digest)
 
-        } else {
-            Ok(digests[0].1.clone())
-        }
-
+            } else {
+                Ok(first_digest)
+            }
+        })
     }
 
     /// Number of threads to use to parallelize CPU-intense part of
@@ -964,7 +973,7 @@ impl Repo {
 
             let chunk_and_write =
                 scope.spawn(move || {
-                                self.chunk_and_write_data_thread(chunker_rx,
+                                self.chunk_and_write_data_thread(Box::new(chunker_rx.into_iter()),
                                                                  process_tx,
                                                                  writer_tx,
                                                                  DataType::Data)
@@ -1047,7 +1056,8 @@ impl Repo {
         let mut buf = vec![];
         file.read_to_end(&mut buf)?;
 
-        let str_ = std::str::from_utf8(&buf).map_err(|_| {
+        let str_ = std::str::from_utf8(&buf)
+            .map_err(|_| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         "seckey data invalid: not utf8")
                      })?;
@@ -1106,7 +1116,8 @@ impl Repo {
     fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
 
         let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
-        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+        let config: config::Repo = serde_yaml::from_reader(file)
+            .map_err(|e| {
                          io::Error::new(io::ErrorKind::InvalidData,
                                         format!("couldn't parse yaml: {}",
                                                 e.to_string()))

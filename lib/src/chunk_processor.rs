@@ -67,10 +67,14 @@ impl ChunkProcessor {
                                       digest: digest.clone(),
                                       chunk_type: DataType::Data,
                                   })
-                            .unwrap()
+                            .expect("chunk_processor: tx.send")
                     });
                 }
-                bench.output(|| digests_tx.send((i, digest)).unwrap());
+                bench.output(|| {
+                                 digests_tx
+                                     .send((i, digest))
+                                     .expect("chunk_processor: digests_tx.send")
+                             });
             } else {
                 return;
             }
