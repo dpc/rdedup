@@ -25,10 +25,6 @@ deduplicated and encrypted backups.
 and it works well and noone reported any problems. I would really appreciate feedback
 from people using `rdedup`.
 
-I consider `rdedup` feature-complete for my needs. That means: I will accept patches
-with fixes and new features, but I don't actively add new ones myself. I'm open for
-sharing or handing over it's development. Feel free to contact me.
-
 ### My use case
 
 I use [rdup][rdup] to create backup archive, and [syncthing][syncthing] to
