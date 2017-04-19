@@ -1,5 +1,6 @@
-use super::{SGBuf, DataType, PipelinePerf, Repo};
+use super::{SGBuf, DataType, Repo};
 use slog::Logger;
+use slog_perf::TimeReporter;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -69,9 +70,13 @@ impl ChunkWriterThread {
     }
 
     pub fn run(&self) {
-        let mut bench = PipelinePerf::new("chunk-writer", self.log.clone());
+        let mut t = TimeReporter::new("chunk-writer", self.log.clone());
 
-        while let Ok(msg) = bench.input(|| self.rx.recv()) {
+
+        while let Ok(msg) = t.start_with("rx", || self.rx.recv()) {
+
+            t.start("processing");
+
             let ChunkWriterMessage {
                 sg,
                 digest,
@@ -100,6 +105,8 @@ impl ChunkWriterThread {
             }
 
             // write file to disk
+            t.start("write");
+
             let tmp_path = path.with_extension("tmp");
             // Workaround
             // https://github.com/rust-lang/rust/issues/33707
@@ -109,16 +116,20 @@ impl ChunkWriterThread {
             let mut chunk_file = fs::File::create(&tmp_path).unwrap();
 
             let mut bytes_written = 0;
-            bench.inside(|| for data_part in sg.iter() {
-                             chunk_file.write_all(data_part).unwrap();
-                             bytes_written += data_part.len() as u64;
-                         });
+            for data_part in sg.iter() {
+                chunk_file.write_all(data_part).unwrap();
+                bytes_written += data_part.len() as u64;
+            }
+
 
             let tmp_path = path.with_extension("tmp");
 
-            bench.output(|| chunk_file.sync_data().unwrap());
+            t.start("fsync");
+
+            chunk_file.sync_data().unwrap();
             fs::rename(&tmp_path, &path).unwrap();
 
+            t.start("processing");
             let mut sh = self.shared.inner.lock().unwrap();
 
             sh.in_progress.remove(&path);

@@ -1,10 +1,10 @@
-use super::{SGBuf, DataType, PipelinePerf, Repo};
+use super::{SGBuf, DataType, Repo};
 use super::chunk_writer::*;
 use slog::Logger;
+use slog_perf::TimeReporter;
 use sodiumoxide::crypto::box_;
 use std::sync::mpsc;
 use two_lock_queue;
-
 
 // TODO: Make a struct
 pub type ChunkProcessorMessage = ((usize, SGBuf),
@@ -33,12 +33,14 @@ impl ChunkProcessor {
     }
 
     pub fn run(&self) {
-        let mut bench = PipelinePerf::new("chunk-processing", self.log.clone());
+        let mut timer = TimeReporter::new("chunk-processing", self.log.clone());
 
         loop {
-            let input = bench.input(|| self.rx.recv());
+            timer.start("rx");
 
-            if let Ok(input) = input {
+            if let Ok(input) = self.rx.recv() {
+                timer.start("processing");
+
                 let ((i, sg), digests_tx, data_type) = input;
 
                 let digest = sg.calculate_digest();
@@ -46,35 +48,32 @@ impl ChunkProcessor {
                     self.repo.chunk_path_by_digest(&digest, DataType::Data);
                 if !chunk_path.exists() {
                     let sg = if data_type.should_compress() {
-                        bench.inside(|| sg.compress())
+                        timer.start("compress");
+                        sg.compress()
                     } else {
                         sg
                     };
                     let sg = if data_type.should_encrypt() {
-                        bench.inside(|| {
-                                         sg.encrypt(&self.repo.pub_key,
-                                                    &digest[0..
-                                                     box_::NONCEBYTES])
-                                     })
+                        timer.start("encrypt");
+                        sg.encrypt(&self.repo.pub_key,
+                                   &digest[0..box_::NONCEBYTES])
                     } else {
                         sg
                     };
 
-                    bench.output(|| {
-                        self.tx
-                            .send(ChunkWriterMessage {
-                                      sg: sg,
-                                      digest: digest.clone(),
-                                      chunk_type: DataType::Data,
-                                  })
-                            .expect("chunk_processor: tx.send")
-                    });
+                    timer.start("tx-writer");
+                    self.tx
+                        .send(ChunkWriterMessage {
+                                  sg: sg,
+                                  digest: digest.clone(),
+                                  chunk_type: DataType::Data,
+                              })
+                        .expect("chunk_processor: tx.send");
                 }
-                bench.output(|| {
-                                 digests_tx
-                                     .send((i, digest))
-                                     .expect("chunk_processor: digests_tx.send")
-                             });
+                timer.start("tx-digest");
+                digests_tx
+                    .send((i, digest))
+                    .expect("chunk_processor: digests_tx.send")
             } else {
                 return;
             }

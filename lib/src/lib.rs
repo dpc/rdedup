@@ -18,6 +18,7 @@ extern crate num_cpus;
 extern crate crossbeam;
 #[macro_use]
 extern crate slog;
+extern crate slog_perf;
 
 
 use crypto::digest::Digest;
@@ -26,6 +27,7 @@ use fs2::FileExt;
 
 use serialize::hex::{ToHex, FromHex};
 use slog::Logger;
+use slog_perf::TimeReporter;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
@@ -47,9 +49,6 @@ use config::ChunkingAlgorithm;
 
 mod sg;
 use sg::*;
-
-mod timestat;
-use timestat::PipelinePerf;
 
 mod chunk_writer;
 use chunk_writer::*;
@@ -856,8 +855,9 @@ impl Repo {
                             let process_tx = process_tx.clone();
                             move || {
 
-                    let mut bench = PipelinePerf::new("chunker",
-                                                      self.log.clone());
+                    let mut timer =
+                        slog_perf::TimeReporter::new("chunker",
+                                                     self.log.clone());
 
                     let chunk_bits = match self.chunking {
                         ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
@@ -869,14 +869,12 @@ impl Repo {
                     let mut data = chunker.enumerate();
 
 
-                    while let Some(i_sg) = bench.inside(|| data.next()) {
-                        bench.output(|| {
-                                         process_tx
-                                             .send((i_sg,
-                                                    digests_tx.clone(),
-                                                    data_type))
-                                             .expect("process_tx.send(...)")
-                                     })
+                    while let Some(i_sg) =
+                        timer.start_with("rx-and-chunking", || data.next()) {
+                        timer.start("tx");
+                        process_tx
+                            .send((i_sg, digests_tx.clone(), data_type))
+                            .expect("process_tx.send(...)")
                     }
                     drop(digests_tx);
                 }
@@ -926,13 +924,14 @@ impl Repo {
                               chunker_tx: mpsc::SyncSender<Vec<u8>>)
         where R: Read + Send
     {
-        let mut bench = PipelinePerf::new("input-reader", self.log.clone());
+        let mut time = TimeReporter::new("input-reader", self.log.clone());
 
         let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
         let mut while_ok = WhileOk::new(r2vi);
 
-        while let Some(buf) = bench.input(|| while_ok.next()) {
-            bench.output(|| chunker_tx.send(buf).unwrap())
+        while let Some(buf) = time.start_with("input", || while_ok.next()) {
+            time.start("tx");
+            chunker_tx.send(buf).unwrap()
         }
     }
 
