@@ -3,8 +3,7 @@ mod lib {
 }
 
 use config::ChunkingAlgorithm;
-use crypto::digest::Digest;
-use crypto::sha2;
+use sha2::{Sha256, Digest};
 use iterators::StoredChunks;
 use rand::{self, Rng};
 use serialize::hex::ToHex;
@@ -49,7 +48,7 @@ struct ExampleDataGen {
     b: Vec<u8>,
     c: Vec<u8>,
     count: usize,
-    sha: sha2::Sha256,
+    sha: Sha256,
 }
 
 impl ExampleDataGen {
@@ -60,14 +59,14 @@ impl ExampleDataGen {
             b: rand_data(1024 * 2),
             c: rand_data(1024 * 2),
             count: kb,
-            sha: sha2::Sha256::new(),
+            sha: Sha256::default(),
         }
     }
 
-    fn finish(&mut self) -> Vec<u8> {
-        let mut digest = vec![0u8; 32];
-        self.sha.result(&mut digest);
-        digest
+    fn finish(self) -> Vec<u8> {
+        let mut vec_result = vec![0u8; DIGEST_SIZE];
+        vec_result.copy_from_slice(&self.sha.result());
+        vec_result
     }
 }
 
@@ -186,10 +185,10 @@ fn random_sanity() {
         let mut data = vec![];
         repo.read(&name, &mut data, &seckey).unwrap();
 
-        let mut sha = sha2::Sha256::new();
+        let mut sha = Sha256::default();
         sha.input(&data);
-        let mut read_digest = vec![0u8; 32];
-        sha.result(&mut read_digest);
+        let mut read_digest = vec![0u8; DIGEST_SIZE];
+        read_digest.copy_from_slice(&sha.result());
         assert_eq!(digest, &read_digest);
     }
 
@@ -198,10 +197,10 @@ fn random_sanity() {
             let mut data = vec![];
             repo.read(&name, &mut data, &seckey).unwrap();
 
-            let mut sha = sha2::Sha256::new();
+            let mut sha = Sha256::default();
             sha.input(&data);
-            let mut read_digest = vec![0u8; 32];
-            sha.result(&mut read_digest);
+            let mut read_digest = vec![0u8; DIGEST_SIZE];
+            read_digest.copy_from_slice(&sha.result());
             assert_eq!(&digest, &read_digest);
         }
 
