@@ -3,11 +3,10 @@
 
 use DIGEST_SIZE;
 use DataType;
-use crypto::digest::Digest;
+use sha2::{Sha256, Digest};
 use flate2;
 use owning_ref::ArcRef;
 use rollsum;
-use sha2;
 use sodiumoxide::crypto::box_;
 use std::{io, mem};
 use std::io::Write;
@@ -167,16 +166,16 @@ impl SGBuf {
 
     /// Calculate digest
     pub fn calculate_digest(&self) -> Vec<u8> {
-        let mut sha = sha2::Sha256::new();
+        let mut sha256 = Sha256::default();
 
         for sg_part in &self.0 {
-            sha.input(sg_part);
+            sha256.input(sg_part);
         }
 
-        let mut sha256 = vec![0u8; DIGEST_SIZE];
-        sha.result(&mut sha256);
+        let mut vec_result = vec![0u8; DIGEST_SIZE];
+        vec_result.copy_from_slice(&sha256.result());
 
-        sha256
+        vec_result
     }
 
     pub fn compress(&self) -> SGBuf {

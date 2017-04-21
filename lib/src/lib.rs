@@ -1,5 +1,5 @@
 extern crate rollsum;
-extern crate crypto;
+extern crate sha2;
 extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate sodiumoxide;
@@ -20,9 +20,7 @@ extern crate crossbeam;
 extern crate slog;
 extern crate slog_perf;
 
-
-use crypto::digest::Digest;
-use crypto::sha2;
+use sha2::{Sha256, Digest};
 use fs2::FileExt;
 
 use serialize::hex::{ToHex, FromHex};
@@ -84,12 +82,12 @@ impl DataType {
 /// Convenient function to calculate sha256 for one continuous data block
 fn quick_sha256(data: &[u8]) -> Vec<u8> {
 
-    let mut sha256 = sha2::Sha256::new();
+    let mut sha256 = Sha256::default();
     sha256.input(data);
-    let mut sha256_digest = vec![0u8; DIGEST_SIZE];
-    sha256.result(&mut sha256_digest);
+    let mut vec_result = vec![0u8; DIGEST_SIZE];
+    vec_result.copy_from_slice(&sha256.result());
 
-    sha256_digest
+    vec_result
 }
 
 /// Derive secret key from passphrase and salt
@@ -389,15 +387,16 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             data
         };
 
-        let mut sha256 = sha2::Sha256::new();
+        let mut sha256 = Sha256::default();
         sha256.input(&data);
-        let mut sha256_digest = vec![0u8; DIGEST_SIZE];
-        sha256.result(&mut sha256_digest);
-        if sha256_digest != digest {
+        let mut vec_result = vec![0u8; DIGEST_SIZE];
+        vec_result.copy_from_slice(&sha256.result());
+
+        if vec_result != digest {
             Err(io::Error::new(io::ErrorKind::InvalidData,
                                format!("{} corrupted, data read: {}",
                                        digest.to_hex(),
-                                       sha256_digest.to_hex())))
+                                       vec_result.to_hex())))
         } else {
             io::copy(&mut io::Cursor::new(data), writer)?;
             Ok(())
