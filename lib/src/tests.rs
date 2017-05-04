@@ -3,10 +3,10 @@ mod lib {
 }
 
 use config::ChunkingAlgorithm;
-use sha2::{Sha256, Digest};
+use hex::ToHex;
 use iterators::StoredChunks;
 use rand::{self, Rng};
-use serialize::hex::ToHex;
+use sha2::{Sha256, Digest};
 
 use std::{io, cmp};
 

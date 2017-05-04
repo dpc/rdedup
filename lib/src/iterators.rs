@@ -1,4 +1,4 @@
-use serialize::hex::FromHex;
+use hex::FromHex;
 
 use slog::Logger;
 

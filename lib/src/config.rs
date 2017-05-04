@@ -2,8 +2,8 @@
 
 
 use {base64, serde_yaml};
+use hex::ToHex;
 use serde::{self, Deserialize};
-use serialize::hex::ToHex;
 
 use sodiumoxide::crypto::{pwhash, secretbox, box_};
 use std::{io, fs};

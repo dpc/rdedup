@@ -3,10 +3,10 @@
 
 use DIGEST_SIZE;
 use DataType;
-use sha2::{Sha256, Digest};
 use flate2;
 use owning_ref::ArcRef;
 use rollsum;
+use sha2::{Sha256, Digest};
 use sodiumoxide::crypto::box_;
 use std::{io, mem};
 use std::io::Write;

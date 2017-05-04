@@ -1,6 +1,5 @@
 extern crate rollsum;
 extern crate sha2;
-extern crate rustc_serialize as serialize;
 extern crate argparse;
 extern crate sodiumoxide;
 extern crate flate2;
@@ -19,11 +18,12 @@ extern crate crossbeam;
 #[macro_use]
 extern crate slog;
 extern crate slog_perf;
+extern crate hex;
 
-use sha2::{Sha256, Digest};
 use fs2::FileExt;
 
-use serialize::hex::{ToHex, FromHex};
+use hex::{ToHex, FromHex};
+use sha2::{Sha256, Digest};
 use slog::Logger;
 use slog_perf::TimeReporter;
 
