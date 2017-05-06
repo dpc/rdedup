@@ -1,14 +1,18 @@
 //! Repository config and metadata
 
 
-use {base64, serde_yaml};
+use {serde_yaml, PassphraseFn};
+
+
+use encryption;
+use encryption::{ArcDecrypter, ArcEncrypter};
 use hex::ToHex;
-use serde::{self, Deserialize};
 
 use sodiumoxide::crypto::{pwhash, secretbox, box_};
 use std::{io, fs};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
 pub const REPO_VERSION_CURRENT: u32 = 1;
@@ -105,132 +109,7 @@ pub fn write_config_v0(repo_path: &Path,
     Ok(())
 }
 
-pub fn write_config_v1(repo_path: &Path,
-                       pk: &box_::PublicKey,
-                       sk: &box_::SecretKey,
-                       passphrase: &str,
-                       chunking: ChunkingAlgorithm)
-                       -> super::Result<()> {
 
-    let salt = pwhash::gen_salt();
-    let nonce = secretbox::gen_nonce();
-
-    let sealed_sk = {
-        let derived_key = super::derive_key(passphrase, &salt)?;
-
-        secretbox::seal(&sk.0, &nonce, &derived_key)
-    };
-
-    let config = Repo {
-        version: 1,
-        encryption: Encryption::Curve25519(Curve25519 {
-                                               sealed_sec_key: sealed_sk,
-                                               pub_key: *pk,
-                                               nonce: nonce,
-                                               salt: salt,
-                                           }),
-        chunking: Some(chunking),
-    };
-
-    let config_str =
-        serde_yaml::to_string(&config).expect("yaml serialization failed");
-
-    let config_path = config_yml_file_path(repo_path);
-    let config_path_tmp = config_path.with_extension("tmp");
-    let mut config_file = fs::File::create(&config_path_tmp)?;
-
-
-    (&mut config_file as &mut Write)
-        .write_all(config_str.as_bytes())?;
-    config_file.flush()?;
-    config_file.sync_data()?;
-
-    fs::rename(config_path_tmp, &config_path)?;
-
-    write_version_file(repo_path, REPO_VERSION_CURRENT)?;
-
-    Ok(())
-}
-
-trait MyTryFromBytes: Sized {
-    type Err: 'static + Sized + ::std::error::Error;
-    fn try_from(&[u8]) -> Result<Self, Self::Err>;
-}
-
-impl MyTryFromBytes for box_::PublicKey {
-    type Err = io::Error;
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        box_::PublicKey::from_slice(slice).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData,
-                           "can't derive PublicKey from invalid binary data")
-        })
-    }
-}
-
-impl MyTryFromBytes for secretbox::Nonce {
-    type Err = io::Error;
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        secretbox::Nonce::from_slice(slice).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData,
-                           "can't derive Nonce from invalid binary data")
-        })
-    }
-}
-
-impl MyTryFromBytes for pwhash::Salt {
-    type Err = io::Error;
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        pwhash::Salt::from_slice(slice).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData,
-                           "can't derive Nonce from invalid binary data")
-        })
-    }
-}
-
-impl MyTryFromBytes for Vec<u8> {
-    type Err = io::Error;
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Err> {
-        Ok(Vec::from(slice))
-    }
-}
-
-fn from_base64<T, D>(deserializer: D) -> Result<T, D::Error>
-    where D: serde::Deserializer,
-          T: MyTryFromBytes
-{
-    use serde::de::Error;
-    String::deserialize(deserializer)
-        .and_then(|string| {
-                      base64::decode(&string)
-                .map_err(|err| Error::custom(err.to_string()))
-                  })
-        .and_then(|ref bytes| {
-                      T::try_from(bytes).map_err(|err| {
-                Error::custom(format!("{}", &err as &::std::error::Error))
-            })
-                  })
-}
-
-fn as_base64<T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where T: AsRef<[u8]>,
-          S: serde::Serializer
-{
-    serializer.serialize_str(&base64::encode(key.as_ref()))
-}
-
-
-/// Configuration of repository encryption
-#[derive(Serialize, Deserialize)]
-pub struct Curve25519 {
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
-    pub sealed_sec_key: Vec<u8>,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
-    pub pub_key: box_::PublicKey,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
-    pub salt: pwhash::Salt,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
-    pub nonce: secretbox::Nonce,
-}
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
@@ -260,7 +139,7 @@ impl ChunkingAlgorithm {
 }
 
 /// Types of supported encryption
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum Encryption {
     /// No encryption
@@ -268,16 +147,95 @@ pub enum Encryption {
     None,
     /// `Curve25519Blake2BSalsa20Poly1305`
     #[serde(rename = "curve25519_blake2b_salsa20_poly1305")]
-    Curve25519(Curve25519),
+    Curve25519(encryption::Curve25519),
+}
+
+
+impl encryption::EncryptionEngine for Encryption {
+    fn change_passphrase(&mut self,
+                         old_p: PassphraseFn,
+                         new_p: PassphraseFn)
+                         -> io::Result<()> {
+        match *self {
+            Encryption::None => Ok(()),
+            Encryption::Curve25519(ref mut c) => {
+                c.change_passphrase(old_p, new_p)
+            }
+        }
+
+    }
+
+    fn encrypter(&self, pass: PassphraseFn) -> io::Result<ArcEncrypter> {
+
+        match *self {
+            Encryption::None => Ok(Arc::new(encryption::NopEncrypter)),
+            Encryption::Curve25519(ref c) => c.encrypter(pass),
+        }
+
+    }
+    fn decrypter(&self, pass: PassphraseFn) -> io::Result<ArcDecrypter> {
+
+        match *self {
+            Encryption::None => Ok(Arc::new(encryption::NopDecrypter)),
+            Encryption::Curve25519(ref c) => c.decrypter(pass),
+        }
+    }
 }
 
 /// Rdedup repository configuration
 ///
 /// This datastructure is used for serialization and deserialization
 /// of repo configuration that is stored as a repostiory metadata.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Repo {
     pub version: u32,
-    pub chunking: Option<ChunkingAlgorithm>,
+    #[serde(default)]
+    pub chunking: ChunkingAlgorithm,
     pub encryption: Encryption,
+}
+
+
+impl Repo {
+    pub fn new(pass: PassphraseFn) -> io::Result<Self> {
+        Ok(Repo {
+               version: REPO_VERSION_CURRENT,
+               chunking: Default::default(),
+               encryption:
+                   Encryption::Curve25519(encryption::Curve25519::new(pass)?),
+           })
+    }
+
+    pub fn set_chunking(&mut self,
+                        chunking: ChunkingAlgorithm)
+                        -> super::Result<()> {
+        if !chunking.valid() {
+            return Err(super::Error::new(io::ErrorKind::InvalidInput,
+                                         "invalid chunking algorithm defined"));
+        }
+        self.chunking = chunking;
+        Ok(())
+    }
+
+    pub fn write(&self, repo_path: &Path) -> super::Result<()> {
+
+
+        let config_str =
+            serde_yaml::to_string(self).expect("yaml serialization failed");
+
+        let config_path = config_yml_file_path(repo_path);
+        let config_path_tmp = config_path.with_extension("tmp");
+        let mut config_file = fs::File::create(&config_path_tmp)?;
+
+
+        (&mut config_file as &mut Write)
+            .write_all(config_str.as_bytes())?;
+        config_file.flush()?;
+        config_file.sync_data()?;
+
+        fs::rename(config_path_tmp, &config_path)?;
+
+        write_version_file(repo_path, REPO_VERSION_CURRENT)?;
+
+        Ok(())
+    }
 }

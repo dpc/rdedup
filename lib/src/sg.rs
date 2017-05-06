@@ -7,7 +7,6 @@ use flate2;
 use owning_ref::ArcRef;
 use rollsum;
 use sha2::{Sha256, Digest};
-use sodiumoxide::crypto::box_;
 use std::{io, mem};
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
@@ -150,7 +149,7 @@ impl SGBuf {
     pub fn from_single(v: Vec<u8>) -> Self {
         SGBuf::from_vec(vec![v])
     }
-    fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
+    pub fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
         SGBuf(v.drain(..)
                   .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
                   .collect())
@@ -191,7 +190,7 @@ impl SGBuf {
         SGBuf::from_single(compressor.finish().unwrap())
     }
 
-    fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {
+    pub fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {
         match self.0.len() {
             0 => ArcRef::new(Arc::new(vec![])).map(|v| &v[..]),
             1 => self.0[0].clone(),
@@ -203,16 +202,6 @@ impl SGBuf {
                 ArcRef::new(Arc::new(v)).map(|v| &v[..])
             }
         }
-    }
-
-    pub fn encrypt(&self, pub_key: &box_::PublicKey, digest: &[u8]) -> SGBuf {
-        let nonce =
-            box_::Nonce::from_slice(digest).expect("Nonce::from_slice failed");
-
-        let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-        let cipher =
-            box_::seal(&self.to_linear(), &nonce, pub_key, &ephemeral_sec);
-        SGBuf::from_vec(vec![ephemeral_pub.0.to_vec(), cipher])
     }
 }
 

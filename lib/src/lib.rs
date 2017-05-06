@@ -37,7 +37,7 @@ use std::io::{BufRead, Read, Write, Result, Error};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 
 mod iterators;
 use iterators::StoredChunks;
@@ -57,11 +57,20 @@ use chunk_processor::*;
 mod sorting_recv;
 use sorting_recv::SortingIterator;
 
+mod encryption;
+use encryption::EncryptionEngine;
+
+mod util;
+use util::*;
+
+type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
+
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
 const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
 const DIGEST_SIZE: usize = 32;
 
+type PassphraseFn<'a> = &'a Fn() -> io::Result<String>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DataType {
@@ -159,7 +168,7 @@ struct IndexTranslator<'a> {
     digest: Vec<u8>,
     writer: Option<&'a mut Write>,
     data_type: DataType,
-    sec_key: Option<&'a box_::SecretKey>,
+    decrypter: Option<ArcDecrypter>,
     log: Logger,
 }
 
@@ -167,14 +176,14 @@ impl<'a> IndexTranslator<'a> {
     fn new(accessor: &'a ChunkAccessor,
            writer: Option<&'a mut Write>,
            data_type: DataType,
-           sec_key: Option<&'a box_::SecretKey>,
+           decrypter: Option<ArcDecrypter>,
            log: Logger)
            -> Self {
         IndexTranslator {
             accessor: accessor,
             digest: vec![],
             data_type: data_type,
-            sec_key: sec_key,
+            decrypter: decrypter,
             writer: writer,
             log: log,
         }
@@ -198,14 +207,14 @@ impl<'a> Write for IndexTranslator<'a> {
                          accessor,
                          ref mut digest,
                          data_type,
-                         sec_key,
+                         ref decrypter,
                          ref mut writer,
                          ..
                      } = self;
             if let Some(ref mut writer) = *writer {
                 let mut traverser = ReadContext::new(Some(writer),
                                                      data_type,
-                                                     sec_key,
+                                                     decrypter.clone(),
                                                      self.log.clone());
                 traverser.read_recursively(accessor, digest)?;
             } else {
@@ -229,7 +238,7 @@ struct ReadContext<'a> {
     writer: Option<&'a mut Write>,
     /// Secret key to access the data - `None` is used for operations
     /// that don't decrypt anything
-    sec_key: Option<&'a box_::SecretKey>,
+    decrypter: Option<ArcDecrypter>,
     /// The type of the data to be read
     data_type: DataType,
 
@@ -239,13 +248,13 @@ struct ReadContext<'a> {
 impl<'a> ReadContext<'a> {
     fn new(writer: Option<&'a mut Write>,
            data_type: DataType,
-           sec_key: Option<&'a box_::SecretKey>,
+           decrypter: Option<ArcDecrypter>,
            log: Logger)
            -> Self {
         ReadContext {
             writer: writer,
             data_type: data_type,
-            sec_key: sec_key,
+            decrypter: decrypter,
             log: log,
         }
     }
@@ -261,14 +270,14 @@ impl<'a> ReadContext<'a> {
                              DataType::Index,
                              DataType::Index,
                              &mut index_data,
-                             self.sec_key)?;
+                             self.decrypter.clone())?;
 
         assert_eq!(index_data.len(), DIGEST_SIZE);
 
         let mut translator = IndexTranslator::new(accessor,
                                                   self.writer.take(),
                                                   self.data_type,
-                                                  self.sec_key,
+                                                  self.decrypter.clone(),
                                                   self.log.clone());
 
         let mut sub_traverser = ReadContext::new(Some(&mut translator),
@@ -288,7 +297,7 @@ impl<'a> ReadContext<'a> {
                                      DataType::Data,
                                      self.data_type,
                                      writer,
-                                     self.sec_key)
+                                     self.decrypter.clone())
         } else {
             accessor.touch(digest)
         }
@@ -320,7 +329,7 @@ trait ChunkAccessor {
                        chunk_type: DataType,
                        data_type: DataType,
                        writer: &mut Write,
-                       sec_key: Option<&box_::SecretKey>)
+                       decrypter: Option<ArcDecrypter>)
                        -> Result<()>;
 
 
@@ -333,11 +342,15 @@ trait ChunkAccessor {
 /// anything
 struct DefaultChunkAccessor<'a> {
     repo: &'a Repo,
+    decrypter: Option<ArcDecrypter>,
 }
 
 impl<'a> DefaultChunkAccessor<'a> {
-    fn new(repo: &'a Repo) -> Self {
-        DefaultChunkAccessor { repo: repo }
+    fn new(repo: &'a Repo, decrypter: Option<ArcDecrypter>) -> Self {
+        DefaultChunkAccessor {
+            repo: repo,
+            decrypter: decrypter,
+        }
     }
 }
 
@@ -351,29 +364,21 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        chunk_type: DataType,
                        data_type: DataType,
                        writer: &mut Write,
-                       sec_key: Option<&box_::SecretKey>)
+                       decrypter: Option<ArcDecrypter>)
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = fs::File::open(path)?;
         let mut data = Vec::with_capacity(ACCESSOR_BUFFER_SIZE);
 
         let data = if data_type.should_encrypt() {
-            let mut ephemeral_pub = [0; box_::PUBLICKEYBYTES];
-            file.read_exact(&mut ephemeral_pub)?;
             file.read_to_end(&mut data)?;
-            let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
-                .unwrap();
-            box_::open(&data,
-                       &nonce,
-                       &box_::PublicKey(ephemeral_pub),
-                       sec_key.unwrap()).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                   format!("can't decrypt chunk file: {}",
-                                           digest.to_hex()))
-                })?
+            self.decrypter
+                .as_ref()
+                .expect("Decrypter expected")
+                .decrypt(SGBuf::from_single(data), digest)?
         } else {
             file.read_to_end(&mut data)?;
-            data
+            SGBuf::from_single(data)
         };
 
         let data = if data_type.should_compress() {
@@ -381,14 +386,19 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                 flate2::write::DeflateDecoder::new(
                     Vec::with_capacity(data.len()));
 
-            decompressor.write_all(&data)?;
-            decompressor.finish()?
+            for part in &*data {
+                decompressor.write_all(&part)?;
+            }
+            SGBuf::from_single(decompressor.finish()?)
         } else {
             data
         };
 
         let mut sha256 = Sha256::default();
-        sha256.input(&data);
+
+        for part in &*data {
+            sha256.input(&*part);
+        }
         let mut vec_result = vec![0u8; DIGEST_SIZE];
         vec_result.copy_from_slice(&sha256.result());
 
@@ -398,7 +408,9 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                                        digest.to_hex(),
                                        vec_result.to_hex())))
         } else {
-            io::copy(&mut io::Cursor::new(data), writer)?;
+            for part in &*data {
+                io::copy(&mut io::Cursor::new(part), writer)?;
+            }
             Ok(())
         }
     }
@@ -411,13 +423,18 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 struct RecordingChunkAccessor<'a> {
     raw: DefaultChunkAccessor<'a>,
     accessed: RefCell<&'a mut HashSet<Vec<u8>>>,
+    decrypter: Option<ArcDecrypter>,
 }
 
 impl<'a> RecordingChunkAccessor<'a> {
-    fn new(repo: &'a Repo, accessed: &'a mut HashSet<Vec<u8>>) -> Self {
+    fn new(repo: &'a Repo,
+           accessed: &'a mut HashSet<Vec<u8>>,
+           decrypter: Option<ArcDecrypter>)
+           -> Self {
         RecordingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo),
+            raw: DefaultChunkAccessor::new(repo, decrypter.clone()),
             accessed: RefCell::new(accessed),
+            decrypter: decrypter,
         }
     }
 }
@@ -437,7 +454,7 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
                        chunk_type: DataType,
                        data_type: DataType,
                        writer: &mut Write,
-                       sec_key: Option<&box_::SecretKey>)
+                       sec_key: Option<ArcDecrypter>)
                        -> Result<()> {
         self.touch(digest)?;
         self.raw
@@ -456,9 +473,9 @@ struct VerifyingChunkAccessor<'a> {
 }
 
 impl<'a> VerifyingChunkAccessor<'a> {
-    fn new(repo: &'a Repo) -> Self {
+    fn new(repo: &'a Repo, decrypter: Option<ArcDecrypter>) -> Self {
         VerifyingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo),
+            raw: DefaultChunkAccessor::new(repo, decrypter),
             accessed: RefCell::new(HashSet::new()),
             errors: RefCell::new(Vec::new()),
         }
@@ -482,7 +499,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
                        chunk_type: DataType,
                        data_type: DataType,
                        writer: &mut Write,
-                       sec_key: Option<&box_::SecretKey>)
+                       decrypter: Option<ArcDecrypter>)
                        -> Result<()> {
         {
             let mut accessed = self.accessed.borrow_mut();
@@ -497,7 +514,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
                                  chunk_type,
                                  data_type,
                                  writer,
-                                 sec_key);
+                                 decrypter);
 
         if res.is_err() {
             self.errors
@@ -524,19 +541,14 @@ pub struct DuResults {
 }
 
 
+
 /// Rdedup repository
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Repo {
     /// Path of the repository
     path: PathBuf,
-    /// Public key associated with the repository
-    pub_key: box_::PublicKey,
 
-    /// Repo configuration version
-    version: u32,
-
-    /// Repo Chunking Algorithm and settings
-    chunking: config::ChunkingAlgorithm,
+    config: config::Repo,
 
     /// Logger
     log: slog::Logger,
@@ -546,6 +558,10 @@ pub struct Repo {
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
         if repo_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists,
@@ -565,6 +581,7 @@ impl Repo {
         Ok(())
     }
 
+    /*
     /// Old repository config creation, should not be used anymore
     /// other than backward compatibility testing purposes
     pub fn init_v0<L>(repo_path: &Path,
@@ -590,38 +607,28 @@ impl Repo {
         };
         Ok(repo)
     }
+    */
 
     /// Create new rdedup repository
     pub fn init<L>(repo_path: &Path,
-                   passphrase: &str,
-                   chunking: ChunkingAlgorithm,
+                   settings: config::Repo,
                    log: L)
                    -> Result<Repo>
         where L: Into<Option<Logger>>
     {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
-        // Validate ChunkingAlgorithm
-        if !chunking.valid() {
-            return Err(Error::new(io::ErrorKind::InvalidInput,
-                                  "invalid chunking algorithm defined"));
-        }
-
-        let (pk, sk) = box_::gen_keypair();
 
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
-        config::write_config_v1(repo_path, &pk, &sk, passphrase, chunking)?;
+        settings.write(repo_path)?;
 
-        let repo = Repo {
-            path: repo_path.to_owned(),
-            pub_key: pk,
-            version: config::REPO_VERSION_CURRENT,
-            chunking: chunking,
-            log: log,
-        };
 
-        Ok(repo)
+        Ok(Repo {
+               path: repo_path.into(),
+               config: settings,
+               log: log,
+           })
     }
 
     #[allow(unknown_lints)]
@@ -664,17 +671,19 @@ impl Repo {
         Ok(version_int)
     }
 
-    pub fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
+    /*
+    fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
         let _lock = self.lock_read()?;
         let sec_key = if self.version == 0 {
             self.load_sec_key_v0(passphrase)?
         } else {
-            self.load_sec_key(passphrase)?
+            self.config.load_sec_key(passphrase)?
         };
 
         Ok(SecretKey(sec_key))
-    }
+    }*/
 
+    /*
     pub fn open_v0<L>(repo_path: &Path, log: L) -> Result<Repo>
         where L: Into<Option<Logger>>
     {
@@ -724,6 +733,7 @@ impl Repo {
                log: log,
            })
     }
+    */
 
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
         where L: Into<Option<Logger>>
@@ -739,7 +749,9 @@ impl Repo {
         let version = Repo::read_and_validate_version(repo_path)?;
 
         if version == 0 {
-            return Repo::open_v0(repo_path, log);
+            // TODO:
+            // return Repo::open_v0(repo_path, log);
+            unimplemented!()
         }
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
@@ -750,19 +762,11 @@ impl Repo {
                                                 e.to_string()))
                      })?;
 
-        if let config::Encryption::Curve25519(encryption_config) =
-            config.encryption {
-            Ok(Repo {
-                   path: repo_path.to_owned(),
-                   pub_key: encryption_config.pub_key,
-                   version: version,
-                   chunking: config.chunking.unwrap_or_default(),
-                   log: log,
-               })
-        } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData,
-                               "Repo without encryptin not supported yet"))
-        }
+        Ok(Repo {
+               path: repo_path.to_owned(),
+               config: config,
+               log: log,
+           })
     }
 
     /// Remove a stored name from repo
@@ -801,18 +805,17 @@ impl Repo {
     }
 
     /// Change the passphrase
-    pub fn change_passphrase(&self,
-                             seckey: &SecretKey,
-                             new_passphrase: &str)
+    pub fn change_passphrase(&mut self,
+                             old_p: PassphraseFn,
+                             new_p: PassphraseFn)
                              -> Result<()> {
-        if self.version == 0 {
-            self.change_passphrase_v0(seckey, new_passphrase)
+        if self.config.version == 0 {
+            unimplemented!();
+            // self.change_passphrase_v0(seckey, new_passphrase)
         } else {
-            config::write_config_v1(&self.path,
-                                    &self.pub_key,
-                                    &seckey.0,
-                                    new_passphrase,
-                                    self.chunking)
+            self.config.encryption.change_passphrase(old_p, new_p)?;
+            self.config.write(&self.path)?;
+            Ok(())
         }
     }
 
@@ -858,7 +861,7 @@ impl Repo {
                         slog_perf::TimeReporter::new("chunker",
                                                      self.log.clone());
 
-                    let chunk_bits = match self.chunking {
+                    let chunk_bits = match self.config.chunking {
                         ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
                     };
 
@@ -934,11 +937,17 @@ impl Repo {
         }
     }
 
-    pub fn write<R>(&self, name: &str, reader: R) -> Result<WriteStats>
+    pub fn write<R>(&self,
+                    name: &str,
+                    reader: R,
+                    passphrase_f: PassphraseFn)
+                    -> Result<WriteStats>
         where R: Read + Send
     {
         info!(self.log, "Writing data"; "name" => name);
         let _lock = self.lock_write()?;
+
+        let encrypter = self.config.encryption.encrypter(passphrase_f)?;
 
         let num_threads = num_cpus::get();
         let (writer_tx, writer_rx) =
@@ -960,11 +969,13 @@ impl Repo {
             for _ in 0..num_threads {
                 let process_rx = process_rx.clone();
                 let writer_tx = writer_tx.clone();
+                let encrypter = encrypter.clone();
                 scope.spawn(move || {
                                 let processor =
                                     ChunkProcessor::new(self.clone(),
                                                         process_rx,
-                                                        writer_tx);
+                                                        writer_tx,
+                                                        encrypter);
                                 processor.run();
                             });
             }
@@ -996,31 +1007,38 @@ impl Repo {
     pub fn read<W: Write>(&self,
                           name: &str,
                           writer: &mut W,
-                          seckey: &SecretKey)
+                          passphrase_f: PassphraseFn)
                           -> Result<()> {
         let digest = self.name_to_digest(name)?;
 
+        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
         let _lock = self.lock_read()?;
 
-        let accessor = self.chunk_accessor();
+        let accessor = self.chunk_accessor(Some(decrypter.clone()));
         let mut traverser = ReadContext::new(Some(writer),
                                              DataType::Data,
-                                             Some(&seckey.0),
+                                             Some(decrypter),
                                              self.log.clone());
         traverser.read_recursively(&accessor, &digest)
     }
 
-    pub fn du(&self, name: &str, seckey: &SecretKey) -> Result<DuResults> {
+    pub fn du(&self,
+              name: &str,
+              passphrase_f: PassphraseFn)
+              -> Result<DuResults> {
         let _lock = self.lock_read()?;
+
+        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
 
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self);
+        let accessor = VerifyingChunkAccessor::new(self,
+                                                   Some(decrypter.clone()));
         {
             let mut traverser = ReadContext::new(Some(&mut counter),
                                                  DataType::Data,
-                                                 Some(&seckey.0),
+                                                 Some(decrypter),
                                                  self.log.clone());
             traverser.read_recursively(&accessor, &digest)?;
         }
@@ -1032,18 +1050,20 @@ impl Repo {
 
     pub fn verify(&self,
                   name: &str,
-                  seckey: &SecretKey)
+                  passphrase_f: PassphraseFn)
                   -> Result<VerifyResults> {
         let _lock = self.lock_read()?;
 
+        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self);
+        let accessor = VerifyingChunkAccessor::new(self,
+                                                   Some(decrypter.clone()));
         {
             let mut traverser = ReadContext::new(Some(&mut counter),
                                                  DataType::Data,
-                                                 Some(&seckey.0),
+                                                 Some(decrypter),
                                                  self.log.clone());
             traverser.read_recursively(&accessor, &digest)?;
         }
@@ -1149,14 +1169,17 @@ impl Repo {
         }
     }
 
-    fn chunk_accessor(&self) -> DefaultChunkAccessor {
-        DefaultChunkAccessor::new(self)
+    fn chunk_accessor(&self,
+                      decrypter: Option<ArcDecrypter>)
+                      -> DefaultChunkAccessor {
+        DefaultChunkAccessor::new(self, decrypter)
     }
 
     fn recording_chunk_accessor<'a>(&'a self,
-                                    accessed: &'a mut HashSet<Vec<u8>>)
+                                    accessed: &'a mut HashSet<Vec<u8>>,
+                                    decrypter: Option<ArcDecrypter>)
                                     -> RecordingChunkAccessor<'a> {
-        RecordingChunkAccessor::new(self, accessed)
+        RecordingChunkAccessor::new(self, accessed, decrypter)
     }
 
     fn chunk_writer_thread(&self,
@@ -1234,7 +1257,8 @@ impl Repo {
         let mut traverser =
             ReadContext::new(None, DataType::Data, None, self.log.clone());
         traverser
-            .read_recursively(&self.recording_chunk_accessor(reachable_digests),
+            .read_recursively(&self.recording_chunk_accessor(reachable_digests,
+                                                             None),
                               digest)
     }
 
@@ -1311,6 +1335,7 @@ impl Repo {
         fs::remove_file(path)?;
         Ok(md.len())
     }
+
     pub fn gc(&self) -> Result<GcResults> {
 
         let _lock = self.lock_write()?;

@@ -1,5 +1,6 @@
 use super::{SGBuf, DataType, Repo};
 use super::chunk_writer::*;
+use encryption::{Encrypter, ArcEncrypter};
 use slog::Logger;
 use slog_perf::TimeReporter;
 use sodiumoxide::crypto::box_;
@@ -17,18 +18,21 @@ pub struct ChunkProcessor {
     rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
     tx: two_lock_queue::Sender<ChunkWriterMessage>,
     log: Logger,
+    encrypter: ArcEncrypter,
 }
 
 impl ChunkProcessor {
     pub fn new(repo: Repo,
                rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-               tx: two_lock_queue::Sender<ChunkWriterMessage>)
+               tx: two_lock_queue::Sender<ChunkWriterMessage>,
+               encrypter: ArcEncrypter)
                -> Self {
         ChunkProcessor {
             log: repo.log.clone(),
             repo: repo,
             rx: rx,
             tx: tx,
+            encrypter: encrypter,
         }
     }
 
@@ -55,8 +59,7 @@ impl ChunkProcessor {
                     };
                     let sg = if data_type.should_encrypt() {
                         timer.start("encrypt");
-                        sg.encrypt(&self.repo.pub_key,
-                                   &digest[0..box_::NONCEBYTES])
+                        self.encrypter.encrypt(sg, &digest).unwrap()
                     } else {
                         sg
                     };
