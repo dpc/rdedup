@@ -1,6 +1,6 @@
 
 
-use {box_, pwhash, secretbox, as_base64, from_base64, SecretKey};
+use {box_, pwhash, secretbox, as_base64, from_base64};
 use PassphraseFn;
 
 use hex::ToHex;
@@ -65,11 +65,10 @@ pub struct Curve25519 {
 }
 
 impl Curve25519 {
-    pub fn new(passphrase_f: &Fn() -> io::Result<String>)
-               -> super::Result<Self> {
+    pub fn new(passphrase_f: PassphraseFn) -> super::Result<Self> {
 
         let (pk, sk) = box_::gen_keypair();
-        let mut passphrase = passphrase_f()?;
+        let passphrase = passphrase_f()?;
 
         let salt = pwhash::gen_salt();
         let nonce = secretbox::gen_nonce();
@@ -107,9 +106,7 @@ impl Curve25519 {
                                      "plain secret key in a wrong format"))?)
     }
 
-    fn unseal_encrypt(&self,
-                      passphrase_f: &Fn() -> io::Result<String>)
-                      -> super::Result<box_::PublicKey> {
+    fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {
         Ok(self.pub_key)
     }
 }
@@ -135,9 +132,9 @@ impl EncryptionEngine for Curve25519 {
         Ok(())
 
     }
-    fn encrypter(&self, pass: PassphraseFn) -> io::Result<ArcEncrypter> {
+    fn encrypter(&self, _pass: PassphraseFn) -> io::Result<ArcEncrypter> {
 
-        let key = self.unseal_encrypt(pass)?;
+        let key = self.unseal_encrypt()?;
 
         Ok(Arc::new(Curve25519Encrypter { pub_key: key }))
 

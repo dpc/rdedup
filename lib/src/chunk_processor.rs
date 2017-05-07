@@ -1,9 +1,8 @@
 use super::{SGBuf, DataType, Repo};
 use super::chunk_writer::*;
-use encryption::{Encrypter, ArcEncrypter};
+use encryption::ArcEncrypter;
 use slog::Logger;
 use slog_perf::TimeReporter;
-use sodiumoxide::crypto::box_;
 use std::sync::mpsc;
 use two_lock_queue;
 

@@ -1,12 +1,12 @@
-//! Repository config and metadata
-
+//! Config: options de/serialized to files
+//! from `settings`
 
 use {serde_yaml, PassphraseFn};
-
 
 use encryption;
 use encryption::{ArcDecrypter, ArcEncrypter};
 use hex::ToHex;
+use settings;
 
 use sodiumoxide::crypto::{pwhash, secretbox, box_};
 use std::{io, fs};
@@ -111,29 +111,28 @@ pub fn write_config_v0(repo_path: &Path,
 
 
 
+
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
-/// `ChunkingAlgorithm` are the algorithms supported by rdedup
-pub enum ChunkingAlgorithm {
+/// `Chunking` are the algorithms supported by rdedup
+pub enum Chunking {
     /// `Bup` is the default algorithm, the chunk_bits value provided with bup
     /// is the bit shift to be used by rollsum. The valid range is between 10
     /// and 30 (1KB to 1GB)
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
 }
-/// Default implementation for the `ChunkingAlgorithm`
-impl Default for ChunkingAlgorithm {
-    fn default() -> ChunkingAlgorithm {
-        ChunkingAlgorithm::Bup { chunk_bits: 17 }
+/// Default implementation for the `Chunking`
+impl Default for Chunking {
+    fn default() -> Chunking {
+        Chunking::Bup { chunk_bits: 17 }
     }
 }
 
-impl ChunkingAlgorithm {
+impl Chunking {
     pub fn valid(self) -> bool {
         match self {
-            ChunkingAlgorithm::Bup { chunk_bits: bits } => {
-                30 >= bits && bits >= 10
-            }
+            Chunking::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
         }
     }
 }
@@ -149,7 +148,6 @@ pub enum Encryption {
     #[serde(rename = "curve25519_blake2b_salsa20_poly1305")]
     Curve25519(encryption::Curve25519),
 }
-
 
 impl encryption::EncryptionEngine for Encryption {
     fn change_passphrase(&mut self,
@@ -190,34 +188,33 @@ impl encryption::EncryptionEngine for Encryption {
 pub struct Repo {
     pub version: u32,
     #[serde(default)]
-    pub chunking: ChunkingAlgorithm,
+    pub chunking: Chunking,
     pub encryption: Encryption,
 }
 
 
 impl Repo {
-    pub fn new(pass: PassphraseFn) -> io::Result<Self> {
+    pub fn new_from_settings(pass: PassphraseFn,
+                             settings: settings::Repo)
+                             -> io::Result<Self> {
+
+        let encryption = match settings.encryption {
+            settings::Encryption::Curve25519 => {
+                Encryption::Curve25519(encryption::Curve25519::new(pass)?)
+            }
+            settings::Encryption::None => Encryption::None,
+        };
+
         Ok(Repo {
                version: REPO_VERSION_CURRENT,
-               chunking: Default::default(),
-               encryption:
-                   Encryption::Curve25519(encryption::Curve25519::new(pass)?),
+               chunking: settings.chunking.0,
+               encryption: encryption,
            })
+
     }
 
-    pub fn set_chunking(&mut self,
-                        chunking: ChunkingAlgorithm)
-                        -> super::Result<()> {
-        if !chunking.valid() {
-            return Err(super::Error::new(io::ErrorKind::InvalidInput,
-                                         "invalid chunking algorithm defined"));
-        }
-        self.chunking = chunking;
-        Ok(())
-    }
 
     pub fn write(&self, repo_path: &Path) -> super::Result<()> {
-
 
         let config_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");

@@ -22,7 +22,7 @@ extern crate hex;
 
 use fs2::FileExt;
 
-use hex::{ToHex, FromHex};
+use hex::ToHex;
 use sha2::{Sha256, Digest};
 use slog::Logger;
 use slog_perf::TimeReporter;
@@ -43,7 +43,7 @@ mod iterators;
 use iterators::StoredChunks;
 
 pub mod config;
-use config::ChunkingAlgorithm;
+use config::Chunking;
 
 mod sg;
 use sg::*;
@@ -60,10 +60,13 @@ use sorting_recv::SortingIterator;
 mod encryption;
 use encryption::EncryptionEngine;
 
+pub mod settings;
+
 mod util;
 use util::*;
 
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
+type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
 
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
@@ -364,7 +367,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        chunk_type: DataType,
                        data_type: DataType,
                        writer: &mut Write,
-                       decrypter: Option<ArcDecrypter>)
+                       _decrypter: Option<ArcDecrypter>)
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = fs::File::open(path)?;
@@ -423,7 +426,6 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 struct RecordingChunkAccessor<'a> {
     raw: DefaultChunkAccessor<'a>,
     accessed: RefCell<&'a mut HashSet<Vec<u8>>>,
-    decrypter: Option<ArcDecrypter>,
 }
 
 impl<'a> RecordingChunkAccessor<'a> {
@@ -434,7 +436,6 @@ impl<'a> RecordingChunkAccessor<'a> {
         RecordingChunkAccessor {
             raw: DefaultChunkAccessor::new(repo, decrypter.clone()),
             accessed: RefCell::new(accessed),
-            decrypter: decrypter,
         }
     }
 }
@@ -554,10 +555,41 @@ pub struct Repo {
     log: slog::Logger,
 }
 
+/// A reading handle
+pub struct DecryptHandle {
+    decrypter: ArcDecrypter,
+}
+
+pub struct EncryptHandle {
+    encrypter: ArcEncrypter,
+}
+
+
+
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
+    pub fn unlock_decrypt(&self,
+                          pass: PassphraseFn)
+                          -> io::Result<DecryptHandle> {
+        info!(self.log, "Opening read handle");
+        let decrypter = self.config.encryption.decrypter(pass)?;
+
+        Ok(DecryptHandle { decrypter: decrypter })
+
+    }
+
+    pub fn unlock_encrypt(&self,
+                          pass: PassphraseFn)
+                          -> io::Result<EncryptHandle> {
+        info!(self.log, "Opening write handle");
+        let encrypter = self.config.encryption.encrypter(pass)?;
+
+
+        Ok(EncryptHandle { encrypter: encrypter })
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -602,7 +634,7 @@ impl Repo {
             path: repo_path.to_owned(),
             pub_key: pk,
             version: 0,
-            chunking: ChunkingAlgorithm::default(),
+            chunking: Chunking::default(),
             log: log,
         };
         Ok(repo)
@@ -611,7 +643,8 @@ impl Repo {
 
     /// Create new rdedup repository
     pub fn init<L>(repo_path: &Path,
-                   settings: config::Repo,
+                   passphrase: PassphraseFn,
+                   settings: settings::Repo,
                    log: L)
                    -> Result<Repo>
         where L: Into<Option<Logger>>
@@ -621,12 +654,13 @@ impl Repo {
 
         Repo::ensure_repo_not_exists(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
-        settings.write(repo_path)?;
+        let config = config::Repo::new_from_settings(passphrase, settings)?;
+        config.write(repo_path)?;
 
 
         Ok(Repo {
                path: repo_path.into(),
-               config: settings,
+               config: config,
                log: log,
            })
     }
@@ -671,6 +705,12 @@ impl Repo {
         Ok(version_int)
     }
 
+    /// List all names
+    pub fn list_names(&self) -> Result<Vec<String>> {
+        let _lock = self.lock_shared();
+
+        self.list_names_nolock()
+    }
     /*
     fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
         let _lock = self.lock_read()?;
@@ -729,7 +769,7 @@ impl Repo {
                path: repo_path.to_owned(),
                pub_key: pub_key,
                version: version_int,
-               chunking: ChunkingAlgorithm::default(),
+               chunking: Chunking::default(),
                log: log,
            })
     }
@@ -769,12 +809,7 @@ impl Repo {
            })
     }
 
-    /// Remove a stored name from repo
-    pub fn rm(&self, name: &str) -> Result<()> {
-        let _lock = self.lock_write()?;
-        fs::remove_file(self.name_path(name))
-    }
-
+    /*
     fn change_passphrase_v0(&self,
                             seckey: &SecretKey,
                             new_passphrase: &str)
@@ -803,6 +838,7 @@ impl Repo {
 
         Ok(())
     }
+    */
 
     /// Change the passphrase
     pub fn change_passphrase(&mut self,
@@ -819,7 +855,7 @@ impl Repo {
         }
     }
 
-    fn lock_write(&self) -> Result<fs::File> {
+    fn lock_exclusive(&self) -> Result<fs::File> {
         let lock_path = config::lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
@@ -828,7 +864,7 @@ impl Repo {
         Ok(file)
     }
 
-    fn lock_read(&self) -> Result<fs::File> {
+    fn lock_shared(&self) -> Result<fs::File> {
         let lock_path = config::lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
@@ -862,7 +898,7 @@ impl Repo {
                                                      self.log.clone());
 
                     let chunk_bits = match self.config.chunking {
-                        ChunkingAlgorithm::Bup { chunk_bits: bits } => bits,
+                        Chunking::Bup { chunk_bits: bits } => bits,
                     };
 
                     let chunker = Chunker::new(input_data_iter.into_iter(),
@@ -937,158 +973,8 @@ impl Repo {
         }
     }
 
-    pub fn write<R>(&self,
-                    name: &str,
-                    reader: R,
-                    passphrase_f: PassphraseFn)
-                    -> Result<WriteStats>
-        where R: Read + Send
-    {
-        info!(self.log, "Writing data"; "name" => name);
-        let _lock = self.lock_write()?;
 
-        let encrypter = self.config.encryption.encrypter(passphrase_f)?;
-
-        let num_threads = num_cpus::get();
-        let (writer_tx, writer_rx) =
-            two_lock_queue::channel(4 * self.write_cpu_thread_num());
-
-        let (chunker_tx, chunker_rx) =
-            mpsc::sync_channel(self.write_cpu_thread_num());
-
-        // mpmc queue used  as spmc fan-out
-        let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
-
-
-
-        let (final_digest, writer_stats) = crossbeam::scope(|scope| {
-
-            scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
-
-
-            for _ in 0..num_threads {
-                let process_rx = process_rx.clone();
-                let writer_tx = writer_tx.clone();
-                let encrypter = encrypter.clone();
-                scope.spawn(move || {
-                                let processor =
-                                    ChunkProcessor::new(self.clone(),
-                                                        process_rx,
-                                                        writer_tx,
-                                                        encrypter);
-                                processor.run();
-                            });
-            }
-            drop(process_rx);
-
-            let chunk_and_write =
-                scope.spawn(move || {
-                                self.chunk_and_write_data_thread(
-                                    Box::new(chunker_rx.into_iter()),
-                                    process_tx,
-                                    writer_tx,
-                                    DataType::Data)
-                            });
-
-            let writer =
-                scope.spawn(move || self.chunk_writer_thread(writer_rx));
-
-            let final_digest = chunk_and_write.join();
-
-            let writer_stats = writer.join();
-            (final_digest, writer_stats)
-        });
-
-
-        self.store_digest_as_name(&final_digest?, name)?;
-        Ok(writer_stats)
-    }
-
-    pub fn read<W: Write>(&self,
-                          name: &str,
-                          writer: &mut W,
-                          passphrase_f: PassphraseFn)
-                          -> Result<()> {
-        let digest = self.name_to_digest(name)?;
-
-        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
-        let _lock = self.lock_read()?;
-
-        let accessor = self.chunk_accessor(Some(decrypter.clone()));
-        let mut traverser = ReadContext::new(Some(writer),
-                                             DataType::Data,
-                                             Some(decrypter),
-                                             self.log.clone());
-        traverser.read_recursively(&accessor, &digest)
-    }
-
-    pub fn du(&self,
-              name: &str,
-              passphrase_f: PassphraseFn)
-              -> Result<DuResults> {
-        let _lock = self.lock_read()?;
-
-        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
-
-        let digest = self.name_to_digest(name)?;
-
-        let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(decrypter.clone()));
-        {
-            let mut traverser = ReadContext::new(Some(&mut counter),
-                                                 DataType::Data,
-                                                 Some(decrypter),
-                                                 self.log.clone());
-            traverser.read_recursively(&accessor, &digest)?;
-        }
-        Ok(DuResults {
-               chunks: accessor.get_results().scanned,
-               bytes: counter.count,
-           })
-    }
-
-    pub fn verify(&self,
-                  name: &str,
-                  passphrase_f: PassphraseFn)
-                  -> Result<VerifyResults> {
-        let _lock = self.lock_read()?;
-
-        let decrypter = self.config.encryption.decrypter(passphrase_f)?;
-        let digest = self.name_to_digest(name)?;
-
-        let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(decrypter.clone()));
-        {
-            let mut traverser = ReadContext::new(Some(&mut counter),
-                                                 DataType::Data,
-                                                 Some(decrypter),
-                                                 self.log.clone());
-            traverser.read_recursively(&accessor, &digest)?;
-        }
-        Ok(accessor.get_results())
-    }
-
-    fn read_hex_file(&self, path: &Path) -> Result<Vec<u8>> {
-        let mut file = fs::File::open(&path)?;
-
-        let mut buf = vec![];
-        file.read_to_end(&mut buf)?;
-
-        let str_ = std::str::from_utf8(&buf)
-            .map_err(|_| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        "seckey data invalid: not utf8")
-                     })?;
-        let bytes = str_.from_hex()
-            .map_err(|_| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        "seckey data invalid: not hex")
-                     })?;
-        Ok(bytes)
-    }
-
+    /*
     fn load_sec_key_v0(&self, passphrase: &str) -> Result<box_::SecretKey> {
         let seckey_path = config::sec_key_file_path(&self.path);
         if !seckey_path.exists() {
@@ -1131,8 +1017,9 @@ impl Repo {
             })?;
 
         Ok(sec_key)
-    }
+    }*/
 
+    /*
     fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
 
         let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
@@ -1167,18 +1054,18 @@ impl Repo {
             Err(io::Error::new(io::ErrorKind::InvalidData,
                                "Repo without encryptin not supported yet"))
         }
-    }
+    }*/
 
-    fn chunk_accessor(&self,
-                      decrypter: Option<ArcDecrypter>)
-                      -> DefaultChunkAccessor {
+    fn get_chunk_accessor(&self,
+                          decrypter: Option<ArcDecrypter>)
+                          -> DefaultChunkAccessor {
         DefaultChunkAccessor::new(self, decrypter)
     }
 
-    fn recording_chunk_accessor<'a>(&'a self,
-                                    accessed: &'a mut HashSet<Vec<u8>>,
-                                    decrypter: Option<ArcDecrypter>)
-                                    -> RecordingChunkAccessor<'a> {
+    fn get_recording_chunk_accessor<'a>(&'a self,
+                                        accessed: &'a mut HashSet<Vec<u8>>,
+                                        decrypter: Option<ArcDecrypter>)
+                                        -> RecordingChunkAccessor<'a> {
         RecordingChunkAccessor::new(self, accessed, decrypter)
     }
 
@@ -1257,7 +1144,7 @@ impl Repo {
         let mut traverser =
             ReadContext::new(None, DataType::Data, None, self.log.clone());
         traverser
-            .read_recursively(&self.recording_chunk_accessor(reachable_digests,
+            .read_recursively(&self.get_recording_chunk_accessor(reachable_digests,
                                                              None),
                               digest)
     }
@@ -1276,12 +1163,6 @@ impl Repo {
         Ok(ret)
     }
 
-    /// List all names
-    pub fn list_names(&self) -> Result<Vec<String>> {
-        let _lock = self.lock_read()?;
-
-        self.list_names_nolock()
-    }
 
     /// Return all reachable chunks
     fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
@@ -1336,9 +1217,32 @@ impl Repo {
         Ok(md.len())
     }
 
+
+    fn name_dir_path(&self) -> PathBuf {
+        self.path.join(config::NAME_SUBDIR)
+    }
+
+    fn index_dir_path(&self) -> PathBuf {
+        self.path.join(config::INDEX_SUBDIR)
+    }
+
+    fn chunk_dir_path(&self) -> PathBuf {
+        self.path.join(config::DATA_SUBDIR)
+    }
+
+    fn name_path(&self, name: &str) -> PathBuf {
+        self.name_dir_path().join(name)
+    }
+
+    /// Remove a stored name from repo
+    pub fn rm(&self, name: &str) -> Result<()> {
+        let _lock = self.lock_exclusive();
+        fs::remove_file(self.name_path(name))
+    }
+
     pub fn gc(&self) -> Result<GcResults> {
 
-        let _lock = self.lock_write()?;
+        let _lock = self.lock_exclusive();
 
         let reachable = self.list_reachable_chunks().unwrap();
         let index_chunks = StoredChunks::new(&self.index_dir_path(),
@@ -1366,20 +1270,125 @@ impl Repo {
         Ok(result)
     }
 
-    fn name_dir_path(&self) -> PathBuf {
-        self.path.join(config::NAME_SUBDIR)
+    pub fn read<W: Write>(&self,
+                          name: &str,
+                          writer: &mut W,
+                          dec: &DecryptHandle)
+                          -> Result<()> {
+
+        let _lock = self.lock_shared();
+
+        let digest = self.name_to_digest(name)?;
+
+        let accessor = self.get_chunk_accessor(Some(dec.decrypter.clone()));
+        let mut traverser = ReadContext::new(Some(writer),
+                                             DataType::Data,
+                                             Some(dec.decrypter.clone()),
+                                             self.log.clone());
+        traverser.read_recursively(&accessor, &digest)
     }
 
-    fn index_dir_path(&self) -> PathBuf {
-        self.path.join(config::INDEX_SUBDIR)
+    pub fn du(&self, name: &str, dec: &DecryptHandle) -> Result<DuResults> {
+
+        let _lock = self.lock_shared();
+        let digest = self.name_to_digest(name)?;
+
+        let mut counter = CounterWriter::new();
+        let accessor = VerifyingChunkAccessor::new(self,
+                                                   Some(dec.decrypter.clone()));
+        {
+            let mut traverser = ReadContext::new(Some(&mut counter),
+                                                 DataType::Data,
+                                                 Some(dec.decrypter.clone()),
+                                                 self.log.clone());
+            traverser.read_recursively(&accessor, &digest)?;
+        }
+        Ok(DuResults {
+               chunks: accessor.get_results().scanned,
+               bytes: counter.count,
+           })
     }
 
-    fn chunk_dir_path(&self) -> PathBuf {
-        self.path.join(config::DATA_SUBDIR)
+    pub fn verify(&self,
+                  name: &str,
+                  dec: &DecryptHandle)
+                  -> Result<VerifyResults> {
+        let _lock = self.lock_shared();
+        let digest = self.name_to_digest(name)?;
+
+        let mut counter = CounterWriter::new();
+        let accessor = VerifyingChunkAccessor::new(self,
+                                                   Some(dec.decrypter.clone()));
+        {
+            let mut traverser = ReadContext::new(Some(&mut counter),
+                                                 DataType::Data,
+                                                 Some(dec.decrypter.clone()),
+                                                 self.log.clone());
+            traverser.read_recursively(&accessor, &digest)?;
+        }
+        Ok(accessor.get_results())
     }
 
-    fn name_path(&self, name: &str) -> PathBuf {
-        self.name_dir_path().join(name)
+    pub fn write<R>(&self,
+                    name: &str,
+                    reader: R,
+                    enc: &EncryptHandle)
+                    -> Result<WriteStats>
+        where R: Read + Send
+    {
+        info!(self.log, "Writing data"; "name" => name);
+        let _lock = self.lock_shared();
+
+        let num_threads = num_cpus::get();
+        let (writer_tx, writer_rx) =
+            two_lock_queue::channel(4 * self.write_cpu_thread_num());
+
+        let (chunker_tx, chunker_rx) =
+            mpsc::sync_channel(self.write_cpu_thread_num());
+
+        // mpmc queue used  as spmc fan-out
+        let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
+
+        let (final_digest, writer_stats) = crossbeam::scope(|scope| {
+
+            scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
+
+            for _ in 0..num_threads {
+                let process_rx = process_rx.clone();
+                let writer_tx = writer_tx.clone();
+                let encrypter = enc.encrypter.clone();
+                scope.spawn(move || {
+                                let processor =
+                                    ChunkProcessor::new(self.clone(),
+                                                        process_rx,
+                                                        writer_tx,
+                                                        encrypter);
+                                processor.run();
+                            });
+            }
+            drop(process_rx);
+
+            let chunk_and_write =
+                scope.spawn(move || {
+                                self.chunk_and_write_data_thread(
+                                    Box::new(chunker_rx.into_iter()),
+                                    process_tx,
+                                    writer_tx,
+                                    DataType::Data)
+                            });
+
+            let writer =
+                scope.spawn(move || self.chunk_writer_thread(writer_rx));
+
+            let final_digest = chunk_and_write.join();
+
+            let writer_stats = writer.join();
+            (final_digest, writer_stats)
+        });
+
+
+        self.store_digest_as_name(&final_digest?, name)?;
+        Ok(writer_stats)
     }
 }
 
