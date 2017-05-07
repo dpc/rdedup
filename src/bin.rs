@@ -170,6 +170,7 @@ struct Options {
     usage: String,
     chunk_size: String,
     chunking: String,
+    encryption: String,
     debug_level: u32,
     rdedup_settings: settings::Repo,
 }
@@ -177,13 +178,13 @@ struct Options {
 impl Options {
     fn new() -> Self {
         let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_default();
-        println!("{}", dir_str);
         let mut args = vec![];
         let mut command = Command::Help;
         let mut usage = vec![];
         let mut add_newline = false;
         let mut chunk_size: String = "128k".to_owned();
         let mut chunking: String = "bup".to_owned();
+        let mut encryption: String = "curve25519".to_owned();
         let mut debug_level = 0u32;
 
         {
@@ -208,6 +209,10 @@ impl Options {
                 .add_option(&["-D", "--debug"],
                             IncrBy(1),
                             "increase debug level");
+            ap.refer(&mut encryption)
+                .add_option(&["--encryption"],
+                            Store,
+                            "chunking algorithm (default: curve25519)");
             ap.refer(&mut command)
                 .add_argument("command", Store, r#"command to run"#);
             ap.refer(&mut args)
@@ -232,6 +237,7 @@ impl Options {
             usage: String::from_utf8_lossy(&usage).to_string(),
             chunk_size: chunk_size,
             chunking: chunking,
+            encryption: encryption,
             debug_level: debug_level,
             rdedup_settings: settings::Repo::new(),
         }
@@ -289,6 +295,27 @@ impl Options {
                 process::exit(-1);
             }
         }
+    }
+
+
+    fn set_encryption(&mut self, s: &str) {
+        let encryption = match s {
+            "curve25519" => lib::settings::Encryption::Curve25519,
+            "none" => lib::settings::Encryption::None,
+
+            _ => {
+                printerrln!("unsupported encryption: {}", s);
+                process::exit(-1);
+            }
+        };
+
+        self.rdedup_settings
+            .set_encryption(encryption)
+            .unwrap_or_else(|_| {
+                                printerrln!("invalid encryption: {}", s);
+                                process::exit(-1);
+                            });
+
     }
     fn check_chunk_size(&self) -> u64 {
         match parse_size(&self.chunk_size) {
@@ -380,11 +407,12 @@ fn run(options: &Options) -> io::Result<()> {
         Command::Init => {
             let dir = options.check_dir();
             let size = options.check_chunk_size();
-            let mut options = options.clone();
-            options.set_chunking(size);
+            let mut applied_options = options.clone();
+            applied_options.set_chunking(size);
+            applied_options.set_encryption(&options.encryption.clone());
             try!(Repo::init(&dir,
                             &|| read_new_passphrase(),
-                            options.rdedup_settings,
+                            applied_options.rdedup_settings,
                             log));
         }
         Command::DU => {
