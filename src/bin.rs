@@ -11,7 +11,7 @@ extern crate slog_async;
 
 
 use lib::Repo;
-use lib::config::ChunkingAlgorithm;
+use lib::settings;
 use serialize::hex::ToHex;
 use slog::Drain;
 use std::{io, process, env};
@@ -48,25 +48,25 @@ macro_rules! printerr {
 }
 
 
-fn read_passphrase(o: &Options) -> String {
+fn read_passphrase(o: &Options) -> io::Result<String> {
     printerrln!("Warning: Use `--add-newline` option if you generated repo \
                  with rdedup version <= 0.2");
     printerr!("Enter passphrase to unlock: ");
     if o.add_newline {
-        rpassword::read_password().unwrap() + "\n"
+        rpassword::read_password().map(|p| p + "\n")
     } else {
-        rpassword::read_password().unwrap()
+        rpassword::read_password().map(|p| p)
     }
 }
 
-fn read_new_passphrase() -> String {
+fn read_new_passphrase() -> io::Result<String> {
     loop {
         printerr!("Enter new passphrase: ");
-        let p1 = rpassword::read_password().unwrap();
+        let p1 = rpassword::read_password()?;
         printerr!("Enter new passphrase again: ");
-        let p2 = rpassword::read_password().unwrap();
+        let p2 = rpassword::read_password()?;
         if p1 == p2 {
-            return p1;
+            return Ok(p1);
         }
         printerrln!("\nPassphrases don't match, try again.");
     }
@@ -161,6 +161,7 @@ impl FromStr for Command {
     }
 }
 
+#[derive(Clone)]
 struct Options {
     dir_str: String,
     args: Vec<String>,
@@ -170,6 +171,7 @@ struct Options {
     chunk_size: String,
     chunking: String,
     debug_level: u32,
+    rdedup_settings: settings::Repo,
 }
 
 impl Options {
@@ -231,6 +233,7 @@ impl Options {
             chunk_size: chunk_size,
             chunking: chunking,
             debug_level: debug_level,
+            rdedup_settings: settings::Repo::new(),
         }
     }
 
@@ -261,7 +264,8 @@ impl Options {
         }
         path::Path::new(&self.dir_str).to_owned()
     }
-    fn check_chunking(&self, size: u64) -> ChunkingAlgorithm {
+
+    fn set_chunking(&mut self, size: u64) {
         match self.chunking.to_lowercase().as_str() {
             "bup" => {
                 // Validate that the size provided works for the bup algorithm
@@ -270,15 +274,14 @@ impl Options {
                                  be power of 2");
                     process::exit(-1);
                 }
-                let algo = ChunkingAlgorithm::Bup {
-                    chunk_bits: size.trailing_zeros(),
-                };
-                if !algo.valid() {
-                    printerrln!("invalid chunk size, value must be at least \
-                                 1K and no more then 1G");
-                    process::exit(-1);
-                }
-                algo
+
+                self.rdedup_settings
+                    .use_bup_chunking(size.trailing_zeros())
+                    .unwrap_or_else(|_| {
+                                        printerrln!("invalid chunk size: {}",
+                                                    size);
+                                        process::exit(-1);
+                                    });
             }
             _ => {
                 printerrln!("chunking algorithm {:} not supported",
@@ -348,7 +351,8 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir, log));
-            let stats = try!(repo.write(&name, &mut io::stdin()));
+            let enc = try!(repo.unlock_encrypt(&|| read_passphrase(&options)));
+            let stats = try!(repo.write(&name, &mut io::stdin(), &enc));
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
         }
@@ -356,17 +360,14 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir, log));
-            let pass = read_passphrase(options);
-            let seckey = try!(repo.get_seckey(&pass));
-            try!(repo.read(&name, &mut io::stdout(), &seckey));
+            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
+            try!(repo.read(&name, &mut io::stdout(), &dec));
         }
         Command::ChangePassphrase => {
             let dir = options.check_dir();
-            let repo = Repo::open(&dir, log)?;
-            let pass = read_passphrase(options);
-            let seckey = repo.get_seckey(&pass)?;
-            let pass = read_new_passphrase();
-            repo.change_passphrase(&seckey, &pass)?;
+            let mut repo = Repo::open(&dir, log)?;
+            repo.change_passphrase(&|| read_passphrase(&options),
+                                   &|| read_new_passphrase())?;
         }
         Command::Remove => {
             let names = options.get_names();
@@ -377,20 +378,22 @@ fn run(options: &Options) -> io::Result<()> {
             }
         }
         Command::Init => {
-            let size = options.check_chunk_size();
-            let chunking = options.check_chunking(size);
             let dir = options.check_dir();
-            let pass = read_new_passphrase();
-            try!(Repo::init(&dir, &pass, chunking, log));
+            let size = options.check_chunk_size();
+            let mut options = options.clone();
+            options.set_chunking(size);
+            try!(Repo::init(&dir,
+                            &|| read_new_passphrase(),
+                            options.rdedup_settings,
+                            log));
         }
         Command::DU => {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir, log));
-            let pass = read_passphrase(options);
-            let seckey = try!(repo.get_seckey(&pass));
+            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
 
-            let result = try!(repo.du(&name, &seckey));
+            let result = try!(repo.du(&name, &dec));
             println!("{} chunks", result.chunks);
             println!("{} bytes", result.bytes);
         }
@@ -417,10 +420,8 @@ fn run(options: &Options) -> io::Result<()> {
             let name = options.check_name();
             let dir = options.check_dir();
             let repo = try!(Repo::open(&dir, log));
-            let pass = read_passphrase(options);
-            let seckey = try!(repo.get_seckey(&pass));
-
-            let results = try!(repo.verify(&name, &seckey));
+            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
+            let results = try!(repo.verify(&name, &dec));
             println!("scanned {} chunk(s)", results.scanned);
             println!("found {} corrupted chunk(s)", results.errors.len());
             for err in results.errors {
