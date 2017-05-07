@@ -613,34 +613,6 @@ impl Repo {
         Ok(())
     }
 
-    /*
-    /// Old repository config creation, should not be used anymore
-    /// other than backward compatibility testing purposes
-    pub fn init_v0<L>(repo_path: &Path,
-                      passphrase: &str,
-                      log: L)
-                      -> Result<Repo>
-        where L: Into<Option<Logger>>
-    {
-        let log = log.into()
-            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
-        Repo::ensure_repo_not_exists(repo_path)?;
-        Repo::init_common_dirs(repo_path)?;
-
-        let (pk, sk) = box_::gen_keypair();
-        config::write_config_v0(repo_path, pk, &sk, passphrase)?;
-
-        let repo = Repo {
-            path: repo_path.to_owned(),
-            pub_key: pk,
-            version: 0,
-            chunking: Chunking::default(),
-            log: log,
-        };
-        Ok(repo)
-    }
-    */
-
     /// Create new rdedup repository
     pub fn init<L>(repo_path: &Path,
                    passphrase: PassphraseFn,
@@ -711,69 +683,6 @@ impl Repo {
 
         self.list_names_nolock()
     }
-    /*
-    fn get_seckey(&self, passphrase: &str) -> Result<SecretKey> {
-        let _lock = self.lock_read()?;
-        let sec_key = if self.version == 0 {
-            self.load_sec_key_v0(passphrase)?
-        } else {
-            self.config.load_sec_key(passphrase)?
-        };
-
-        Ok(SecretKey(sec_key))
-    }*/
-
-    /*
-    pub fn open_v0<L>(repo_path: &Path, log: L) -> Result<Repo>
-        where L: Into<Option<Logger>>
-    {
-        let log = log.into()
-            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
-        if !repo_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("repo not found: {}",
-                                          repo_path.to_string_lossy())));
-        }
-
-        let pubkey_path = config::pub_key_file_path(repo_path);
-        if !pubkey_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("pubkey file not found: {}",
-                                          pubkey_path.to_string_lossy())));
-        }
-
-        let version_int = Repo::read_and_validate_version(repo_path)?;
-
-        let mut file = fs::File::open(&pubkey_path)?;
-
-        let mut buf = vec![];
-        file.read_to_end(&mut buf)?;
-
-        let pubkey_str = std::str::from_utf8(&buf)
-            .map_err(|_| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        "pubkey data invalid: not utf8")
-                     })?;
-        let pubkey_bytes = pubkey_str
-            .from_hex()
-            .map_err(|_| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        "pubkey data invalid: not hex")
-                     })?;
-        let pub_key = box_::PublicKey::from_slice(&pubkey_bytes).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "pubkey data invalid: can't convert to pubkey")
-            })?;
-
-        Ok(Repo {
-               path: repo_path.to_owned(),
-               pub_key: pub_key,
-               version: version_int,
-               chunking: Chunking::default(),
-               log: log,
-           })
-    }
-    */
 
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
         where L: Into<Option<Logger>>
@@ -789,9 +698,8 @@ impl Repo {
         let version = Repo::read_and_validate_version(repo_path)?;
 
         if version == 0 {
-            // TODO:
-            // return Repo::open_v0(repo_path, log);
-            unimplemented!()
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("rdedup v0 config format not supported")));
         }
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
@@ -809,45 +717,17 @@ impl Repo {
            })
     }
 
-    /*
-    fn change_passphrase_v0(&self,
-                            seckey: &SecretKey,
-                            new_passphrase: &str)
-                            -> Result<()> {
-        let _lock = self.lock_write()?;
-
-
-        let salt = pwhash::gen_salt();
-        let nonce = secretbox::gen_nonce();
-
-        let derived_key = derive_key(new_passphrase, &salt)?;
-
-
-        let encrypted_seckey =
-            secretbox::seal(&(seckey.0).0, &nonce, &derived_key);
-
-        let seckey_path = config::sec_key_file_path(&self.path);
-        let seckey_path_tmp = seckey_path.with_extension("tmp");
-
-        config::write_seckey_file(&seckey_path_tmp,
-                                  &encrypted_seckey,
-                                  &nonce,
-                                  &salt)?;
-
-        fs::rename(seckey_path_tmp, &seckey_path)?;
-
-        Ok(())
-    }
-    */
-
     /// Change the passphrase
     pub fn change_passphrase(&mut self,
                              old_p: PassphraseFn,
                              new_p: PassphraseFn)
                              -> Result<()> {
+
+        let _lock = self.lock_exclusive();
+
         if self.config.version == 0 {
-            unimplemented!();
-            // self.change_passphrase_v0(seckey, new_passphrase)
+            return Err(Error::new(io::ErrorKind::NotFound,
+                                  format!("rdedup v0 config format not supported")));
         } else {
             self.config.encryption.change_passphrase(old_p, new_p)?;
             self.config.write(&self.path)?;
@@ -972,89 +852,6 @@ impl Repo {
             chunker_tx.send(buf).unwrap()
         }
     }
-
-
-    /*
-    fn load_sec_key_v0(&self, passphrase: &str) -> Result<box_::SecretKey> {
-        let seckey_path = config::sec_key_file_path(&self.path);
-        if !seckey_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("seckey file not found: {}",
-                                          seckey_path.to_string_lossy())));
-        }
-
-
-        let secfile_bytes = self.read_hex_file(&seckey_path)?;
-
-        const TOTAL_SECKEY_FILE_LEN: usize =
-            pwhash::SALTBYTES + secretbox::NONCEBYTES + secretbox::MACBYTES +
-            box_::SECRETKEYBYTES;
-        if secfile_bytes.len() != TOTAL_SECKEY_FILE_LEN {
-            return Err(Error::new(io::ErrorKind::InvalidData,
-                                  "seckey file is not of correct length"));
-        }
-
-        let (sealed_key, rest) =
-            secfile_bytes.split_at(box_::SECRETKEYBYTES + secretbox::MACBYTES);
-        let (nonce, rest) = rest.split_at(secretbox::NONCEBYTES);
-        let (salt, rest) = rest.split_at(pwhash::SALTBYTES);
-        assert_eq!(rest.len(), 0);
-
-        let salt = pwhash::Salt::from_slice(salt).unwrap();
-        let nonce = secretbox::Nonce::from_slice(nonce).unwrap();
-
-        let derived_key = derive_key(passphrase, &salt)?;
-
-        let plain_seckey =
-            secretbox::open(sealed_key, &nonce, &derived_key).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                   "can't decrypt key using given passphrase")
-                })?;
-        let sec_key = box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "encrypted seckey data invalid: can't convert \
-                                to seckey")
-            })?;
-
-        Ok(sec_key)
-    }*/
-
-    /*
-    fn load_sec_key(&self, passphrase: &str) -> Result<box_::SecretKey> {
-
-        let file = fs::File::open(&config::config_yml_file_path(&self.path))?;
-        let config: config::Repo = serde_yaml::from_reader(file)
-            .map_err(|e| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        format!("couldn't parse yaml: {}",
-                                                e.to_string()))
-                     })?;
-
-        if let config::Encryption::Curve25519(enc) = config.encryption {
-            let derived_key = derive_key(passphrase, &enc.salt)?;
-
-            let plain_seckey = secretbox::open(&enc.sealed_sec_key,
-                                               &enc.nonce,
-                                               &derived_key).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                   "can't decrypt key using given passphrase")
-                })?;
-            let sec_key =
-                box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData,
-                                       "encrypted seckey data invalid: can't \
-                                        convert to seckey")
-                    })?;
-
-
-
-            Ok(sec_key)
-
-        } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData,
-                               "Repo without encryptin not supported yet"))
-        }
-    }*/
 
     fn get_chunk_accessor(&self,
                           decrypter: Option<ArcDecrypter>)

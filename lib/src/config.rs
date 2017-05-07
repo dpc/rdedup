@@ -8,7 +8,7 @@ use encryption::{ArcDecrypter, ArcEncrypter};
 use hex::ToHex;
 use settings;
 
-use sodiumoxide::crypto::{pwhash, secretbox, box_};
+use sodiumoxide::crypto::{pwhash, secretbox};
 use std::{io, fs};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -77,40 +77,6 @@ pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
 
     Ok(())
 }
-
-pub fn write_config_v0(repo_path: &Path,
-                       pk: box_::PublicKey,
-                       sk: &box_::SecretKey,
-                       passphrase: &str)
-                       -> super::Result<()> {
-    {
-        let pubkey_path = pub_key_file_path(repo_path);
-
-        let mut pubkey_file = fs::File::create(pubkey_path)?;
-
-
-        (&mut pubkey_file as &mut Write)
-            .write_all(pk.0.to_hex().as_bytes())?;
-        pubkey_file.flush()?;
-    }
-    {
-        let salt = pwhash::gen_salt();
-        let nonce = secretbox::gen_nonce();
-
-        let derived_key = super::derive_key(passphrase, &salt)?;
-
-        let encrypted_seckey = secretbox::seal(&sk.0, &nonce, &derived_key);
-
-        let seckey_path = sec_key_file_path(repo_path);
-        write_seckey_file(&seckey_path, &encrypted_seckey, &nonce, &salt)?;
-    }
-    write_version_file(repo_path, 0)?;
-
-    Ok(())
-}
-
-
-
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
