@@ -1,6 +1,7 @@
 extern crate log;
 extern crate rustc_serialize as serialize;
-extern crate argparse;
+#[macro_use]
+extern crate clap;
 extern crate env_logger;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
@@ -15,9 +16,8 @@ use lib::settings;
 use serialize::hex::ToHex;
 use slog::Drain;
 use std::{io, process, env};
-use std::path;
-use std::str::FromStr;
 
+use std::path::PathBuf;
 
 macro_rules! printerrln {
     ($($arg:tt)*) => ({
@@ -48,252 +48,55 @@ macro_rules! printerr {
 }
 
 
-fn read_passphrase(o: &Options) -> io::Result<String> {
-    printerrln!("Warning: Use `--add-newline` option if you generated repo \
-                 with rdedup version <= 0.2");
-    printerr!("Enter passphrase to unlock: ");
-    if o.add_newline {
-        rpassword::read_password().map(|p| p + "\n")
-    } else {
-        rpassword::read_password().map(|p| p)
-    }
-}
 
-fn read_new_passphrase() -> io::Result<String> {
-    loop {
-        printerr!("Enter new passphrase: ");
-        let p1 = rpassword::read_password()?;
-        printerr!("Enter new passphrase again: ");
-        let p2 = rpassword::read_password()?;
-        if p1 == p2 {
-            return Ok(p1);
-        }
-        printerrln!("\nPassphrases don't match, try again.");
-    }
-}
-/// `parse_size` is a utility function to take a string representing a size
-/// in bytes like 192k or 192K and turns it into a u64. Currently this parses up
-/// to a Terabyte value but additional values are supported by simply expanding
-/// the units array.
-fn parse_size(input: &str) -> Option<u64> {
-    let input = input.to_uppercase();
-
-    if input.contains('.') {
-        return None;
-    }
-
-    let units = ["K", "M", "G", "T", "P", "E"];
-    let unit = input.matches(char::is_alphabetic).next();
-    let str_size: String = input.matches(char::is_numeric).collect();
-
-    let mut size = if !str_size.is_empty() {
-        match u64::from_str(str_size.as_str()) {
-            Ok(s) => s,
-            Err(_) => return None,
-        }
-    } else {
-        return None;
-    };
-
-    if let Some(unit) = unit {
-        if let Some(idx) = units.iter().position(|&u| u == unit) {
-            let modifier: u64 = 1024u64.pow(idx as u32 + 1);
-            size *= modifier;
-        } else {
-            return None;
-        }
-    }
-    Some(size)
-}
-
-#[test]
-fn test_parse_size() {
-    // tuples that are str, expected Option<u64>
-    let tests = [("192K", Some(192 * 1024)),
-                 ("1M", Some(1024u64.pow(2))),
-                 ("Hello", None),
-                 ("12345.6789", None),
-                 ("1024B", None),
-                 ("1024A", None),
-                 ("1t", Some(1024u64.pow(4))),
-                 ("1E", Some(1024u64.pow(6)))];
-
-    for test in &tests {
-        let result = parse_size(test.0);
-        if result != test.1 {
-            panic!("expected {:?}, got {:?}", test.1, result);
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-enum Command {
-    Help,
-    Store,
-    Load,
-    Init,
-    DU,
-    GC,
-    Remove,
-    ChangePassphrase,
-    List,
-    Verify,
-}
-
-impl FromStr for Command {
-    type Err = ();
-    fn from_str(src: &str) -> Result<Command, ()> {
-        match src {
-            "help" => Ok(Command::Help),
-            "store" => Ok(Command::Store),
-            "load" => Ok(Command::Load),
-            "init" => Ok(Command::Init),
-            "rm" | "delete" | "del" => Ok(Command::Remove),
-            "ls" | "list" => Ok(Command::List),
-            "du" => Ok(Command::DU),
-            "gc" => Ok(Command::GC),
-            "chpasswd" |
-            "chpassphrase" |
-            "changepassphrase" => Ok(Command::ChangePassphrase),
-            "verify" => Ok(Command::Verify),
-            _ => Err(()),
-        }
-    }
-}
-
+// #[derive(Copy, Clone)]
+// enum Command {
+// Help,
+// Store,
+// Load,
+// Init,
+// DU,
+// GC,
+// Remove,
+// ChangePassphrase,
+// List,
+// Verify,
+// }
+//
+// impl FromStr for Command {
+// type Err = ();
+// fn from_str(src: &str) -> Result<Command, ()> {
+// match src {
+// "help" => Ok(Command::Help),
+// "store" => Ok(Command::Store),
+// "load" => Ok(Command::Load),
+// "init" => Ok(Command::Init),
+// "rm" | "delete" | "del" => Ok(Command::Remove),
+// "ls" | "list" => Ok(Command::List),
+// "du" => Ok(Command::DU),
+// "gc" => Ok(Command::GC),
+// "chpasswd" |
+// "chpassphrase" |
+// "changepassphrase" => Ok(Command::ChangePassphrase),
+// "verify" => Ok(Command::Verify),
+// _ => Err(()),
+// }
+// }
+// }
+//
 #[derive(Clone)]
 struct Options {
-    dir_str: String,
-    args: Vec<String>,
-    command: Command,
-    add_newline: bool,
-    usage: String,
-    chunk_size: String,
-    chunking: String,
-    encryption: String,
+    dir: PathBuf,
     debug_level: u32,
-    rdedup_settings: settings::Repo,
+    settings: settings::Repo,
 }
 
 impl Options {
-    fn new() -> Self {
-        let mut dir_str: String = env::var("RDEDUP_DIR").unwrap_or_default();
-        let mut args = vec![];
-        let mut command = Command::Help;
-        let mut usage = vec![];
-        let mut add_newline = false;
-        let mut chunk_size: String = "128k".to_owned();
-        let mut chunking: String = "bup".to_owned();
-        let mut encryption: String = "curve25519".to_owned();
-        let mut debug_level = 0u32;
-
-        {
-            let mut ap = argparse::ArgumentParser::new();
-            use argparse::*;
-            ap.set_description("rdedup");
-            ap.refer(&mut dir_str)
-                .add_option(&["-d", "--dir"], Store, "destination dir");
-            ap.refer(&mut add_newline)
-                .add_option(&["-n", "--add-newline"],
-                            StoreTrue,
-                            "add newline to the password");
-            ap.refer(&mut chunking)
-                .add_option(&["--chunking"],
-                            Store,
-                            "chunking algorithm (bup - default)");
-            ap.refer(&mut chunk_size)
-                .add_option(&["--chunk-size"],
-                            Store,
-                            "chunking size, default: 128k");
-            ap.refer(&mut debug_level)
-                .add_option(&["-D", "--debug"],
-                            IncrBy(1),
-                            "increase debug level");
-            ap.refer(&mut encryption)
-                .add_option(&["--encryption"],
-                            Store,
-                            "chunking algorithm (default: curve25519)");
-            ap.refer(&mut command)
-                .add_argument("command", Store, r#"command to run"#);
-            ap.refer(&mut args)
-                .add_argument("arguments", List, r#"arguments for command"#);
-
-            ap.add_option(&["-V", "--version"],
-                          Print(env!("CARGO_PKG_VERSION").to_string()),
-                          "show version");
-
-            ap.stop_on_first_argument(true);
-            ap.parse_args_or_exit();
-
-            ap.print_help("rdedup", &mut usage).unwrap();
-        }
-        println!("{}", dir_str);
-
+    fn new(path: PathBuf) -> Options {
         Options {
-            dir_str: dir_str,
-            command: command,
-            args: args,
-            add_newline: add_newline,
-            usage: String::from_utf8_lossy(&usage).to_string(),
-            chunk_size: chunk_size,
-            chunking: chunking,
-            encryption: encryption,
-            debug_level: debug_level,
-            rdedup_settings: settings::Repo::new(),
-        }
-    }
-
-    fn check_no_arguments(&self) {
-        if !self.args.is_empty() {
-            printerrln!("Unnecessary argument: {}", self.args[0]);
-            process::exit(-1);
-        }
-    }
-
-    fn check_command(&self) -> Command {
-        self.command
-    }
-
-    fn check_name(&self) -> String {
-        if self.args.len() != 1 {
-            printerrln!("Name required");
-            process::exit(-1);
-        }
-        self.args[0].clone()
-    }
-
-    fn check_dir(&self) -> path::PathBuf {
-        if self.dir_str.is_empty() {
-            printerrln!("No destination directory specified. Use `--dir` or \
-                         `$RDEDUP_DIR`");
-            process::exit(-1);
-        }
-        path::Path::new(&self.dir_str).to_owned()
-    }
-
-    fn set_chunking(&mut self, size: u64) {
-        match self.chunking.to_lowercase().as_str() {
-            "bup" => {
-                // Validate that the size provided works for the bup algorithm
-                if !size.is_power_of_two() {
-                    printerrln!("invalid chunk size provided for bup, must \
-                                 be power of 2");
-                    process::exit(-1);
-                }
-
-                self.rdedup_settings
-                    .use_bup_chunking(size.trailing_zeros())
-                    .unwrap_or_else(|_| {
-                                        printerrln!("invalid chunk size: {}",
-                                                    size);
-                                        process::exit(-1);
-                                    });
-            }
-            _ => {
-                printerrln!("chunking algorithm {:} not supported",
-                            self.chunking);
-                process::exit(-1);
-            }
+            dir: path,
+            debug_level: 0,
+            settings: settings::Repo::new(),
         }
     }
 
@@ -302,60 +105,48 @@ impl Options {
         let encryption = match s {
             "curve25519" => lib::settings::Encryption::Curve25519,
             "none" => lib::settings::Encryption::None,
-
             _ => {
                 printerrln!("unsupported encryption: {}", s);
                 process::exit(-1);
             }
         };
 
-        self.rdedup_settings
+        self.settings
             .set_encryption(encryption)
-            .unwrap_or_else(|_| {
-                                printerrln!("invalid encryption: {}", s);
-                                process::exit(-1);
-                            });
-
+            .expect("wrong encryption");
     }
-    fn check_chunk_size(&self) -> u64 {
-        match parse_size(&self.chunk_size) {
-            Some(s) => s,
-            None => {
-                printerrln!("invalid chunk size provided, must be a number \
-                             with a size suffix");
+
+    fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
+        match s {
+            "bup" => {
+                self.settings
+                    .use_bup_chunking(chunk_size)
+                    .expect("wrong chunking settings")
+            }
+            _ => {
+                printerrln!("unsupported encryption: {}", s);
                 process::exit(-1);
             }
-        }
-    }
+        };
 
-    fn get_names(&self) -> Vec<String> {
-        if self.args.len() < 1 {
-            printerrln!("At least one name is required");
-            process::exit(-1);
-        }
-        let mut names: Vec<String> = Vec::with_capacity(self.args.len());
-        for name in &self.args {
-            names.push(name.clone());
-        }
-        names
-    }
-
-    fn print_usage(&self) {
-        printerrln!("{}", self.usage);
-
-        printerrln!("Commands:
-  store\t\t\tsave data under name
-  load\t\t\tload data under name
-  ls\t\t\tlist all stored names
-  rm\t\t\tdelete name
-  gc\t\t\tdelete unreachable data
-  changepassphrase\tchange the passphrase
-  verify\t\tverify integrity of chunks associated with a name");
     }
 }
 
-fn run(options: &Options) -> io::Result<()> {
-    let log = match options.debug_level {
+
+mod util;
+use util::{read_passphrase, read_new_passphrase};
+
+fn validate_chunk_size(s: String) -> Result<(), String> {
+    if let Some(_) = util::parse_size(&s) {
+        Ok(())
+    } else {
+        Err("Can't parse a human readable byte-size value".into())
+    }
+
+}
+
+fn create_logger(verbosity: u32) -> slog::Logger {
+    match verbosity {
         0 => slog::Logger::root(slog::Discard, o!()),
         dl => {
             let level = match dl {
@@ -369,93 +160,159 @@ fn run(options: &Options) -> io::Result<()> {
             let drain = slog::LevelFilter::new(drain, level);
             slog::Logger::root(drain.fuse(), o!())
         }
-    };
-    match options.check_command() {
-        Command::Help => {
-            options.print_usage();
+    }
+}
+
+fn run() -> io::Result<()> {
+    let matches = clap_app!(
+        rdedup =>
+        (version: env!("CARGO_PKG_VERSION"))
+        (author: "Dawid Ciężarkiewicz <dpc@dpc.pw>")
+        (about: "Data deduplication toolkit")
+        (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. Override `RDEDUP_DIR` environment variable.")
+        (@arg verbose: -v ... "Increase debugging level")
+        (@subcommand init =>
+         (about: "Create a new repository")
+         (@arg CHUNKING: --chunking possible_values(&["bup"]) "Set chunking scheme. Default: bup")
+         (@arg CHUNK_SIZE: --chunk_size {validate_chunk_size} "Set average chunk size"
+          )
+         (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) "Set encryption scheme. Default: curve25519")
+        )
+        (@subcommand store =>
+         (about: "Store data from repository")
+         (@arg NAME: +required "Name to store")
+        )
+        (@subcommand load =>
+         (about: "Load data from repository")
+         (@arg NAME:  +required "Name to load")
+        )
+        (@subcommand list =>
+         (visible_alias: "ls")
+         (about: "List names stored in the repository")
+        )
+        (@subcommand change_passphrase =>
+         (visible_alias: "chpasswd")
+         (about: "Change the passphrase protecting the encryption key (if any)")
+        )
+        (@subcommand remove =>
+         (visible_alias: "rm")
+         (about: "Remove name(s) stored in the repository")
+         (@arg NAME: +required ... "Names to remove")
+        )
+        (@subcommand gc =>
+         (about: "Garbage collect unreferenced chunks")
+        )
+        (@subcommand verify =>
+         (about: "Verify integrity of data stored in the repository")
+         (@arg NAME: +required ... "Names to verify")
+        )
+        (@subcommand du =>
+         (about: "Calculate disk usage of a give data stored in the repository")
+         (@arg NAME: +required ... "Names to check")
+        )
+
+        )
+        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        .get_matches();
+
+
+    let dir = if let Some(dir) = matches.value_of_os("REPO_DIR") {
+        PathBuf::from(dir)
+    } else {
+        if let Some(dir) = env::var_os("RDEDUP_DIR") {
+            PathBuf::from(dir)
+        } else {
+            printerrln!("Repository dir path not specified");
+            process::exit(-1);
         }
-        Command::Store => {
-            let name = options.check_name();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
-            let enc = try!(repo.unlock_encrypt(&|| read_passphrase(&options)));
-            let stats = try!(repo.write(&name, &mut io::stdin(), &enc));
+    };
+
+    let mut options = Options::new(dir);
+
+    let log = create_logger(matches.occurrences_of("verbose") as u32);
+
+    match matches.subcommand() {
+        ("init", Some(matches)) => {
+            if let Some(chunking) = matches.value_of("CHUNKING") {
+                options.set_chunking(chunking,
+                                     matches
+                                         .value_of("CHUNK_SIZE")
+                                         .map(|s| {
+                                                       util::parse_size(s).expect("Invalid chunk size option")
+                                                   })
+                                         .map(|u| u.trailing_zeros()));
+            }
+            if let Some(encryption) = matches.value_of("ENCRYPTION") {
+                options.set_encryption(encryption);
+            }
+
+            let _ = Repo::init(&options.dir,
+                               &|| util::read_new_passphrase(),
+                               options.settings,
+                               log)?;
+        }
+        ("store", Some(matches)) => {
+            let name = matches.value_of("NAME").expect("name agument missing");
+            let repo = Repo::open(&options.dir, log)?;
+            let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
+            let stats = repo.write(&name, &mut io::stdin(), &enc)?;
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
         }
-        Command::Load => {
-            let name = options.check_name();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
-            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
-            try!(repo.read(&name, &mut io::stdout(), &dec));
+        ("load", Some(matches)) => {
+            let name = matches.value_of("NAME").expect("name agument missing");
+            let repo = Repo::open(&options.dir, log)?;
+            let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
+            repo.read(&name, &mut io::stdout(), &dec)?;
         }
-        Command::ChangePassphrase => {
-            let dir = options.check_dir();
-            let mut repo = Repo::open(&dir, log)?;
-            repo.change_passphrase(&|| read_passphrase(&options),
+        ("change_passphrase", Some(_matches)) => {
+            let mut repo = Repo::open(&options.dir, log)?;
+            repo.change_passphrase(&|| read_passphrase(),
                                    &|| read_new_passphrase())?;
         }
-        Command::Remove => {
-            let names = options.get_names();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
-            for name in &names {
-                try!(repo.rm(&name));
+        ("remove", Some(matches)) => {
+            let repo = Repo::open(&options.dir, log)?;
+            for name in matches.values_of("NAME").expect("names missing") {
+                repo.rm(name)?;
             }
         }
-        Command::Init => {
-            let dir = options.check_dir();
-            let size = options.check_chunk_size();
-            let mut applied_options = options.clone();
-            applied_options.set_chunking(size);
-            applied_options.set_encryption(&options.encryption.clone());
-            try!(Repo::init(&dir,
-                            &|| read_new_passphrase(),
-                            applied_options.rdedup_settings,
-                            log));
+        ("du", Some(matches)) => {
+            let repo = Repo::open(&options.dir, log)?;
+            let dec = repo.unlock_decrypt(&|| read_passphrase())?;
+
+            for name in matches.values_of("NAME").expect("names missing") {
+                let result = repo.du(&name, &dec)?;
+                println!("{} chunks", result.chunks);
+                println!("{} bytes", result.bytes);
+            }
         }
-        Command::DU => {
-            let name = options.check_name();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
-            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
+        ("gc", Some(_matches)) => {
+            let repo = Repo::open(&options.dir, log)?;
 
-            let result = try!(repo.du(&name, &dec));
-            println!("{} chunks", result.chunks);
-            println!("{} bytes", result.bytes);
-        }
-        Command::GC => {
-            options.check_no_arguments();
-            let dir = options.check_dir();
-
-            let repo = try!(Repo::open(&dir, log));
-
-            let result = try!(repo.gc());
+            let result = repo.gc()?;
             println!("Removed {} chunks", result.chunks);
             println!("Freed {} bytes", result.bytes);
         }
-        Command::List => {
-            options.check_no_arguments();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
+        ("list", Some(_matches)) => {
+            let repo = Repo::open(&options.dir, log)?;
 
             for name in try!(repo.list_names()) {
                 println!("{}", name);
             }
         }
-        Command::Verify => {
-            let name = options.check_name();
-            let dir = options.check_dir();
-            let repo = try!(Repo::open(&dir, log));
-            let dec = try!(repo.unlock_decrypt(&|| read_passphrase(&options)));
-            let results = try!(repo.verify(&name, &dec));
-            println!("scanned {} chunk(s)", results.scanned);
-            println!("found {} corrupted chunk(s)", results.errors.len());
-            for err in results.errors {
-                println!("chunk {} - {}", &err.0.to_hex(), err.1);
+        ("verify", Some(matches)) => {
+            let repo = Repo::open(&options.dir, log)?;
+            let dec = repo.unlock_decrypt(&|| read_passphrase())?;
+            for name in matches.values_of("NAME").expect("values") {
+                let results = repo.verify(&name, &dec)?;
+                println!("scanned {} chunk(s)", results.scanned);
+                println!("found {} corrupted chunk(s)", results.errors.len());
+                for err in results.errors {
+                    println!("chunk {} - {}", &err.0.to_hex(), err.1);
+                }
             }
         }
+        _ => panic!("Unrecognized subcommand"),
     }
 
     Ok(())
@@ -464,9 +321,8 @@ fn run(options: &Options) -> io::Result<()> {
 fn main() {
     env_logger::init().unwrap();
 
-    let options = Options::new();
-
-    if let Err(err) = run(&options) {
-        printerrln!("Error: {}", err);
+    if let Err(e) = run() {
+        printerrln!("Error: {}", e);
+        process::exit(-1);
     }
 }

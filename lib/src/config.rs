@@ -27,6 +27,8 @@ pub const SECKEY_FILE: &'static str = "sec_key";
 pub const VERSION_FILE: &'static str = "version";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
+pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
+
 pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
 }
@@ -88,10 +90,11 @@ pub enum Chunking {
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
 }
+
 /// Default implementation for the `Chunking`
 impl Default for Chunking {
     fn default() -> Chunking {
-        Chunking::Bup { chunk_bits: 17 }
+        Chunking::Bup { chunk_bits: DEFAULT_BUP_CHUNK_BITS }
     }
 }
 

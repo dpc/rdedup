@@ -36,7 +36,8 @@ impl Repo {
         Ok(())
     }
 
-    pub fn use_bup_chunking(&mut self, bits: u32) -> super::Result<()> {
+    pub fn use_bup_chunking(&mut self, bits: Option<u32>) -> super::Result<()> {
+        let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
         let bup = config::Chunking::Bup { chunk_bits: bits };
 
         if !bup.valid() {
