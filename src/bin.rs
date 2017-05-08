@@ -2,7 +2,6 @@ extern crate log;
 extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate clap;
-extern crate env_logger;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
 #[macro_use]
@@ -169,10 +168,18 @@ fn create_logger(verbosity: u32) -> slog::Logger {
                 2 => slog::Level::Debug,
                 _ => slog::Level::Trace,
             };
-            let drain = slog_term::term_compact();
-            let drain = slog_async::Async::default(drain.fuse());
-            let drain = slog::LevelFilter::new(drain, level);
-            slog::Logger::root(drain.fuse(), o!())
+            let drain = slog_term::term_full();
+            if dl > 4 {
+                // at level 4, use synchronous logger so not to loose any
+                // logging messages
+                let drain = std::sync::Mutex::new(drain);
+                let drain = slog::LevelFilter::new(drain, level);
+                slog::Logger::root(drain.fuse(), o!())
+            } else {
+                let drain = slog_async::Async::default(drain.fuse());
+                let drain = slog::LevelFilter::new(drain, level);
+                slog::Logger::root(drain.fuse(), o!())
+            }
         }
     }
 }
@@ -336,8 +343,6 @@ fn run() -> io::Result<()> {
 }
 
 fn main() {
-    env_logger::init().unwrap();
-
     if let Err(e) = run() {
         printerrln!("Error: {}", e);
         process::exit(-1);
