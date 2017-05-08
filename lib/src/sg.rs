@@ -3,7 +3,6 @@
 
 use DIGEST_SIZE;
 use DataType;
-use flate2;
 use owning_ref::ArcRef;
 use rollsum;
 use sha2::{Sha256, Digest};
@@ -175,19 +174,6 @@ impl SGBuf {
         vec_result.copy_from_slice(&sha256.result());
 
         vec_result
-    }
-
-    pub fn compress(&self) -> SGBuf {
-        let mut compressor =
-            flate2::write::DeflateEncoder::new(
-                Vec::with_capacity(self.total_len()),
-                flate2::Compression::Default);
-
-        for sg_part in &self.0 {
-            compressor.write_all(sg_part).unwrap();
-        }
-
-        SGBuf::from_single(compressor.finish().unwrap())
     }
 
     pub fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {

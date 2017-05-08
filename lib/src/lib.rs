@@ -60,6 +60,9 @@ use sorting_recv::SortingIterator;
 mod encryption;
 use encryption::EncryptionEngine;
 
+mod compression;
+use compression::ArcCompression;
+
 pub mod settings;
 
 mod util;
@@ -172,6 +175,7 @@ struct IndexTranslator<'a> {
     writer: Option<&'a mut Write>,
     data_type: DataType,
     decrypter: Option<ArcDecrypter>,
+    compression: ArcCompression,
     log: Logger,
 }
 
@@ -180,6 +184,7 @@ impl<'a> IndexTranslator<'a> {
            writer: Option<&'a mut Write>,
            data_type: DataType,
            decrypter: Option<ArcDecrypter>,
+           compression: ArcCompression,
            log: Logger)
            -> Self {
         IndexTranslator {
@@ -187,6 +192,7 @@ impl<'a> IndexTranslator<'a> {
             digest: vec![],
             data_type: data_type,
             decrypter: decrypter,
+            compression: compression,
             writer: writer,
             log: log,
         }
@@ -211,6 +217,7 @@ impl<'a> Write for IndexTranslator<'a> {
                          ref mut digest,
                          data_type,
                          ref decrypter,
+                         ref compression,
                          ref mut writer,
                          ..
                      } = self;
@@ -218,6 +225,7 @@ impl<'a> Write for IndexTranslator<'a> {
                 let mut traverser = ReadContext::new(Some(writer),
                                                      data_type,
                                                      decrypter.clone(),
+                                                     compression.clone(),
                                                      self.log.clone());
                 traverser.read_recursively(accessor, digest)?;
             } else {
@@ -239,9 +247,8 @@ impl<'a> Write for IndexTranslator<'a> {
 struct ReadContext<'a> {
     /// Writer to write the data to; `None` will discard the data
     writer: Option<&'a mut Write>,
-    /// Secret key to access the data - `None` is used for operations
-    /// that don't decrypt anything
     decrypter: Option<ArcDecrypter>,
+    compression: ArcCompression,
     /// The type of the data to be read
     data_type: DataType,
 
@@ -252,12 +259,14 @@ impl<'a> ReadContext<'a> {
     fn new(writer: Option<&'a mut Write>,
            data_type: DataType,
            decrypter: Option<ArcDecrypter>,
+           compression: ArcCompression,
            log: Logger)
            -> Self {
         ReadContext {
             writer: writer,
             data_type: data_type,
             decrypter: decrypter,
+            compression: compression,
             log: log,
         }
     }
@@ -272,8 +281,7 @@ impl<'a> ReadContext<'a> {
             .read_chunk_into(digest,
                              DataType::Index,
                              DataType::Index,
-                             &mut index_data,
-                             self.decrypter.clone())?;
+                             &mut index_data)?;
 
         assert_eq!(index_data.len(), DIGEST_SIZE);
 
@@ -281,11 +289,13 @@ impl<'a> ReadContext<'a> {
                                                   self.writer.take(),
                                                   self.data_type,
                                                   self.decrypter.clone(),
+                                                  self.compression.clone(),
                                                   self.log.clone());
 
         let mut sub_traverser = ReadContext::new(Some(&mut translator),
                                                  DataType::Index,
                                                  None,
+                                                 self.compression.clone(),
                                                  self.log.clone());
         sub_traverser.read_recursively(accessor, &index_data)
     }
@@ -299,8 +309,7 @@ impl<'a> ReadContext<'a> {
             accessor.read_chunk_into(digest,
                                      DataType::Data,
                                      self.data_type,
-                                     writer,
-                                     self.decrypter.clone())
+                                     writer)
         } else {
             accessor.touch(digest)
         }
@@ -331,8 +340,7 @@ trait ChunkAccessor {
                        digest: &[u8],
                        chunk_type: DataType,
                        data_type: DataType,
-                       writer: &mut Write,
-                       decrypter: Option<ArcDecrypter>)
+                       writer: &mut Write)
                        -> Result<()>;
 
 
@@ -346,13 +354,18 @@ trait ChunkAccessor {
 struct DefaultChunkAccessor<'a> {
     repo: &'a Repo,
     decrypter: Option<ArcDecrypter>,
+    compression: ArcCompression,
 }
 
 impl<'a> DefaultChunkAccessor<'a> {
-    fn new(repo: &'a Repo, decrypter: Option<ArcDecrypter>) -> Self {
+    fn new(repo: &'a Repo,
+           decrypter: Option<ArcDecrypter>,
+           compression: ArcCompression)
+           -> Self {
         DefaultChunkAccessor {
             repo: repo,
             decrypter: decrypter,
+            compression: compression,
         }
     }
 }
@@ -366,8 +379,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                        digest: &[u8],
                        chunk_type: DataType,
                        data_type: DataType,
-                       writer: &mut Write,
-                       _decrypter: Option<ArcDecrypter>)
+                       writer: &mut Write)
                        -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = fs::File::open(path)?;
@@ -385,14 +397,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         };
 
         let data = if data_type.should_compress() {
-            let mut decompressor =
-                flate2::write::DeflateDecoder::new(
-                    Vec::with_capacity(data.len()));
-
-            for part in &*data {
-                decompressor.write_all(&part)?;
-            }
-            SGBuf::from_single(decompressor.finish()?)
+            self.compression.decompress(data)?
         } else {
             data
         };
@@ -431,10 +436,11 @@ struct RecordingChunkAccessor<'a> {
 impl<'a> RecordingChunkAccessor<'a> {
     fn new(repo: &'a Repo,
            accessed: &'a mut HashSet<Vec<u8>>,
-           decrypter: Option<ArcDecrypter>)
+           decrypter: Option<ArcDecrypter>,
+           compression: ArcCompression)
            -> Self {
         RecordingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo, decrypter.clone()),
+            raw: DefaultChunkAccessor::new(repo, decrypter, compression),
             accessed: RefCell::new(accessed),
         }
     }
@@ -454,12 +460,11 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
                        digest: &[u8],
                        chunk_type: DataType,
                        data_type: DataType,
-                       writer: &mut Write,
-                       sec_key: Option<ArcDecrypter>)
+                       writer: &mut Write)
                        -> Result<()> {
         self.touch(digest)?;
         self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer, sec_key)
+            .read_chunk_into(digest, chunk_type, data_type, writer)
     }
 }
 
@@ -474,9 +479,12 @@ struct VerifyingChunkAccessor<'a> {
 }
 
 impl<'a> VerifyingChunkAccessor<'a> {
-    fn new(repo: &'a Repo, decrypter: Option<ArcDecrypter>) -> Self {
+    fn new(repo: &'a Repo,
+           decrypter: Option<ArcDecrypter>,
+           compression: ArcCompression)
+           -> Self {
         VerifyingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo, decrypter),
+            raw: DefaultChunkAccessor::new(repo, decrypter, compression),
             accessed: RefCell::new(HashSet::new()),
             errors: RefCell::new(Vec::new()),
         }
@@ -499,8 +507,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
                        digest: &[u8],
                        chunk_type: DataType,
                        data_type: DataType,
-                       writer: &mut Write,
-                       decrypter: Option<ArcDecrypter>)
+                       writer: &mut Write)
                        -> Result<()> {
         {
             let mut accessed = self.accessed.borrow_mut();
@@ -509,13 +516,8 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res =
-            self.raw
-                .read_chunk_into(digest,
-                                 chunk_type,
-                                 data_type,
-                                 writer,
-                                 decrypter);
+        let res = self.raw
+            .read_chunk_into(digest, chunk_type, data_type, writer);
 
         if res.is_err() {
             self.errors
@@ -550,6 +552,8 @@ pub struct Repo {
     path: PathBuf,
 
     config: config::Repo,
+
+    compression: compression::ArcCompression,
 
     /// Logger
     log: slog::Logger,
@@ -629,10 +633,12 @@ impl Repo {
         let config = config::Repo::new_from_settings(passphrase, settings)?;
         config.write(repo_path)?;
 
+        let compression = config.compression.to_engine();
 
         Ok(Repo {
                path: repo_path.into(),
                config: config,
+               compression: compression,
                log: log,
            })
     }
@@ -710,9 +716,11 @@ impl Repo {
                                                 e.to_string()))
                      })?;
 
+        let compression = config.compression.to_engine();
         Ok(Repo {
                path: repo_path.to_owned(),
                config: config,
+               compression: compression,
                log: log,
            })
     }
@@ -854,16 +862,18 @@ impl Repo {
     }
 
     fn get_chunk_accessor(&self,
-                          decrypter: Option<ArcDecrypter>)
+                          decrypter: Option<ArcDecrypter>,
+                          compression: ArcCompression)
                           -> DefaultChunkAccessor {
-        DefaultChunkAccessor::new(self, decrypter)
+        DefaultChunkAccessor::new(self, decrypter, compression)
     }
 
     fn get_recording_chunk_accessor<'a>(&'a self,
                                         accessed: &'a mut HashSet<Vec<u8>>,
-                                        decrypter: Option<ArcDecrypter>)
+                                        decrypter: Option<ArcDecrypter>,
+                                        compression: ArcCompression)
                                         -> RecordingChunkAccessor<'a> {
-        RecordingChunkAccessor::new(self, accessed, decrypter)
+        RecordingChunkAccessor::new(self, accessed, decrypter, compression)
     }
 
     fn chunk_writer_thread(&self,
@@ -938,11 +948,15 @@ impl Repo {
                                     -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut traverser =
-            ReadContext::new(None, DataType::Data, None, self.log.clone());
+        let mut traverser = ReadContext::new(None,
+                                             DataType::Data,
+                                             None,
+                                             self.compression.clone(),
+                                             self.log.clone());
         traverser
             .read_recursively(&self.get_recording_chunk_accessor(reachable_digests,
-                                                             None),
+                                                             None,
+                                                             self.compression.clone()),
                               digest)
     }
 
@@ -1077,10 +1091,13 @@ impl Repo {
 
         let digest = self.name_to_digest(name)?;
 
-        let accessor = self.get_chunk_accessor(Some(dec.decrypter.clone()));
+        let accessor =
+            self.get_chunk_accessor(Some(dec.decrypter.clone()),
+                                    self.compression.clone());
         let mut traverser = ReadContext::new(Some(writer),
                                              DataType::Data,
                                              Some(dec.decrypter.clone()),
+                                             self.compression.clone(),
                                              self.log.clone());
         traverser.read_recursively(&accessor, &digest)
     }
@@ -1092,11 +1109,13 @@ impl Repo {
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(dec.decrypter.clone()));
+                                                   Some(dec.decrypter.clone()),
+                                                   self.compression.clone());
         {
             let mut traverser = ReadContext::new(Some(&mut counter),
                                                  DataType::Data,
                                                  Some(dec.decrypter.clone()),
+                                                 self.compression.clone(),
                                                  self.log.clone());
             traverser.read_recursively(&accessor, &digest)?;
         }
@@ -1115,11 +1134,13 @@ impl Repo {
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(dec.decrypter.clone()));
+                                                   Some(dec.decrypter.clone()),
+                                                   self.compression.clone());
         {
             let mut traverser = ReadContext::new(Some(&mut counter),
                                                  DataType::Data,
                                                  Some(dec.decrypter.clone()),
+                                                 self.compression.clone(),
                                                  self.log.clone());
             traverser.read_recursively(&accessor, &digest)?;
         }
@@ -1154,14 +1175,15 @@ impl Repo {
                 let process_rx = process_rx.clone();
                 let writer_tx = writer_tx.clone();
                 let encrypter = enc.encrypter.clone();
+                let compression = self.compression.clone();
                 scope.spawn(move || {
-                                let processor =
-                                    ChunkProcessor::new(self.clone(),
+                    let processor = ChunkProcessor::new(self.clone(),
                                                         process_rx,
                                                         writer_tx,
-                                                        encrypter);
-                                processor.run();
-                            });
+                                                        encrypter,
+                                                        compression);
+                    processor.run();
+                });
             }
             drop(process_rx);
 

@@ -2,9 +2,11 @@
 //! from `settings`
 
 use {serde_yaml, PassphraseFn};
+use compression;
 
 use encryption;
 use encryption::{ArcDecrypter, ArcEncrypter};
+
 use hex::ToHex;
 use settings;
 
@@ -106,6 +108,30 @@ impl Chunking {
     }
 }
 
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum Compression {
+    #[serde(rename = "deflate")]
+    Deflate,
+    #[serde(rename = "none")]
+    None,
+}
+
+impl Default for Compression {
+    fn default() -> Compression {
+        Compression::Deflate
+    }
+}
+
+impl Compression {
+    pub(crate) fn to_engine(&self) -> compression::ArcCompression {
+        match *self {
+            Compression::None => Arc::new(compression::NoCompression),
+            Compression::Deflate => Arc::new(compression::Deflate),
+        }
+    }
+}
+
 /// Types of supported encryption
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -159,6 +185,8 @@ pub struct Repo {
     #[serde(default)]
     pub chunking: Chunking,
     pub encryption: Encryption,
+    #[serde(default)]
+    pub compression: Compression,
 }
 
 
@@ -178,6 +206,7 @@ impl Repo {
                version: REPO_VERSION_CURRENT,
                chunking: settings.chunking.0,
                encryption: encryption,
+               compression: settings.compression.to_config(),
            })
 
     }

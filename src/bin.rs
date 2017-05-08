@@ -116,6 +116,21 @@ impl Options {
             .expect("wrong encryption");
     }
 
+    fn set_compression(&mut self, s: &str) {
+        let compression = match s {
+            "deflate" => lib::settings::Compression::Deflate,
+            "none" => lib::settings::Compression::None,
+            _ => {
+                printerrln!("unsupported compression: {}", s);
+                process::exit(-1);
+            }
+        };
+
+        self.settings
+            .set_compression(compression)
+            .expect("wrong compression");
+    }
+
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
             "bup" => {
@@ -128,7 +143,6 @@ impl Options {
                 process::exit(-1);
             }
         };
-
     }
 }
 
@@ -173,10 +187,11 @@ fn run() -> io::Result<()> {
         (@arg verbose: -v ... "Increase debugging level")
         (@subcommand init =>
          (about: "Create a new repository")
-         (@arg CHUNKING: --chunking possible_values(&["bup"]) "Set chunking scheme. Default: bup")
-         (@arg CHUNK_SIZE: --chunk_size {validate_chunk_size} "Set average chunk size"
+         (@arg CHUNKING: --chunking possible_values(&["bup"]) +takes_value "Set chunking scheme. Default: bup")
+         (@arg CHUNK_SIZE: --chunk_size {validate_chunk_size} +takes_value "Set average chunk size"
           )
-         (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) "Set encryption scheme. Default: curve25519")
+         (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
+         (@arg COMPRESSION : --compression possible_values(&["deflate", "none"]) +takes_value "Set compression scheme. Default: deflate")
         )
         (@subcommand store =>
          (about: "Store data from repository")
@@ -245,7 +260,9 @@ fn run() -> io::Result<()> {
             if let Some(encryption) = matches.value_of("ENCRYPTION") {
                 options.set_encryption(encryption);
             }
-
+            if let Some(compression) = matches.value_of("COMPRESSION") {
+                options.set_compression(compression);
+            }
             let _ = Repo::init(&options.dir,
                                &|| util::read_new_passphrase(),
                                options.settings,

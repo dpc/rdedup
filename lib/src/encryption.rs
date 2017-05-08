@@ -31,7 +31,7 @@ pub trait Encrypter {
 }
 
 pub trait Decrypter {
-    fn decrypt(&self, bug: SGBuf, digest: &[u8]) -> io::Result<SGBuf>;
+    fn decrypt(&self, buf: SGBuf, digest: &[u8]) -> io::Result<SGBuf>;
 }
 
 pub struct NopEncrypter;

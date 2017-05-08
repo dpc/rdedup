@@ -1,5 +1,6 @@
 use super::{SGBuf, DataType, Repo};
 use super::chunk_writer::*;
+use compression::ArcCompression;
 use encryption::ArcEncrypter;
 use slog::Logger;
 use slog_perf::TimeReporter;
@@ -18,13 +19,15 @@ pub struct ChunkProcessor {
     tx: two_lock_queue::Sender<ChunkWriterMessage>,
     log: Logger,
     encrypter: ArcEncrypter,
+    compressor: ArcCompression,
 }
 
 impl ChunkProcessor {
     pub fn new(repo: Repo,
                rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
                tx: two_lock_queue::Sender<ChunkWriterMessage>,
-               encrypter: ArcEncrypter)
+               encrypter: ArcEncrypter,
+               compressor: ArcCompression)
                -> Self {
         ChunkProcessor {
             log: repo.log.clone(),
@@ -32,6 +35,7 @@ impl ChunkProcessor {
             rx: rx,
             tx: tx,
             encrypter: encrypter,
+            compressor: compressor,
         }
     }
 
@@ -52,7 +56,7 @@ impl ChunkProcessor {
                 if !chunk_path.exists() {
                     let sg = if data_type.should_compress() {
                         timer.start("compress");
-                        sg.compress()
+                        self.compressor.compress(sg).unwrap()
                     } else {
                         sg
                     };

@@ -4,6 +4,27 @@ use config;
 use std::io;
 
 #[derive(Clone)]
+pub enum Compression {
+    Deflate,
+    None,
+}
+
+impl Default for Compression {
+    fn default() -> Self {
+        Compression::Deflate
+    }
+}
+
+impl Compression {
+    pub fn to_config(&self) -> config::Compression {
+        match *self {
+            Compression::Deflate => config::Compression::Deflate,
+            Compression::None => config::Compression::None,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum Encryption {
     Curve25519,
     None,
@@ -22,6 +43,7 @@ pub struct Chunking(pub(crate) config::Chunking);
 #[derive(Clone, Default)]
 pub struct Repo {
     pub(crate) encryption: Encryption,
+    pub(crate) compression: Compression,
     pub(crate) chunking: Chunking,
 }
 
@@ -33,6 +55,13 @@ impl Repo {
     pub fn set_encryption(&mut self, encryption: Encryption) -> io::Result<()> {
 
         self.encryption = encryption;
+        Ok(())
+    }
+
+    pub fn set_compression(&mut self,
+                           compression: Compression)
+                           -> io::Result<()> {
+        self.compression = compression;
         Ok(())
     }
 
