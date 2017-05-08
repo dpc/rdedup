@@ -771,11 +771,20 @@ impl Repo {
          data_type: DataType)
          -> io::Result<Vec<u8>>
     {
-        let (digests_tx, digests_rx) = mpsc::sync_channel(num_cpus::get());
 
-        // TODO: Instead of using collecting whole index and then writing it,
-        // use a priority queue on the sender side (with some `condvar`
-        // for back-pressure, to write index at the same time as data.
+        // Note: This channel is intentionally unbounded
+        // The processing loop runs in sort of a loop (actually more of a
+        // recursive spiral). Unless this channel is unbounded it's possible
+        // that one `index-processor` will wait for `chunker` while `chunker`
+        // waits for `chunk-processor` while will `chunk-processor` waits
+        // for `index-processor`.
+        //
+        // In practice there's always less `index` data than chunk data (that's
+        // the whole point of keeping index) so this channel does not have
+        // to be bounded.
+        let (digests_tx, digests_rx) = mpsc::channel();
+
+
         crossbeam::scope(|scope| {
             scope.spawn({
                             let process_tx = process_tx.clone();
