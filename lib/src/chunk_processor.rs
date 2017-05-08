@@ -8,8 +8,8 @@ use std::sync::mpsc;
 use two_lock_queue;
 
 // TODO: Make a struct
-pub type ChunkProcessorMessage = ((usize, SGBuf),
-                                  mpsc::SyncSender<(usize, Vec<u8>)>,
+pub type ChunkProcessorMessage = ((u64, SGBuf),
+                                  mpsc::Sender<(u64, Vec<u8>)>,
                                   DataType);
 
 

@@ -786,6 +786,10 @@ impl Repo {
 
 
         crossbeam::scope(|scope| {
+            let mut timer = slog_perf::TimeReporter::new("index-processor",
+                                                         self.log.clone());
+            timer.start("spawn-chunker");
+
             scope.spawn({
                             let process_tx = process_tx.clone();
                             move || {
@@ -801,26 +805,32 @@ impl Repo {
                     let chunker = Chunker::new(input_data_iter.into_iter(),
                                                BupEdgeFinder::new(chunk_bits));
 
+                    // TODO: Change to `enumerate_u64`
                     let mut data = chunker.enumerate();
-
 
                     while let Some(i_sg) =
                         timer.start_with("rx-and-chunking", || data.next()) {
                         timer.start("tx");
+                        let (i, sg) = i_sg;
                         process_tx
-                            .send((i_sg, digests_tx.clone(), data_type))
+                            .send(((i as u64, sg),
+                                   digests_tx.clone(),
+                                   data_type))
                             .expect("process_tx.send(...)")
                     }
                     drop(digests_tx);
                 }
                         });
 
+            timer.start("sorting-recv-create");
             let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
 
+            timer.start("digest-rx");
             let first_digest =
                 digests_rx.next().expect("At least one index digest");
 
-            if let Some(second_digest) = digests_rx.next() {
+            if let Some(second_digest) =
+                timer.start_with("digest-rx", || digests_rx.next()) {
                 let mut two_first = vec![first_digest, second_digest];
                 let digest =
                     self.chunk_and_write_data_thread(
@@ -833,6 +843,7 @@ impl Repo {
 
                 let index_digest = quick_sha256(&digest);
 
+                timer.start("writer-tx");
                 writer_tx
                     .send(ChunkWriterMessage {
                               sg: SGBuf::from_single(digest),

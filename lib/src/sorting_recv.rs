@@ -12,17 +12,13 @@ use std::default::Default;
 // shouldn't be a problem if pool of workers
 // picks elements in order - the distortions
 // should be minimal anyway.
-pub struct SortingIterator<T, I>
-    where I: Iterator<Item = (usize, T)>
-{
-    early_items: BTreeMap<usize, T>,
+pub struct SortingIterator<T, I> {
+    early_items: BTreeMap<u64, T>,
     iter: I,
-    next_i: usize,
+    next_i: u64,
 }
 
-impl<T, I> SortingIterator<T, I>
-    where I: Iterator<Item = (usize, T)>
-{
+impl<T, I> SortingIterator<T, I> {
     pub fn new(iter: I) -> Self {
         SortingIterator {
             iter: iter,
@@ -33,7 +29,7 @@ impl<T, I> SortingIterator<T, I>
 }
 
 impl<T, I> Iterator for SortingIterator<T, I>
-    where I: Iterator<Item = (usize, T)>
+    where I: Iterator<Item = (u64, T)>
 {
     type Item = T;
 
