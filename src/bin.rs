@@ -188,7 +188,7 @@ fn run() -> io::Result<()> {
         (@subcommand init =>
          (about: "Create a new repository")
          (@arg CHUNKING: --chunking possible_values(&["bup"]) +takes_value "Set chunking scheme. Default: bup")
-         (@arg CHUNK_SIZE: --chunk_size {validate_chunk_size} +takes_value "Set average chunk size"
+         (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size"
           )
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "none"]) +takes_value "Set compression scheme. Default: deflate")
