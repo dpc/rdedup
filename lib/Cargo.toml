@@ -28,7 +28,7 @@ base64 = "0.4.0"
 owning_ref = "0.2.4"
 two-lock-queue = "0.1.0"
 num_cpus = "1.2.1"
-crossbeam = "0.2.10"
+crossbeam = { git = "https://github.com/crossbeam-rs/crossbeam" }
 slog = "2"
 slog-perf = "0.1"
 hex = { git = "https://github.com/dpc/rust-hex" }

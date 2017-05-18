@@ -790,7 +790,10 @@ impl Repo {
                                                          self.log.clone());
             timer.start("spawn-chunker");
 
-            scope.spawn({
+            scope
+                .builder()
+                .name("chunker".into())
+                .spawn({
                             let process_tx = process_tx.clone();
                             move || {
 
@@ -820,7 +823,8 @@ impl Repo {
                     }
                     drop(digests_tx);
                 }
-                        });
+                        })
+            .unwrap();
 
             timer.start("sorting-recv-create");
             let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
@@ -915,13 +919,17 @@ impl Repo {
                 // let self_clone = self.clone();
                 let rx = rx.clone();
                 let shared = shared.clone();
-                scope.spawn(move || {
-                                let thread =
-                                    ChunkWriterThread::new(self.clone(),
-                                                           shared,
-                                                           rx);
-                                thread.run();
-                            });
+                scope
+                    .builder()
+                    .name("ch-writer".into())
+                    .spawn(move || {
+                               let thread =
+                                   ChunkWriterThread::new(self.clone(),
+                                                          shared,
+                                                          rx);
+                               thread.run();
+                           })
+                    .unwrap();
             }
             drop(rx);
         });
@@ -1189,35 +1197,49 @@ impl Repo {
 
         let (final_digest, writer_stats) = crossbeam::scope(|scope| {
 
-            scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
+            scope
+                .builder()
+                .name("ch-reader".into())
+                .spawn(move || self.input_reader_thread(reader, chunker_tx))
+                .unwrap();
 
-            for _ in 0..num_threads {
+            for thread_i in 0..num_threads {
                 let process_rx = process_rx.clone();
                 let writer_tx = writer_tx.clone();
                 let encrypter = enc.encrypter.clone();
                 let compression = self.compression.clone();
-                scope.spawn(move || {
-                    let processor = ChunkProcessor::new(self.clone(),
-                                                        process_rx,
-                                                        writer_tx,
-                                                        encrypter,
-                                                        compression);
-                    processor.run();
-                });
+                scope
+                    .builder()
+                    .name(format!("ch-processor-{}", thread_i))
+                    .spawn(move || {
+                        let processor = ChunkProcessor::new(self.clone(),
+                                                            process_rx,
+                                                            writer_tx,
+                                                            encrypter,
+                                                            compression);
+                        processor.run();
+                    })
+                    .unwrap();
             }
             drop(process_rx);
 
-            let chunk_and_write =
-                scope.spawn(move || {
-                                self.chunk_and_write_data_thread(
+            let chunk_and_write = scope
+                .builder()
+                .name("ch-indexer".into())
+                .spawn(move || {
+                           self.chunk_and_write_data_thread(
                                     Box::new(chunker_rx.into_iter()),
                                     process_tx,
                                     writer_tx,
                                     DataType::Data)
-                            });
+                       })
+                .unwrap();
 
-            let writer =
-                scope.spawn(move || self.chunk_writer_thread(writer_rx));
+            let writer = scope
+                .builder()
+                .name("ch-writer".into())
+                .spawn(move || self.chunk_writer_thread(writer_rx))
+                .unwrap();
 
             let final_digest = chunk_and_write.join();
 
