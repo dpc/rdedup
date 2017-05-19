@@ -7,7 +7,7 @@ rust:
 script:
   - export PATH=$PATH:~/.cargo/bin
 # - disabled until fmt stabilized: ./scripts/check-fmt.sh
-  - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
+#  - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
   - make all
   - make travistest
   - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
@@ -26,7 +26,7 @@ install:
   - export PKG_CONFIG_PATH=$HOME/installed_libsodium/lib/pkgconfig:$PKG_CONFIG_PATH
   - export LD_LIBRARY_PATH=$HOME/installed_libsodium/lib:$LD_LIBRARY_PATH
 # - disabled until fmt stabilized: cargo install -f rustfmt
-  - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo install -f clippy; fi
+#  - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo install -f clippy; fi
   - ls -ahl ~/.cargo/bin/
 
 notifications:
