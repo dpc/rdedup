@@ -11,6 +11,7 @@ script:
   - make all
   - make travistest
   - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
+  - ./scripts/e2e-test.sh
 
 env:
   global:
