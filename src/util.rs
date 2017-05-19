@@ -1,5 +1,5 @@
 use rpassword;
-use std::io;
+use std::{env, io};
 use std::str::FromStr;
 
 /// Parse human-readable size string
@@ -58,11 +58,21 @@ fn test_parse_size() {
 }
 
 pub fn read_passphrase() -> io::Result<String> {
+    // The environment variable should only be used for testing
+    if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
+        printerr!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        return Ok(pass);
+    }
     printerr!("Enter passphrase to unlock: ");
     rpassword::read_password()
 }
 
 pub fn read_new_passphrase() -> io::Result<String> {
+    // The environment variable should only be used for testing
+    if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
+        printerr!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        return Ok(pass);
+    }
     loop {
         printerr!("Enter new passphrase: ");
         let p1 = rpassword::read_password()?;
