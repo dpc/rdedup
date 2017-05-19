@@ -3,7 +3,7 @@
 export RDEDUP_DIR=/tmp/e2e-test
 export RDEDUP_PASSPHRASE=testing
 
-dd if=/dev/urandom of=test.data bs=1m count=1
+dd if=/dev/urandom of=test.data bs=1024 count=1024
 src_sum=$(cat test.data | shasum)
 if [ -d $RDEDUP_DIR ]; then
     rm -rf $RDEDUP_DIR
