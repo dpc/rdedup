@@ -10,8 +10,8 @@ script:
 # - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
   - make all
   - make travistest
-  - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
   - ./scripts/e2e-test.sh
+  - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
 
 env:
   global:
