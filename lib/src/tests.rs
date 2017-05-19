@@ -379,7 +379,7 @@ fn test_custom_chunking_size() {
         {
 
             let mut settings = settings::Repo::new();
-            let result = settings.use_bup_chunking(bits);
+            let result = settings.use_bup_chunking(Some(bits));
 
 
             if bits < 10 || bits > 30 {
