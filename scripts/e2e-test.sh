@@ -1,4 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
 
 export RDEDUP_DIR=/tmp/e2e-test
 export RDEDUP_PASSPHRASE=testing
@@ -20,5 +24,5 @@ if [ "$src_sum" != "$test_sum" ]; then
     exit -1
 fi
 
-export RDEDUP_DIR=
-export RDEDUP_PASSPHRASE=
+unset RDEDUP_DIR
+unset RDEDUP_PASSPHRASE
