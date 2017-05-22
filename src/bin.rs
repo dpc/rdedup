@@ -255,15 +255,14 @@ fn run() -> io::Result<()> {
 
     match matches.subcommand() {
         ("init", Some(matches)) => {
-            if let Some(chunking) = matches.value_of("CHUNKING") {
-                options.set_chunking(chunking,
+            options.set_chunking(matches
+                                         .value_of("CHUNKING").unwrap_or("bup"),
                                      matches
                                          .value_of("CHUNK_SIZE")
                                          .map(|s| {
                                                        util::parse_size(s).expect("Invalid chunk size option")
                                                    })
                                          .map(|u| u.trailing_zeros()));
-            }
             if let Some(encryption) = matches.value_of("ENCRYPTION") {
                 options.set_encryption(encryption);
             }
