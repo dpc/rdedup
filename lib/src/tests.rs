@@ -11,6 +11,7 @@ use sha2::{Sha256, Digest};
 use std::{io, cmp};
 
 use std::collections::HashSet;
+use std::env;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
@@ -401,5 +402,37 @@ fn test_custom_chunking_size() {
             assert_eq!(settings.chunking.0, repo.config.chunking);
             wipe(&repo);
         }
+    }
+}
+
+#[test]
+fn test_ensure_repo_empty_or_new() {
+    let mut t = env::temp_dir();
+    t.push("repo-dir-tests");
+    let ptest = &t;
+
+    if let Err(e) = fs::remove_dir_all(ptest) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("error encountered before cleanup, {}", e);
+        }
+    }
+
+    // Test a dir that does not exist
+    lib::Repo::ensure_repo_empty_or_new(ptest).unwrap();
+
+    // Test an empty directory is valid
+    fs::create_dir(ptest).unwrap();
+    lib::Repo::ensure_repo_empty_or_new(ptest).unwrap();
+
+    // Test a non empty directory is invalid
+    let mut t2 = t.clone();
+    t2.push("config.yml");
+    fs::File::create(t2).unwrap();
+    if let Err(e) = lib::Repo::ensure_repo_empty_or_new(ptest) {
+        if e.kind() != io::ErrorKind::AlreadyExists {
+            panic!("expected already exists error, got {}", e);
+        }
+    } else {
+        panic!("expected already exists error, got 'Ok'");
     }
 }
