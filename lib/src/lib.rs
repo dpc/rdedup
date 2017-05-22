@@ -598,10 +598,10 @@ impl Repo {
         &self.path
     }
 
-    fn ensure_repo_not_exists(repo_path: &Path) -> Result<()> {
-        if repo_path.exists() {
+    fn ensure_repo_empty_or_new(repo_path: &Path) -> Result<()> {
+        if repo_path.exists() && fs::read_dir(repo_path)?.next().is_some() {
             return Err(Error::new(io::ErrorKind::AlreadyExists,
-                                  format!("repo already exists: {}",
+                                  format!("{} must not exist or be empty to be used",
                                           repo_path.to_string_lossy())));
         }
         Ok(())
@@ -628,7 +628,7 @@ impl Repo {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        Repo::ensure_repo_not_exists(repo_path)?;
+        Repo::ensure_repo_empty_or_new(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
         config.write(repo_path)?;
