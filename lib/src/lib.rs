@@ -133,11 +133,12 @@ fn chunk_path_by_digest(repo_dir: &Path,
         DataType::Index => Path::new(config::INDEX_SUBDIR),
     };
 
+    let hex_digest = &digest.to_hex();
     repo_dir
         .join(i_or_c)
-        .join(&digest[0..1].to_hex())
-        .join(digest[1..2].to_hex())
-        .join(&digest.to_hex())
+        .join(&hex_digest[0..2])
+        .join(&hex_digest[2..4])
+        .join(&hex_digest)
 }
 
 /// Writer that counts how many bytes were written to it
