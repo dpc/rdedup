@@ -1,3 +1,10 @@
+# v2.0.0 (in progress)
+## Added
+- End to End testing to make sure stored data is loaded correctly
+
+## Changed
+- rdedup can now initialize an existing but empty directory
+
 # v1.0.2
 ## Added
 - Support to remove multiple names in a single call in lib and command line
