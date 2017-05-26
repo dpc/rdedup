@@ -56,8 +56,12 @@ impl Iterator for StoredChunks {
             }
             // We have landed on a file, we need to verify the file is a valid
             // chunk by parsing the hex code in the file name.
-            let name = entry.file_name().to_string_lossy().to_string();
-            match name.from_hex() {
+            let name = entry
+                .file_name()
+                .to_string_lossy()
+                .to_string()
+                .into_bytes();
+            match Vec::from_hex(name) {
                 Ok(digest) => {
                     if digest.len() == self.digest_size {
                         return Some(Ok(digest));

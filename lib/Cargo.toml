@@ -31,7 +31,7 @@ num_cpus = "1.2.1"
 crossbeam = "0.2.10"
 slog = "2"
 slog-perf = "0.1"
-hex = { git = "https://github.com/dpc/rust-hex" }
+hex = "0.2"
 
 [dev-dependencies]
 rand = "0.3.14"
