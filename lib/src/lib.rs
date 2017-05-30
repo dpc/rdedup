@@ -123,24 +123,6 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     Ok(derived_key)
 }
 
-/// Returns the path where the chunk should be located
-fn chunk_path_by_digest(repo_dir: &Path,
-                        digest: &[u8],
-                        chunk_type: DataType)
-                        -> PathBuf {
-    let i_or_c = match chunk_type {
-        DataType::Data => Path::new(config::DATA_SUBDIR),
-        DataType::Index => Path::new(config::INDEX_SUBDIR),
-    };
-
-    let hex_digest = &digest.to_hex();
-    repo_dir
-        .join(i_or_c)
-        .join(&hex_digest[0..2])
-        .join(&hex_digest[2..4])
-        .join(&hex_digest)
-}
-
 /// Writer that counts how many bytes were written to it
 struct CounterWriter {
     count: u64,
@@ -1038,7 +1020,12 @@ impl Repo {
                             digest: &[u8],
                             chunk_type: DataType)
                             -> PathBuf {
-        chunk_path_by_digest(&self.path, digest, chunk_type)
+        let i_or_c = match chunk_type {
+        DataType::Data => Path::new(config::DATA_SUBDIR),
+        DataType::Index => Path::new(config::INDEX_SUBDIR),
+    };
+
+        self.config.nesting.get_path(&self.path.join(i_or_c), digest)
     }
 
     fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {

@@ -175,6 +175,30 @@ impl encryption::EncryptionEngine for Encryption {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone)]
+pub struct Nesting(pub u8);
+impl Default for Nesting {
+    fn default() -> Self{
+        Nesting(2)
+    }
+}
+
+impl Nesting {
+    pub fn get_path(&self, base: &Path, digest: &[u8]) -> PathBuf {
+        let hex_digest = &digest.to_hex();
+        let mut dir = base.to_path_buf();
+        let levels = self.clone().0;
+        if levels > 0 {
+        for i in 0..levels {
+            let start = i as usize *2;
+            let end = start + 2 ;
+            dir = dir.join(&hex_digest[start..end]);
+        }
+        }
+        dir.join(&hex_digest)
+    }
+}
+
 /// Rdedup repository configuration
 ///
 /// This datastructure is used for serialization and deserialization
@@ -187,6 +211,7 @@ pub struct Repo {
     pub encryption: Encryption,
     #[serde(default)]
     pub compression: Compression,
+    pub nesting: Nesting,
 }
 
 
@@ -207,6 +232,7 @@ impl Repo {
                chunking: settings.chunking.0,
                encryption: encryption,
                compression: settings.compression.to_config(),
+               nesting: settings.nesting.to_config(),
            })
 
     }
