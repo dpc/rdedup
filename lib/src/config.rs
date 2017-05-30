@@ -211,6 +211,7 @@ pub struct Repo {
     pub encryption: Encryption,
     #[serde(default)]
     pub compression: Compression,
+    #[serde(default)]
     pub nesting: Nesting,
 }
 
