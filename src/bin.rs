@@ -216,7 +216,7 @@ fn run() -> io::Result<()> {
           )
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "none"]) +takes_value "Set compression scheme. Default: deflate")
-         (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting")
+         (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
         )
         (@subcommand store =>
          (about: "Store data from repository")
