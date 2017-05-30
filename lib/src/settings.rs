@@ -40,11 +40,26 @@ impl Default for Encryption {
 #[derive(Clone, Default)]
 pub struct Chunking(pub(crate) config::Chunking);
 
+#[derive(Clone)]
+pub struct Nesting(u8);
+impl Default for Nesting {
+    fn default() -> Self {
+        Nesting(2)
+    }
+}
+
+impl Nesting {
+    pub fn to_config(&self) -> config::Nesting {
+        config::Nesting(self.0)
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Repo {
     pub(crate) encryption: Encryption,
     pub(crate) compression: Compression,
     pub(crate) chunking: Chunking,
+    pub(crate) nesting: Nesting,
 }
 
 impl Repo {
@@ -74,6 +89,14 @@ impl Repo {
                                          "invalid chunking algorithm defined"));
         }
         self.chunking = Chunking(bup);
+        Ok(())
+    }
+
+    pub fn set_nesting(&mut self, level: u8) -> super::Result<()> {
+        if level > 31 {
+            return Err(super::Error::new(io::ErrorKind::InvalidInput, "nesting can't be greater than or equal to 32"))
+        }
+        self.nesting = Nesting(level);
         Ok(())
     }
 }

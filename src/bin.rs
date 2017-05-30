@@ -15,6 +15,7 @@ use lib::settings;
 use serialize::hex::ToHex;
 use slog::Drain;
 use std::{io, process, env};
+use std::str::FromStr;
 
 use std::path::PathBuf;
 
@@ -143,6 +144,10 @@ impl Options {
             }
         };
     }
+
+    fn set_nesting(&mut self, level: u8) {
+        self.settings.set_nesting(level).expect("invalid nesting");
+    }
 }
 
 
@@ -156,6 +161,18 @@ fn validate_chunk_size(s: String) -> Result<(), String> {
         Err("Can't parse a human readable byte-size value".into())
     }
 
+}
+
+fn validate_nesting(s: String) -> Result<(), String> {
+    let msg = "nesting must be an integer between 0 and 31";
+    let levels = match u8::from_str(s.as_str()) {
+        Ok(l) => l,
+        Err(_) => return Err(msg.into()),
+    };
+    if levels > 31 {
+        return Err(msg.into());
+    }
+    Ok(())
 }
 
 fn create_logger(verbosity: u32) -> slog::Logger {
@@ -199,6 +216,7 @@ fn run() -> io::Result<()> {
           )
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "none"]) +takes_value "Set compression scheme. Default: deflate")
+         (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting")
         )
         (@subcommand store =>
          (about: "Store data from repository")
@@ -268,6 +286,9 @@ fn run() -> io::Result<()> {
             }
             if let Some(compression) = matches.value_of("COMPRESSION") {
                 options.set_compression(compression);
+            }
+            if let Some(nesting) = matches.value_of("NESTING") {
+                options.set_nesting(u8::from_str(nesting).unwrap());
             }
             let _ = Repo::init(&options.dir,
                                &|| util::read_new_passphrase(),
