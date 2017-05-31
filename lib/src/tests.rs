@@ -406,6 +406,57 @@ fn test_custom_chunking_size() {
 }
 
 #[test]
+fn test_custom_nesting() {
+    for &level in &[0, 1, 4, 31, 64] {
+        let dir_path = rand_tmp_dir();
+        {
+
+            let mut settings = settings::Repo::new();
+            let result = settings.set_nesting(level);
+
+
+            if level > 31 {
+                if result.is_err() {
+                    continue;
+                } else {
+                    panic!("expected an error for value {:}, but got Ok", level);
+                }
+            } else if result.is_err() {
+                panic!("expected Ok, but got {:}", result.err().unwrap());
+            }
+            lib::Repo::init(&dir_path,
+                            &|| Ok(PASS.into()),
+                            settings.clone(),
+                            None)
+                    .unwrap();
+
+            let repo = lib::Repo::open(&dir_path, None).unwrap();
+            assert_eq!(lib::config::Nesting(level), repo.config.nesting);
+
+            // Test Store, Load, RM, and GC
+            let data = rand_data(1024 * 1024);
+            let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
+            let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
+
+            let wstats = repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
+                .unwrap();
+
+            let mut load_data = vec![];
+            repo.read("data", &mut load_data, &dec_handle).unwrap();
+
+            assert_eq!(load_data, data);
+
+            repo.rm("data").unwrap();
+
+            let gstats = repo.gc().unwrap();
+
+            assert_eq!(wstats.new_chunks, gstats.chunks);
+            wipe(&repo);
+        }
+    }
+}
+
+#[test]
 fn test_ensure_repo_empty_or_new() {
     let mut t = env::temp_dir();
     t.push("repo-dir-tests");
