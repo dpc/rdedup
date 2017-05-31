@@ -175,7 +175,7 @@ impl encryption::EncryptionEngine for Encryption {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct Nesting(pub u8);
 impl Default for Nesting {
     fn default() -> Self{
