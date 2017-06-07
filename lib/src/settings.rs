@@ -6,6 +6,7 @@ use std::io;
 #[derive(Clone)]
 pub enum Compression {
     Deflate,
+    Xz2,
     None,
 }
 
@@ -19,6 +20,7 @@ impl Compression {
     pub fn to_config(&self) -> config::Compression {
         match *self {
             Compression::Deflate => config::Compression::Deflate,
+            Compression::Xz2 => config::Compression::Xz2,
             Compression::None => config::Compression::None,
         }
     }
