@@ -4,6 +4,8 @@ rust:
  # - stable
   - beta
   - nightly
+before_install:
+  - sudo apt-get install -y liblzma-dev
 script:
   - export PATH=$PATH:~/.cargo/bin
 # - disabled until fmt stabilized: ./scripts/check-fmt.sh

@@ -3,6 +3,7 @@ extern crate sha2;
 extern crate argparse;
 extern crate sodiumoxide;
 extern crate flate2;
+extern crate lzma;
 #[cfg(test)]
 extern crate rand;
 extern crate fs2;

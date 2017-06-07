@@ -113,6 +113,8 @@ impl Chunking {
 pub enum Compression {
     #[serde(rename = "deflate")]
     Deflate,
+    #[serde(rename = "xz2")]
+    Xz2,
     #[serde(rename = "none")]
     None,
 }
@@ -128,6 +130,7 @@ impl Compression {
         match *self {
             Compression::None => Arc::new(compression::NoCompression),
             Compression::Deflate => Arc::new(compression::Deflate),
+            Compression::Xz2 => Arc::new(compression::Xz2),
         }
     }
 }

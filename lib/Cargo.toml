@@ -20,6 +20,7 @@ sha2 = "0.5"
 argparse = "0.2.1"
 sodiumoxide = { version = "0.0.14", features = ["serde"] }
 flate2 = "0.2"
+rust-lzma = "0.2"
 fs2 = "0.4"
 serde = "0.9"
 serde_derive = "0.9"
