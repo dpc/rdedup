@@ -7,6 +7,7 @@ use std::io;
 pub enum Compression {
     Deflate,
     Xz2,
+    Bzip2,
     None,
 }
 
@@ -21,6 +22,7 @@ impl Compression {
         match *self {
             Compression::Deflate => config::Compression::Deflate,
             Compression::Xz2 => config::Compression::Xz2,
+            Compression::Bzip2 => config::Compression::Bzip2,
             Compression::None => config::Compression::None,
         }
     }

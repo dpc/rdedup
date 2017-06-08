@@ -6,6 +6,7 @@ rust:
   - nightly
 before_install:
   - sudo apt-get install -y liblzma-dev
+  - sudo apt-get install -y libbz2-dev
 script:
   - export PATH=$PATH:~/.cargo/bin
 # - disabled until fmt stabilized: ./scripts/check-fmt.sh
