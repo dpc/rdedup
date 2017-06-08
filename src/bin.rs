@@ -120,6 +120,7 @@ impl Options {
         let compression = match s {
             "deflate" => lib::settings::Compression::Deflate,
             "xz2" => lib::settings::Compression::Xz2,
+            "bzip2" => lib::settings::Compression::Bzip2,
             "none" => lib::settings::Compression::None,
             _ => {
                 printerrln!("unsupported compression: {}", s);
@@ -215,7 +216,7 @@ fn run() -> io::Result<()> {
          (@arg CHUNKING: --chunking possible_values(&["bup"]) +takes_value "Set chunking scheme. Default: bup")
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
-         (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "none"]) +takes_value "Set compression scheme. Default: deflate")
+         (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "none"]) +takes_value "Set compression scheme. Default: deflate")
          (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
         )
         (@subcommand store =>

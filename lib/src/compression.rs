@@ -1,5 +1,6 @@
 use flate2;
 use lzma;
+use bzip2;
 use sg::SGBuf;
 use std::io;
 
@@ -46,6 +47,33 @@ impl Compression for Deflate {
 
         for part in &*buf {
             decompressor.write_all(&part)?;
+        }
+        Ok(SGBuf::from_single(decompressor.finish()?))
+    }
+}
+
+pub struct Bzip2;
+
+impl Compression for Bzip2 {
+    fn compress(&self, buf: SGBuf) -> io::Result<SGBuf> {
+        let mut compressor =
+            bzip2::write::BzEncoder::new(
+                Vec::with_capacity(buf.total_len()),
+                bzip2::Compression::Default);
+
+        for sg_part in &*buf {
+            compressor.write_all(sg_part).unwrap();
+        }
+
+        Ok(SGBuf::from_single(compressor.finish().unwrap()))
+    }
+
+    fn decompress(&self, buf: SGBuf) -> io::Result<SGBuf> {
+        let mut decompressor =
+            bzip2::write::BzDecoder::new(Vec::with_capacity(buf.total_len()));
+
+        for sg_part in &*buf {
+            decompressor.write_all(&sg_part)?;
         }
         Ok(SGBuf::from_single(decompressor.finish()?))
     }
