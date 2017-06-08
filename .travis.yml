@@ -1,9 +1,11 @@
 language: rust
 cache: cargo
 rust:
- # - stable
+  - stable
+  - 1.18.0
   - beta
   - nightly
+
 before_install:
   - sudo apt-get install -y liblzma-dev
   - sudo apt-get install -y libbz2-dev
