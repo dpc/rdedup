@@ -22,20 +22,26 @@ const DIGEST_SIZE: usize = 32;
 
 fn rand_tmp_dir() -> path::PathBuf {
     // TODO: Use $TMP or something?
-    path::PathBuf::from("/tmp/rdedup-tests").join(rand::thread_rng()
-                                                      .gen_ascii_chars()
-                                                      .take(20)
-                                                      .collect::<String>())
+    path::PathBuf::from("/tmp/rdedup-tests").join(
+        rand::thread_rng()
+            .gen_ascii_chars()
+            .take(20)
+            .collect::<String>(),
+    )
 }
 
 fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
     let mut digests = HashSet::new();
-    let index_chunks = StoredChunks::new(&repo.index_dir_path(),
-                                         DIGEST_SIZE,
-                                         repo.log.clone())?;
-    let data_chunks = StoredChunks::new(&repo.chunk_dir_path(),
-                                        DIGEST_SIZE,
-                                        repo.log.clone())?;
+    let index_chunks = StoredChunks::new(
+        &repo.index_dir_path(),
+        DIGEST_SIZE,
+        repo.log.clone(),
+    )?;
+    let data_chunks = StoredChunks::new(
+        &repo.chunk_dir_path(),
+        DIGEST_SIZE,
+        repo.log.clone(),
+    )?;
     for digest in index_chunks.chain(data_chunks) {
         let digest = digest.unwrap();
         digests.insert(digest);
@@ -104,10 +110,7 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng()
-        .gen_iter()
-        .take(len)
-        .collect::<Vec<u8>>()
+    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -240,11 +243,12 @@ fn change_passphrase() {
 
     {
         let settings = settings::Repo::new();
-        let repo = lib::Repo::init(&dir_path,
-                                   &|| Ok(prev_passphrase.into()),
-                                   settings,
-                                   None)
-                .unwrap();
+        let repo = lib::Repo::init(
+            &dir_path,
+            &|| Ok(prev_passphrase.into()),
+            settings,
+            None,
+        ).unwrap();
 
         let enc_handle = repo.unlock_encrypt(&|| Ok(prev_passphrase.into()))
             .unwrap();
@@ -255,9 +259,10 @@ fn change_passphrase() {
 
     for &p in &["a", "", "foo", "bar"] {
         let mut repo = lib::Repo::open(dir_path, None).unwrap();
-        repo.change_passphrase(&|| Ok(prev_passphrase.into()),
-                               &|| Ok(p.into()))
-            .unwrap();
+        repo.change_passphrase(
+            &|| Ok(prev_passphrase.into()),
+            &|| Ok(p.into()),
+        ).unwrap();
         prev_passphrase = p;
     }
 
@@ -355,17 +360,19 @@ fn test_stored_chunks_iter() {
     // Remove the second name and make sure the difference
     repo.rm("data2").unwrap();
     let chunks_from_indexes3 = repo.list_reachable_chunks().unwrap();
-    assert_eq!(chunks_from_indexes3
-                   .difference(&chunks_from_indexes)
-                   .count(),
-               0);
+    assert_eq!(
+        chunks_from_indexes3
+            .difference(&chunks_from_indexes)
+            .count(),
+        0
+    );
     // Chunks from iterator should equal the list from both names before the
     // removal
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes2
-                   .difference(&chunks_from_iter)
-                   .count(),
-               0);
+    assert_eq!(
+        chunks_from_indexes2.difference(&chunks_from_iter).count(),
+        0
+    );
 
     repo.gc().unwrap();
     // Chunks from iterator should equal the first reachable list
@@ -392,11 +399,12 @@ fn test_custom_chunking_size() {
             } else if result.is_err() {
                 panic!("expected Ok, but got {:}", result.err().unwrap());
             }
-            lib::Repo::init(&dir_path,
-                            &|| Ok(PASS.into()),
-                            settings.clone(),
-                            None)
-                    .unwrap();
+            lib::Repo::init(
+                &dir_path,
+                &|| Ok(PASS.into()),
+                settings.clone(),
+                None,
+            ).unwrap();
 
             let repo = lib::Repo::open(&dir_path, None).unwrap();
             assert_eq!(settings.chunking.0, repo.config.chunking);
@@ -419,16 +427,20 @@ fn test_custom_nesting() {
                 if result.is_err() {
                     continue;
                 } else {
-                    panic!("expected an error for value {:}, but got Ok", level);
+                    panic!(
+                        "expected an error for value {:}, but got Ok",
+                        level
+                    );
                 }
             } else if result.is_err() {
                 panic!("expected Ok, but got {:}", result.err().unwrap());
             }
-            lib::Repo::init(&dir_path,
-                            &|| Ok(PASS.into()),
-                            settings.clone(),
-                            None)
-                    .unwrap();
+            lib::Repo::init(
+                &dir_path,
+                &|| Ok(PASS.into()),
+                settings.clone(),
+                None,
+            ).unwrap();
 
             let repo = lib::Repo::open(&dir_path, None).unwrap();
             assert_eq!(lib::config::Nesting(level), repo.config.nesting);
@@ -438,8 +450,9 @@ fn test_custom_nesting() {
             let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
             let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
 
-            let wstats = repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
-                .unwrap();
+            let wstats =
+                repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
+                    .unwrap();
 
             let mut load_data = vec![];
             repo.read("data", &mut load_data, &dec_handle).unwrap();

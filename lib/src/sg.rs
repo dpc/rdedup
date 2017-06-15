@@ -57,7 +57,8 @@ pub struct ReaderVecIter<R: io::Read> {
 }
 
 impl<R> ReaderVecIter<R>
-    where R: io::Read
+where
+    R: io::Read,
 {
     pub fn new(reader: R, buf_size: usize) -> Self {
 
@@ -69,7 +70,8 @@ impl<R> ReaderVecIter<R>
 }
 
 impl<R> Iterator for ReaderVecIter<R>
-    where R: io::Read
+where
+    R: io::Read,
 {
     type Item = io::Result<Vec<u8>>;
 
@@ -97,7 +99,8 @@ pub struct WhileOk<I, E> {
 
 impl<I, E> WhileOk<I, E> {
     pub fn new<O>(into_iter: I) -> WhileOk<I, E>
-        where I: Iterator<Item = Result<O, E>>
+    where
+        I: Iterator<Item = Result<O, E>>,
     {
 
         WhileOk {
@@ -107,7 +110,8 @@ impl<I, E> WhileOk<I, E> {
     }
 }
 impl<I, O, E> Iterator for WhileOk<I, E>
-    where I: Iterator<Item = Result<O, E>>
+where
+    I: Iterator<Item = Result<O, E>>,
 {
     type Item = O;
 
@@ -149,9 +153,11 @@ impl SGBuf {
         SGBuf::from_vec(vec![v])
     }
     pub fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
-        SGBuf(v.drain(..)
-                  .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
-                  .collect())
+        SGBuf(
+            v.drain(..)
+                .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
+                .collect(),
+        )
     }
 
     pub fn total_len(&self) -> usize {
@@ -230,31 +236,33 @@ impl<I, EF> Chunker<I, EF> {
 }
 
 impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
-    where EF: EdgeFinder
+where
+    EF: EdgeFinder,
 {
     type Item = SGBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             self.cur_buf_edges = if let Some((buf, edges)) =
-                self.cur_buf_edges.clone() {
+                self.cur_buf_edges.clone()
+            {
                 if self.cur_edge_i < edges.len() {
                     let edge = edges[self.cur_edge_i];
-                    let aref =
-                        ArcRef::new(buf.clone()).map(|a| {
-                                                         &a[self.cur_buf_i..
-                                                          edge]
-                                                     });
+                    let aref = ArcRef::new(buf.clone()).map(|a| {
+                        &a[self.cur_buf_i..edge]
+                    });
                     self.cur_sgbuf.push(aref);
                     self.cur_edge_i += 1;
                     self.cur_buf_i = edge;
                     self.chunks_returned += 1;
-                    return Some(mem::replace(&mut self.cur_sgbuf,
-                                             SGBuf::new()));
+                    return Some(
+                        mem::replace(&mut self.cur_sgbuf, SGBuf::new()),
+                    );
                 } else {
                     if self.cur_buf_i != buf.len() {
-                        let aref = ArcRef::new(buf.clone())
-                                .map(|a| &a[self.cur_buf_i..]);
+                        let aref = ArcRef::new(buf.clone()).map(|a| {
+                            &a[self.cur_buf_i..]
+                        });
                         self.cur_sgbuf.push(aref);
                     }
                     self.cur_buf_i = 0;

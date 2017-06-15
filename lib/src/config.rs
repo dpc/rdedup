@@ -51,11 +51,12 @@ pub fn config_yml_file_path(path: &Path) -> PathBuf {
     path.join(CONFIG_YML_FILE)
 }
 
-pub fn write_seckey_file(path: &Path,
-                         encrypted_seckey: &[u8],
-                         nonce: &secretbox::Nonce,
-                         salt: &pwhash::Salt)
-                         -> io::Result<()> {
+pub fn write_seckey_file(
+    path: &Path,
+    encrypted_seckey: &[u8],
+    nonce: &secretbox::Nonce,
+    salt: &pwhash::Salt,
+) -> io::Result<()> {
     let mut seckey_file = fs::File::create(path)?;
     let mut writer = &mut seckey_file as &mut Write;
     writer.write_all(encrypted_seckey.to_hex().as_bytes())?;
@@ -86,8 +87,10 @@ pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
 #[serde(tag = "type")]
 /// `Chunking` are the algorithms supported by rdedup
 pub enum Chunking {
-    /// `Bup` is the default algorithm, the chunk_bits value provided with bup
-    /// is the bit shift to be used by rollsum. The valid range is between 10
+    /// `Bup` is the default algorithm, the chunk_bits value provided with
+    /// bup
+    /// is the bit shift to be used by rollsum. The valid range is between
+    /// 10
     /// and 30 (1KB to 1GB)
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
@@ -151,10 +154,11 @@ pub enum Encryption {
 }
 
 impl encryption::EncryptionEngine for Encryption {
-    fn change_passphrase(&mut self,
-                         old_p: PassphraseFn,
-                         new_p: PassphraseFn)
-                         -> io::Result<()> {
+    fn change_passphrase(
+        &mut self,
+        old_p: PassphraseFn,
+        new_p: PassphraseFn,
+    ) -> io::Result<()> {
         match *self {
             Encryption::None => Ok(()),
             Encryption::Curve25519(ref mut c) => {
@@ -184,7 +188,7 @@ impl encryption::EncryptionEngine for Encryption {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct Nesting(pub u8);
 impl Default for Nesting {
-    fn default() -> Self{
+    fn default() -> Self {
         Nesting(2)
     }
 }
@@ -195,11 +199,11 @@ impl Nesting {
         let mut dir = base.to_path_buf();
         let levels = self.clone().0;
         if levels > 0 {
-        for i in 0..levels {
-            let start = i as usize *2;
-            let end = start + 2 ;
-            dir = dir.join(&hex_digest[start..end]);
-        }
+            for i in 0..levels {
+                let start = i as usize * 2;
+                let end = start + 2;
+                dir = dir.join(&hex_digest[start..end]);
+            }
         }
         dir.join(&hex_digest)
     }
@@ -223,9 +227,10 @@ pub struct Repo {
 
 
 impl Repo {
-    pub fn new_from_settings(pass: PassphraseFn,
-                             settings: settings::Repo)
-                             -> io::Result<Self> {
+    pub fn new_from_settings(
+        pass: PassphraseFn,
+        settings: settings::Repo,
+    ) -> io::Result<Self> {
 
         let encryption = match settings.encryption {
             settings::Encryption::Curve25519 => {
@@ -235,12 +240,12 @@ impl Repo {
         };
 
         Ok(Repo {
-               version: REPO_VERSION_CURRENT,
-               chunking: settings.chunking.0,
-               encryption: encryption,
-               compression: settings.compression.to_config(),
-               nesting: settings.nesting.to_config(),
-           })
+            version: REPO_VERSION_CURRENT,
+            chunking: settings.chunking.0,
+            encryption: encryption,
+            compression: settings.compression.to_config(),
+            nesting: settings.nesting.to_config(),
+        })
 
     }
 
@@ -255,8 +260,9 @@ impl Repo {
         let mut config_file = fs::File::create(&config_path_tmp)?;
 
 
-        (&mut config_file as &mut Write)
-            .write_all(config_str.as_bytes())?;
+        (&mut config_file as &mut Write).write_all(
+            config_str.as_bytes(),
+        )?;
         config_file.flush()?;
         config_file.sync_data()?;
 

@@ -112,14 +112,18 @@ fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
     let mut derived_key = secretbox::Key([0; secretbox::KEYBYTES]);
     {
         let secretbox::Key(ref mut kb) = derived_key;
-        pwhash::derive_key(kb,
-                           passphrase.as_bytes(),
-                           salt,
-                           pwhash::OPSLIMIT_SENSITIVE,
-                           pwhash::MEMLIMIT_SENSITIVE).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "can't derive encryption key from passphrase")
-            })?;
+        pwhash::derive_key(
+            kb,
+            passphrase.as_bytes(),
+            salt,
+            pwhash::OPSLIMIT_SENSITIVE,
+            pwhash::MEMLIMIT_SENSITIVE,
+        ).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "can't derive encryption key from passphrase",
+            )
+        })?;
     }
 
     Ok(derived_key)
@@ -165,13 +169,14 @@ struct IndexTranslator<'a> {
 }
 
 impl<'a> IndexTranslator<'a> {
-    fn new(accessor: &'a ChunkAccessor,
-           writer: Option<&'a mut Write>,
-           data_type: DataType,
-           decrypter: Option<ArcDecrypter>,
-           compression: ArcCompression,
-           log: Logger)
-           -> Self {
+    fn new(
+        accessor: &'a ChunkAccessor,
+        writer: Option<&'a mut Write>,
+        data_type: DataType,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+        log: Logger,
+    ) -> Self {
         IndexTranslator {
             accessor: accessor,
             digest: vec![],
@@ -198,20 +203,22 @@ impl<'a> Write for IndexTranslator<'a> {
             self.digest.extend_from_slice(&bytes[..needs]);
             bytes = &bytes[needs..];
             let &mut IndexTranslator {
-                         accessor,
-                         ref mut digest,
-                         data_type,
-                         ref decrypter,
-                         ref compression,
-                         ref mut writer,
-                         ..
-                     } = self;
+                accessor,
+                ref mut digest,
+                data_type,
+                ref decrypter,
+                ref compression,
+                ref mut writer,
+                ..
+            } = self;
             if let Some(ref mut writer) = *writer {
-                let mut traverser = ReadContext::new(Some(writer),
-                                                     data_type,
-                                                     decrypter.clone(),
-                                                     compression.clone(),
-                                                     self.log.clone());
+                let mut traverser = ReadContext::new(
+                    Some(writer),
+                    data_type,
+                    decrypter.clone(),
+                    compression.clone(),
+                    self.log.clone(),
+                );
                 traverser.read_recursively(accessor, digest)?;
             } else {
                 accessor.touch(digest)?
@@ -241,12 +248,13 @@ struct ReadContext<'a> {
 }
 
 impl<'a> ReadContext<'a> {
-    fn new(writer: Option<&'a mut Write>,
-           data_type: DataType,
-           decrypter: Option<ArcDecrypter>,
-           compression: ArcCompression,
-           log: Logger)
-           -> Self {
+    fn new(
+        writer: Option<&'a mut Write>,
+        data_type: DataType,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+        log: Logger,
+    ) -> Self {
         ReadContext {
             writer: writer,
             data_type: data_type,
@@ -256,54 +264,64 @@ impl<'a> ReadContext<'a> {
         }
     }
 
-    fn on_index(&mut self,
-                accessor: &'a ChunkAccessor,
-                digest: &[u8])
-                -> Result<()> {
+    fn on_index(
+        &mut self,
+        accessor: &'a ChunkAccessor,
+        digest: &[u8],
+    ) -> Result<()> {
         trace!(self.log, "Traversing index"; "digest" => digest.to_hex());
         let mut index_data = vec![];
-        accessor
-            .read_chunk_into(digest,
-                             DataType::Index,
-                             DataType::Index,
-                             &mut index_data)?;
+        accessor.read_chunk_into(
+            digest,
+            DataType::Index,
+            DataType::Index,
+            &mut index_data,
+        )?;
 
         assert_eq!(index_data.len(), DIGEST_SIZE);
 
-        let mut translator = IndexTranslator::new(accessor,
-                                                  self.writer.take(),
-                                                  self.data_type,
-                                                  self.decrypter.clone(),
-                                                  self.compression.clone(),
-                                                  self.log.clone());
+        let mut translator = IndexTranslator::new(
+            accessor,
+            self.writer.take(),
+            self.data_type,
+            self.decrypter.clone(),
+            self.compression.clone(),
+            self.log.clone(),
+        );
 
-        let mut sub_traverser = ReadContext::new(Some(&mut translator),
-                                                 DataType::Index,
-                                                 None,
-                                                 self.compression.clone(),
-                                                 self.log.clone());
+        let mut sub_traverser = ReadContext::new(
+            Some(&mut translator),
+            DataType::Index,
+            None,
+            self.compression.clone(),
+            self.log.clone(),
+        );
         sub_traverser.read_recursively(accessor, &index_data)
     }
 
-    fn on_data(&mut self,
-               accessor: &'a ChunkAccessor,
-               digest: &[u8])
-               -> Result<()> {
+    fn on_data(
+        &mut self,
+        accessor: &'a ChunkAccessor,
+        digest: &[u8],
+    ) -> Result<()> {
         trace!(self.log, "Traversing data"; "digest" => digest.to_hex());
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(digest,
-                                     DataType::Data,
-                                     self.data_type,
-                                     writer)
+            accessor.read_chunk_into(
+                digest,
+                DataType::Data,
+                self.data_type,
+                writer,
+            )
         } else {
             accessor.touch(digest)
         }
     }
 
-    fn read_recursively(&mut self,
-                        accessor: &'a ChunkAccessor,
-                        digest: &[u8])
-                        -> Result<()> {
+    fn read_recursively(
+        &mut self,
+        accessor: &'a ChunkAccessor,
+        digest: &[u8],
+    ) -> Result<()> {
 
         let chunk_type = accessor.repo().chunk_type(digest)?;
 
@@ -321,12 +339,13 @@ trait ChunkAccessor {
     fn repo(&self) -> &Repo;
 
     /// Read a chunk identified by `digest` into `writer`
-    fn read_chunk_into(&self,
-                       digest: &[u8],
-                       chunk_type: DataType,
-                       data_type: DataType,
-                       writer: &mut Write)
-                       -> Result<()>;
+    fn read_chunk_into(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+        data_type: DataType,
+        writer: &mut Write,
+    ) -> Result<()>;
 
 
     fn touch(&self, _digest: &[u8]) -> Result<()> {
@@ -343,10 +362,11 @@ struct DefaultChunkAccessor<'a> {
 }
 
 impl<'a> DefaultChunkAccessor<'a> {
-    fn new(repo: &'a Repo,
-           decrypter: Option<ArcDecrypter>,
-           compression: ArcCompression)
-           -> Self {
+    fn new(
+        repo: &'a Repo,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+    ) -> Self {
         DefaultChunkAccessor {
             repo: repo,
             decrypter: decrypter,
@@ -360,12 +380,13 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         self.repo
     }
 
-    fn read_chunk_into(&self,
-                       digest: &[u8],
-                       chunk_type: DataType,
-                       data_type: DataType,
-                       writer: &mut Write)
-                       -> Result<()> {
+    fn read_chunk_into(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+        data_type: DataType,
+        writer: &mut Write,
+    ) -> Result<()> {
         let path = self.repo.chunk_path_by_digest(digest, chunk_type);
         let mut file = fs::File::open(path)?;
         let mut data = Vec::with_capacity(ACCESSOR_BUFFER_SIZE);
@@ -396,10 +417,14 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         vec_result.copy_from_slice(&sha256.result());
 
         if vec_result != digest {
-            Err(io::Error::new(io::ErrorKind::InvalidData,
-                               format!("{} corrupted, data read: {}",
-                                       digest.to_hex(),
-                                       vec_result.to_hex())))
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{} corrupted, data read: {}",
+                    digest.to_hex(),
+                    vec_result.to_hex()
+                ),
+            ))
         } else {
             for part in &*data {
                 io::copy(&mut io::Cursor::new(part), writer)?;
@@ -419,11 +444,12 @@ struct RecordingChunkAccessor<'a> {
 }
 
 impl<'a> RecordingChunkAccessor<'a> {
-    fn new(repo: &'a Repo,
-           accessed: &'a mut HashSet<Vec<u8>>,
-           decrypter: Option<ArcDecrypter>,
-           compression: ArcCompression)
-           -> Self {
+    fn new(
+        repo: &'a Repo,
+        accessed: &'a mut HashSet<Vec<u8>>,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+    ) -> Self {
         RecordingChunkAccessor {
             raw: DefaultChunkAccessor::new(repo, decrypter, compression),
             accessed: RefCell::new(accessed),
@@ -441,15 +467,20 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         Ok(())
     }
 
-    fn read_chunk_into(&self,
-                       digest: &[u8],
-                       chunk_type: DataType,
-                       data_type: DataType,
-                       writer: &mut Write)
-                       -> Result<()> {
+    fn read_chunk_into(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+        data_type: DataType,
+        writer: &mut Write,
+    ) -> Result<()> {
         self.touch(digest)?;
-        self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer)
+        self.raw.read_chunk_into(
+            digest,
+            chunk_type,
+            data_type,
+            writer,
+        )
     }
 }
 
@@ -464,10 +495,11 @@ struct VerifyingChunkAccessor<'a> {
 }
 
 impl<'a> VerifyingChunkAccessor<'a> {
-    fn new(repo: &'a Repo,
-           decrypter: Option<ArcDecrypter>,
-           compression: ArcCompression)
-           -> Self {
+    fn new(
+        repo: &'a Repo,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+    ) -> Self {
         VerifyingChunkAccessor {
             raw: DefaultChunkAccessor::new(repo, decrypter, compression),
             accessed: RefCell::new(HashSet::new()),
@@ -488,12 +520,13 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         self.raw.repo()
     }
 
-    fn read_chunk_into(&self,
-                       digest: &[u8],
-                       chunk_type: DataType,
-                       data_type: DataType,
-                       writer: &mut Write)
-                       -> Result<()> {
+    fn read_chunk_into(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+        data_type: DataType,
+        writer: &mut Write,
+    ) -> Result<()> {
         {
             let mut accessed = self.accessed.borrow_mut();
             if accessed.contains(digest) {
@@ -501,13 +534,18 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer);
+        let res = self.raw.read_chunk_into(
+            digest,
+            chunk_type,
+            data_type,
+            writer,
+        );
 
         if res.is_err() {
-            self.errors
-                .borrow_mut()
-                .push((digest.to_owned(), res.err().unwrap()));
+            self.errors.borrow_mut().push((
+                digest.to_owned(),
+                res.err().unwrap(),
+            ));
         }
         Ok(())
     }
@@ -559,9 +597,10 @@ pub struct EncryptHandle {
 pub struct SecretKey(box_::SecretKey);
 
 impl Repo {
-    pub fn unlock_decrypt(&self,
-                          pass: PassphraseFn)
-                          -> io::Result<DecryptHandle> {
+    pub fn unlock_decrypt(
+        &self,
+        pass: PassphraseFn,
+    ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
         let decrypter = self.config.encryption.decrypter(pass)?;
 
@@ -569,9 +608,10 @@ impl Repo {
 
     }
 
-    pub fn unlock_encrypt(&self,
-                          pass: PassphraseFn)
-                          -> io::Result<EncryptHandle> {
+    pub fn unlock_encrypt(
+        &self,
+        pass: PassphraseFn,
+    ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
         let encrypter = self.config.encryption.encrypter(pass)?;
 
@@ -585,9 +625,13 @@ impl Repo {
 
     fn ensure_repo_empty_or_new(repo_path: &Path) -> Result<()> {
         if repo_path.exists() && fs::read_dir(repo_path)?.next().is_some() {
-            return Err(Error::new(io::ErrorKind::AlreadyExists,
-                                  format!("{} must not exist or be empty to be used",
-                                          repo_path.to_string_lossy())));
+            return Err(Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "{} must not exist or be empty to be used",
+                    repo_path.to_string_lossy()
+                ),
+            ));
         }
         Ok(())
     }
@@ -603,15 +647,18 @@ impl Repo {
     }
 
     /// Create new rdedup repository
-    pub fn init<L>(repo_path: &Path,
-                   passphrase: PassphraseFn,
-                   settings: settings::Repo,
-                   log: L)
-                   -> Result<Repo>
-        where L: Into<Option<Logger>>
+    pub fn init<L>(
+        repo_path: &Path,
+        passphrase: PassphraseFn,
+        settings: settings::Repo,
+        log: L,
+    ) -> Result<Repo>
+    where
+        L: Into<Option<Logger>>,
     {
-        let log = log.into()
-            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
+        let log = log.into().unwrap_or_else(
+            || Logger::root(slog::Discard, o!()),
+        );
 
         Repo::ensure_repo_empty_or_new(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
@@ -621,11 +668,11 @@ impl Repo {
         let compression = config.compression.to_engine();
 
         Ok(Repo {
-               path: repo_path.into(),
-               config: config,
-               compression: compression,
-               log: log,
-           })
+            path: repo_path.into(),
+            config: config,
+            compression: compression,
+            log: log,
+        })
     }
 
     #[allow(unknown_lints)]
@@ -637,32 +684,42 @@ impl Repo {
         let mut reader = io::BufReader::new(&mut file);
         let mut version = String::new();
         reader.read_line(&mut version)?;
-        let version_int = version
-            .parse::<u32>()
-            .map_err(|_| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        format!("can't parse version file; \
+        let version_int = version.parse::<u32>().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "can't parse version file; \
                                         unsupported repo format version: {}",
-                                                version))
-                     })?;
+                    version
+                ),
+            )
+        })?;
 
 
         if version_int > config::REPO_VERSION_CURRENT {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      format!("repo version {} higher than \
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "repo version {} higher than \
                                                supported {}; update?",
-                                              version,
-                                              config::REPO_VERSION_CURRENT)));
+                    version,
+                    config::REPO_VERSION_CURRENT
+                ),
+            ));
         }
         // This if statement triggers the absurd_extreme_comparisons because the
         // minimum repo version is also the smallest value of a u32
         if version_int < config::REPO_VERSION_LOWEST {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      format!("repo version {} lower than \
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "repo version {} lower than \
                                                lowest supported {}; \
                                                restore using older version?",
-                                              version,
-                                              config::REPO_VERSION_LOWEST)));
+                    version,
+                    config::REPO_VERSION_LOWEST
+                ),
+            ));
         }
 
         Ok(version_int)
@@ -676,51 +733,59 @@ impl Repo {
     }
 
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
-        where L: Into<Option<Logger>>
+    where
+        L: Into<Option<Logger>>,
     {
-        let log = log.into()
-            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
+        let log = log.into().unwrap_or_else(
+            || Logger::root(slog::Discard, o!()),
+        );
         if !repo_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("repo not found: {}",
-                                          repo_path.to_string_lossy())));
+            return Err(Error::new(
+                io::ErrorKind::NotFound,
+                format!("repo not found: {}", repo_path.to_string_lossy()),
+            ));
         }
 
         let version = Repo::read_and_validate_version(repo_path)?;
 
         if version == 0 {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("rdedup v0 config format not supported")));
+            return Err(Error::new(
+                io::ErrorKind::NotFound,
+                format!("rdedup v0 config format not supported"),
+            ));
         }
 
         let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
-        let config: config::Repo = serde_yaml::from_reader(file)
-            .map_err(|e| {
-                         io::Error::new(io::ErrorKind::InvalidData,
-                                        format!("couldn't parse yaml: {}",
-                                                e.to_string()))
-                     })?;
+        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("couldn't parse yaml: {}", e.to_string()),
+            )
+        })?;
 
         let compression = config.compression.to_engine();
         Ok(Repo {
-               path: repo_path.to_owned(),
-               config: config,
-               compression: compression,
-               log: log,
-           })
+            path: repo_path.to_owned(),
+            config: config,
+            compression: compression,
+            log: log,
+        })
     }
 
     /// Change the passphrase
-    pub fn change_passphrase(&mut self,
-                             old_p: PassphraseFn,
-                             new_p: PassphraseFn)
-                             -> Result<()> {
+    pub fn change_passphrase(
+        &mut self,
+        old_p: PassphraseFn,
+        new_p: PassphraseFn,
+    ) -> Result<()> {
 
         let _lock = self.lock_exclusive();
 
         if self.config.version == 0 {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  format!("rdedup v0 config format not supported")));
+            return Err(Error::new(
+                io::ErrorKind::NotFound,
+                format!("rdedup v0 config format not supported"),
+            ));
         } else {
             self.config.encryption.change_passphrase(old_p, new_p)?;
             self.config.write(&self.path)?;
@@ -748,14 +813,13 @@ impl Repo {
 
 
     /// Write a chunk of data to the repo.
-    fn chunk_and_write_data_thread<'a>
-        (&'a self,
-         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
-         process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
-         writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
-         data_type: DataType)
-         -> io::Result<Vec<u8>>
-    {
+    fn chunk_and_write_data_thread<'a>(
+        &'a self,
+        input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
+        process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
+        writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
+        data_type: DataType,
+    ) -> io::Result<Vec<u8>> {
 
         // Note: This channel is intentionally unbounded
         // The processing loop runs in sort of a loop (actually more of a
@@ -771,41 +835,49 @@ impl Repo {
 
 
         crossbeam::scope(|scope| {
-            let mut timer = slog_perf::TimeReporter::new("index-processor",
-                                                         self.log.clone());
+            let mut timer = slog_perf::TimeReporter::new(
+                "index-processor",
+                self.log.clone(),
+            );
             timer.start("spawn-chunker");
 
             scope.spawn({
-                            let process_tx = process_tx.clone();
-                            move || {
+                let process_tx = process_tx.clone();
+                move || {
 
-                    let mut timer =
-                        slog_perf::TimeReporter::new("chunker",
-                                                     self.log.clone());
+                    let mut timer = slog_perf::TimeReporter::new(
+                        "chunker",
+                        self.log.clone(),
+                    );
 
                     let chunk_bits = match self.config.chunking {
                         Chunking::Bup { chunk_bits: bits } => bits,
                     };
 
-                    let chunker = Chunker::new(input_data_iter.into_iter(),
-                                               BupEdgeFinder::new(chunk_bits));
+                    let chunker = Chunker::new(
+                        input_data_iter.into_iter(),
+                        BupEdgeFinder::new(chunk_bits),
+                    );
 
                     // TODO: Change to `enumerate_u64`
                     let mut data = chunker.enumerate();
 
-                    while let Some(i_sg) =
-                        timer.start_with("rx-and-chunking", || data.next()) {
+                    while let Some(i_sg) = timer.start_with(
+                        "rx-and-chunking",
+                        || data.next(),
+                    )
+                    {
                         timer.start("tx");
                         let (i, sg) = i_sg;
                         process_tx
-                            .send(((i as u64, sg),
-                                   digests_tx.clone(),
-                                   data_type))
+                            .send(
+                                ((i as u64, sg), digests_tx.clone(), data_type),
+                            )
                             .expect("process_tx.send(...)")
                     }
                     drop(digests_tx);
                 }
-                        });
+            });
 
             timer.start("sorting-recv-create");
             let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
@@ -815,26 +887,30 @@ impl Repo {
                 digests_rx.next().expect("At least one index digest");
 
             if let Some(second_digest) =
-                timer.start_with("digest-rx", || digests_rx.next()) {
+                timer.start_with("digest-rx", || digests_rx.next())
+            {
                 let mut two_first = vec![first_digest, second_digest];
                 let digest =
                     self.chunk_and_write_data_thread(
-                        Box::new(two_first.drain(..).chain(digests_rx)
-                                 .map(|i_sg| i_sg)),
-                                 process_tx,
-                                 writer_tx.clone(),
-                                 DataType::Index,
-                                 )?;
+                        Box::new(
+                            two_first.drain(..).chain(digests_rx).map(
+                                |i_sg| i_sg,
+                            ),
+                        ),
+                        process_tx,
+                        writer_tx.clone(),
+                        DataType::Index,
+                    )?;
 
                 let index_digest = quick_sha256(&digest);
 
                 timer.start("writer-tx");
                 writer_tx
                     .send(ChunkWriterMessage {
-                              sg: SGBuf::from_single(digest),
-                              digest: index_digest.clone(),
-                              chunk_type: DataType::Index,
-                          })
+                        sg: SGBuf::from_single(digest),
+                        digest: index_digest.clone(),
+                        chunk_type: DataType::Index,
+                    })
                     .expect("writer_tx.send(...)");
                 Ok(index_digest)
 
@@ -850,10 +926,12 @@ impl Repo {
         num_cpus::get()
     }
 
-    fn input_reader_thread<R>(&self,
-                              reader: R,
-                              chunker_tx: mpsc::SyncSender<Vec<u8>>)
-        where R: Read + Send
+    fn input_reader_thread<R>(
+        &self,
+        reader: R,
+        chunker_tx: mpsc::SyncSender<Vec<u8>>,
+    ) where
+        R: Read + Send,
     {
         let mut time = TimeReporter::new("input-reader", self.log.clone());
 
@@ -866,24 +944,27 @@ impl Repo {
         }
     }
 
-    fn get_chunk_accessor(&self,
-                          decrypter: Option<ArcDecrypter>,
-                          compression: ArcCompression)
-                          -> DefaultChunkAccessor {
+    fn get_chunk_accessor(
+        &self,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+    ) -> DefaultChunkAccessor {
         DefaultChunkAccessor::new(self, decrypter, compression)
     }
 
-    fn get_recording_chunk_accessor<'a>(&'a self,
-                                        accessed: &'a mut HashSet<Vec<u8>>,
-                                        decrypter: Option<ArcDecrypter>,
-                                        compression: ArcCompression)
-                                        -> RecordingChunkAccessor<'a> {
+    fn get_recording_chunk_accessor<'a>(
+        &'a self,
+        accessed: &'a mut HashSet<Vec<u8>>,
+        decrypter: Option<ArcDecrypter>,
+        compression: ArcCompression,
+    ) -> RecordingChunkAccessor<'a> {
         RecordingChunkAccessor::new(self, accessed, decrypter, compression)
     }
 
-    fn chunk_writer_thread(&self,
-                           rx: two_lock_queue::Receiver<ChunkWriterMessage>)
-                           -> WriteStats {
+    fn chunk_writer_thread(
+        &self,
+        rx: two_lock_queue::Receiver<ChunkWriterMessage>,
+    ) -> WriteStats {
 
         let shared = ChunkWriterShared::new();
 
@@ -901,12 +982,10 @@ impl Repo {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 scope.spawn(move || {
-                                let thread =
-                                    ChunkWriterThread::new(self.clone(),
-                                                           shared,
-                                                           rx);
-                                thread.run();
-                            });
+                    let thread =
+                        ChunkWriterThread::new(self.clone(), shared, rx);
+                    thread.run();
+                });
             }
             drop(rx);
         });
@@ -918,8 +997,9 @@ impl Repo {
     fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
         let name_path = self.name_path(name);
         if !name_path.exists() {
-            return Err(Error::new(io::ErrorKind::NotFound,
-                                  "name file not found"));
+            return Err(
+                Error::new(io::ErrorKind::NotFound, "name file not found"),
+            );
         }
 
         let mut file = fs::File::open(&name_path)?;
@@ -936,8 +1016,10 @@ impl Repo {
         let name_path = self.name_path(name);
 
         if name_path.exists() {
-            return Err(Error::new(io::ErrorKind::AlreadyExists,
-                                  "name already exists"));
+            return Err(Error::new(
+                io::ErrorKind::AlreadyExists,
+                "name already exists",
+            ));
         }
 
         let mut file = fs::File::create(&name_path)?;
@@ -947,22 +1029,28 @@ impl Repo {
     }
 
 
-    fn reachable_recursively_insert(&self,
-                                    digest: &[u8],
-                                    reachable_digests: &mut HashSet<Vec<u8>>)
-                                    -> Result<()> {
+    fn reachable_recursively_insert(
+        &self,
+        digest: &[u8],
+        reachable_digests: &mut HashSet<Vec<u8>>,
+    ) -> Result<()> {
         reachable_digests.insert(digest.to_owned());
 
-        let mut traverser = ReadContext::new(None,
-                                             DataType::Data,
-                                             None,
-                                             self.compression.clone(),
-                                             self.log.clone());
-        traverser
-            .read_recursively(&self.get_recording_chunk_accessor(reachable_digests,
-                                                             None,
-                                                             self.compression.clone()),
-                              digest)
+        let mut traverser = ReadContext::new(
+            None,
+            DataType::Data,
+            None,
+            self.compression.clone(),
+            self.log.clone(),
+        );
+        traverser.read_recursively(
+            &self.get_recording_chunk_accessor(
+                reachable_digests,
+                None,
+                self.compression.clone(),
+            ),
+            digest,
+        )
     }
 
     /// List all names
@@ -992,8 +1080,9 @@ impl Repo {
                     if digest.len() == DIGEST_SIZE {
                         info!(self.log, "processing"; "name" => name);
                         self.reachable_recursively_insert(
-                            &digest, &mut reachable_digests
-                            )?;
+                            &digest,
+                            &mut reachable_digests,
+                        )?;
                     } else {
                         info!(self.log, "skipped";  "name" => name);
                     }
@@ -1014,20 +1103,26 @@ impl Repo {
                 return Ok(*i);
             }
         }
-        Err(Error::new(io::ErrorKind::NotFound,
-                       format!("chunk file missing: {}", digest.to_hex())))
+        Err(Error::new(
+            io::ErrorKind::NotFound,
+            format!("chunk file missing: {}", digest.to_hex()),
+        ))
     }
 
-    fn chunk_path_by_digest(&self,
-                            digest: &[u8],
-                            chunk_type: DataType)
-                            -> PathBuf {
+    fn chunk_path_by_digest(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+    ) -> PathBuf {
         let i_or_c = match chunk_type {
-        DataType::Data => Path::new(config::DATA_SUBDIR),
-        DataType::Index => Path::new(config::INDEX_SUBDIR),
-    };
+            DataType::Data => Path::new(config::DATA_SUBDIR),
+            DataType::Index => Path::new(config::INDEX_SUBDIR),
+        };
 
-        self.config.nesting.get_path(&self.path.join(i_or_c), digest)
+        self.config.nesting.get_path(
+            &self.path.join(i_or_c),
+            digest,
+        )
     }
 
     fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
@@ -1066,12 +1161,16 @@ impl Repo {
         let _lock = self.lock_exclusive();
 
         let reachable = self.list_reachable_chunks().unwrap();
-        let index_chunks = StoredChunks::new(&self.index_dir_path(),
-                                             DIGEST_SIZE,
-                                             self.log.clone())?;
-        let data_chunks = StoredChunks::new(&self.chunk_dir_path(),
-                                            DIGEST_SIZE,
-                                            self.log.clone())?;
+        let index_chunks = StoredChunks::new(
+            &self.index_dir_path(),
+            DIGEST_SIZE,
+            self.log.clone(),
+        )?;
+        let data_chunks = StoredChunks::new(
+            &self.chunk_dir_path(),
+            DIGEST_SIZE,
+            self.log.clone(),
+        )?;
 
         let mut result = GcResults {
             chunks: 0,
@@ -1091,24 +1190,28 @@ impl Repo {
         Ok(result)
     }
 
-    pub fn read<W: Write>(&self,
-                          name: &str,
-                          writer: &mut W,
-                          dec: &DecryptHandle)
-                          -> Result<()> {
+    pub fn read<W: Write>(
+        &self,
+        name: &str,
+        writer: &mut W,
+        dec: &DecryptHandle,
+    ) -> Result<()> {
 
         let _lock = self.lock_shared();
 
         let digest = self.name_to_digest(name)?;
 
-        let accessor =
-            self.get_chunk_accessor(Some(dec.decrypter.clone()),
-                                    self.compression.clone());
-        let mut traverser = ReadContext::new(Some(writer),
-                                             DataType::Data,
-                                             Some(dec.decrypter.clone()),
-                                             self.compression.clone(),
-                                             self.log.clone());
+        let accessor = self.get_chunk_accessor(
+            Some(dec.decrypter.clone()),
+            self.compression.clone(),
+        );
+        let mut traverser = ReadContext::new(
+            Some(writer),
+            DataType::Data,
+            Some(dec.decrypter.clone()),
+            self.compression.clone(),
+            self.log.clone(),
+        );
         traverser.read_recursively(&accessor, &digest)
     }
 
@@ -1118,51 +1221,62 @@ impl Repo {
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(dec.decrypter.clone()),
-                                                   self.compression.clone());
+        let accessor = VerifyingChunkAccessor::new(
+            self,
+            Some(dec.decrypter.clone()),
+            self.compression.clone(),
+        );
         {
-            let mut traverser = ReadContext::new(Some(&mut counter),
-                                                 DataType::Data,
-                                                 Some(dec.decrypter.clone()),
-                                                 self.compression.clone(),
-                                                 self.log.clone());
+            let mut traverser = ReadContext::new(
+                Some(&mut counter),
+                DataType::Data,
+                Some(dec.decrypter.clone()),
+                self.compression.clone(),
+                self.log.clone(),
+            );
             traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(DuResults {
-               chunks: accessor.get_results().scanned,
-               bytes: counter.count,
-           })
+            chunks: accessor.get_results().scanned,
+            bytes: counter.count,
+        })
     }
 
-    pub fn verify(&self,
-                  name: &str,
-                  dec: &DecryptHandle)
-                  -> Result<VerifyResults> {
+    pub fn verify(
+        &self,
+        name: &str,
+        dec: &DecryptHandle,
+    ) -> Result<VerifyResults> {
         let _lock = self.lock_shared();
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
-        let accessor = VerifyingChunkAccessor::new(self,
-                                                   Some(dec.decrypter.clone()),
-                                                   self.compression.clone());
+        let accessor = VerifyingChunkAccessor::new(
+            self,
+            Some(dec.decrypter.clone()),
+            self.compression.clone(),
+        );
         {
-            let mut traverser = ReadContext::new(Some(&mut counter),
-                                                 DataType::Data,
-                                                 Some(dec.decrypter.clone()),
-                                                 self.compression.clone(),
-                                                 self.log.clone());
+            let mut traverser = ReadContext::new(
+                Some(&mut counter),
+                DataType::Data,
+                Some(dec.decrypter.clone()),
+                self.compression.clone(),
+                self.log.clone(),
+            );
             traverser.read_recursively(&accessor, &digest)?;
         }
         Ok(accessor.get_results())
     }
 
-    pub fn write<R>(&self,
-                    name: &str,
-                    reader: R,
-                    enc: &EncryptHandle)
-                    -> Result<WriteStats>
-        where R: Read + Send
+    pub fn write<R>(
+        &self,
+        name: &str,
+        reader: R,
+        enc: &EncryptHandle,
+    ) -> Result<WriteStats>
+    where
+        R: Read + Send,
     {
         info!(self.log, "Writing data"; "name" => name);
         let _lock = self.lock_shared();
@@ -1187,24 +1301,26 @@ impl Repo {
                 let encrypter = enc.encrypter.clone();
                 let compression = self.compression.clone();
                 scope.spawn(move || {
-                    let processor = ChunkProcessor::new(self.clone(),
-                                                        process_rx,
-                                                        writer_tx,
-                                                        encrypter,
-                                                        compression);
+                    let processor = ChunkProcessor::new(
+                        self.clone(),
+                        process_rx,
+                        writer_tx,
+                        encrypter,
+                        compression,
+                    );
                     processor.run();
                 });
             }
             drop(process_rx);
 
-            let chunk_and_write =
-                scope.spawn(move || {
-                                self.chunk_and_write_data_thread(
-                                    Box::new(chunker_rx.into_iter()),
-                                    process_tx,
-                                    writer_tx,
-                                    DataType::Data)
-                            });
+            let chunk_and_write = scope.spawn(move || {
+                self.chunk_and_write_data_thread(
+                    Box::new(chunker_rx.into_iter()),
+                    process_tx,
+                    writer_tx,
+                    DataType::Data,
+                )
+            });
 
             let writer =
                 scope.spawn(move || self.chunk_writer_thread(writer_rx));

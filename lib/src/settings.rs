@@ -77,9 +77,10 @@ impl Repo {
         Ok(())
     }
 
-    pub fn set_compression(&mut self,
-                           compression: Compression)
-                           -> io::Result<()> {
+    pub fn set_compression(
+        &mut self,
+        compression: Compression,
+    ) -> io::Result<()> {
         self.compression = compression;
         Ok(())
     }
@@ -89,8 +90,10 @@ impl Repo {
         let bup = config::Chunking::Bup { chunk_bits: bits };
 
         if !bup.valid() {
-            return Err(super::Error::new(io::ErrorKind::InvalidInput,
-                                         "invalid chunking algorithm defined"));
+            return Err(super::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid chunking algorithm defined",
+            ));
         }
         self.chunking = Chunking(bup);
         Ok(())
@@ -98,7 +101,10 @@ impl Repo {
 
     pub fn set_nesting(&mut self, level: u8) -> super::Result<()> {
         if level > 31 {
-            return Err(super::Error::new(io::ErrorKind::InvalidInput, "nesting can't be greater than or equal to 32"))
+            return Err(super::Error::new(
+                io::ErrorKind::InvalidInput,
+                "nesting can't be greater than or equal to 32",
+            ));
         }
         self.nesting = Nesting(level);
         Ok(())

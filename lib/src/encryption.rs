@@ -13,17 +13,16 @@ pub type ArcEncrypter = Arc<Encrypter + Send + Sync>;
 pub type ArcDecrypter = Arc<Decrypter + Send + Sync>;
 
 pub trait EncryptionEngine {
-    fn change_passphrase(&mut self,
-                         old_p: PassphraseFn,
-                         new_p: PassphraseFn)
-                         -> io::Result<()>;
+    fn change_passphrase(
+        &mut self,
+        old_p: PassphraseFn,
+        new_p: PassphraseFn,
+    ) -> io::Result<()>;
 
-    fn encrypter(&self,
-                 passphrase_f: PassphraseFn)
-                 -> io::Result<ArcEncrypter>;
-    fn decrypter(&self,
-                 passphrase_f: PassphraseFn)
-                 -> io::Result<ArcDecrypter>;
+    fn encrypter(&self, passphrase_f: PassphraseFn)
+        -> io::Result<ArcEncrypter>;
+    fn decrypter(&self, passphrase_f: PassphraseFn)
+        -> io::Result<ArcDecrypter>;
 }
 
 pub trait Encrypter {
@@ -80,30 +79,36 @@ impl Curve25519 {
         };
 
         Ok(Curve25519 {
-               sealed_sec_key: sealed_sk,
-               pub_key: pk,
-               nonce: nonce,
-               salt: salt,
-           })
+            sealed_sec_key: sealed_sk,
+            pub_key: pk,
+            nonce: nonce,
+            salt: salt,
+        })
     }
 
-    fn unseal_decrypt(&self,
-                      passphrase_f: &Fn() -> io::Result<String>)
-                      -> io::Result<box_::SecretKey> {
+    fn unseal_decrypt(
+        &self,
+        passphrase_f: &Fn() -> io::Result<String>,
+    ) -> io::Result<box_::SecretKey> {
 
         let passphrase = passphrase_f()?;
 
         let derived_key = super::derive_key(&passphrase, &self.salt)?;
-        let plain_seckey = secretbox::open(&self.sealed_sec_key,
-                                               &self.nonce,
-                                               &derived_key).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData,
-                               "can't decrypt key using given passphrase")
-            })?;
+        let plain_seckey =
+            secretbox::open(&self.sealed_sec_key, &self.nonce, &derived_key)
+                .map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "can't decrypt key using given passphrase",
+                    )
+                })?;
 
-        Ok(box_::SecretKey::from_slice(&plain_seckey)
-               .ok_or(io::Error::new(io::ErrorKind::InvalidData,
-                                     "plain secret key in a wrong format"))?)
+        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or(
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "plain secret key in a wrong format",
+            ),
+        )?)
     }
 
     fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {
@@ -113,10 +118,11 @@ impl Curve25519 {
 
 
 impl EncryptionEngine for Curve25519 {
-    fn change_passphrase(&mut self,
-                         old_p: &Fn() -> io::Result<String>,
-                         new_p: &Fn() -> io::Result<String>)
-                         -> io::Result<()> {
+    fn change_passphrase(
+        &mut self,
+        old_p: &Fn() -> io::Result<String>,
+        new_p: &Fn() -> io::Result<String>,
+    ) -> io::Result<()> {
         let sec_key = self.unseal_decrypt(old_p)?;
 
         let new_passphrase = new_p()?;
@@ -139,9 +145,10 @@ impl EncryptionEngine for Curve25519 {
         Ok(Arc::new(Curve25519Encrypter { pub_key: key }))
 
     }
-    fn decrypter(&self,
-                 pass: &Fn() -> io::Result<String>)
-                 -> io::Result<ArcDecrypter> {
+    fn decrypter(
+        &self,
+        pass: &Fn() -> io::Result<String>,
+    ) -> io::Result<ArcDecrypter> {
         let key = self.unseal_decrypt(pass)?;
         Ok(Arc::new(Curve25519Decrypter { sec_key: key }))
     }
@@ -175,27 +182,35 @@ impl Decrypter for Curve25519Decrypter {
         let buf = buf.to_linear();
 
         if buf.len() < box_::PUBLICKEYBYTES {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      format!("chunk {} too short to even contain a public key",
-                                              digest.to_hex())));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "chunk {} too short to even contain a public key",
+                    digest.to_hex()
+                ),
+            ));
         }
 
-        let ephemeral_pub =
-            box_::PublicKey::from_slice(&buf[..box_::PUBLICKEYBYTES])
-                .ok_or(
-                    io::Error::new(io::ErrorKind::InvalidData,
-                                       format!("Can't read ephemeral public key from chunk: {}",
-                                               digest.to_hex())))?;
+        let ephemeral_pub = box_::PublicKey::from_slice(
+            &buf[..box_::PUBLICKEYBYTES],
+        ).ok_or(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Can't read ephemeral public key from chunk: {}",
+                digest.to_hex()
+            ),
+        ))?;
 
-        Ok(
-            SGBuf::from_single(box_::open(&buf[box_::PUBLICKEYBYTES..],
-                   &nonce,
-                   &ephemeral_pub,
-                   &self.sec_key)
-                .map_err(|_| {
-                             io::Error::new(io::ErrorKind::InvalidData,
-                                            format!("can't decrypt chunk: {}",
-                                                    digest.to_hex()))
-                         })?))
+        Ok(SGBuf::from_single(box_::open(
+            &buf[box_::PUBLICKEYBYTES..],
+            &nonce,
+            &ephemeral_pub,
+            &self.sec_key,
+        ).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("can't decrypt chunk: {}", digest.to_hex()),
+            )
+        })?))
     }
 }
