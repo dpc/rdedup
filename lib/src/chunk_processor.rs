@@ -8,9 +8,11 @@ use std::sync::mpsc;
 use two_lock_queue;
 
 // TODO: Make a struct
-pub type ChunkProcessorMessage = ((u64, SGBuf),
-                                  mpsc::Sender<(u64, Vec<u8>)>,
-                                  DataType);
+pub type ChunkProcessorMessage = (
+    (u64, SGBuf),
+    mpsc::Sender<(u64, Vec<u8>)>,
+    DataType,
+);
 
 
 pub struct ChunkProcessor {
@@ -23,12 +25,13 @@ pub struct ChunkProcessor {
 }
 
 impl ChunkProcessor {
-    pub fn new(repo: Repo,
-               rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-               tx: two_lock_queue::Sender<ChunkWriterMessage>,
-               encrypter: ArcEncrypter,
-               compressor: ArcCompression)
-               -> Self {
+    pub fn new(
+        repo: Repo,
+        rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
+        tx: two_lock_queue::Sender<ChunkWriterMessage>,
+        encrypter: ArcEncrypter,
+        compressor: ArcCompression,
+    ) -> Self {
         ChunkProcessor {
             log: repo.log.clone(),
             repo: repo,
@@ -70,16 +73,16 @@ impl ChunkProcessor {
                     timer.start("tx-writer");
                     self.tx
                         .send(ChunkWriterMessage {
-                                  sg: sg,
-                                  digest: digest.clone(),
-                                  chunk_type: DataType::Data,
-                              })
+                            sg: sg,
+                            digest: digest.clone(),
+                            chunk_type: DataType::Data,
+                        })
                         .expect("chunk_processor: tx.send");
                 }
                 timer.start("tx-digest");
-                digests_tx
-                    .send((i, digest))
-                    .expect("chunk_processor: digests_tx.send")
+                digests_tx.send((i, digest)).expect(
+                    "chunk_processor: digests_tx.send",
+                )
             } else {
                 return;
             }

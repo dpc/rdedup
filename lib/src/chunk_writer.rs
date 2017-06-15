@@ -56,10 +56,11 @@ pub struct ChunkWriterThread {
 }
 
 impl ChunkWriterThread {
-    pub fn new(repo: Repo,
-               shared: ChunkWriterShared,
-               rx: two_lock_queue::Receiver<ChunkWriterMessage>)
-               -> Self {
+    pub fn new(
+        repo: Repo,
+        shared: ChunkWriterShared,
+        rx: two_lock_queue::Receiver<ChunkWriterMessage>,
+    ) -> Self {
 
         ChunkWriterThread {
             log: repo.log.clone(),

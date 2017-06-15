@@ -15,9 +15,9 @@ use lib::settings;
 use serialize::hex::ToHex;
 use slog::Drain;
 use std::{io, process, env};
-use std::str::FromStr;
 
 use std::path::PathBuf;
+use std::str::FromStr;
 
 macro_rules! printerrln {
     ($($arg:tt)*) => ({
@@ -111,9 +111,9 @@ impl Options {
             }
         };
 
-        self.settings
-            .set_encryption(encryption)
-            .expect("wrong encryption");
+        self.settings.set_encryption(encryption).expect(
+            "wrong encryption",
+        );
     }
 
     fn set_compression(&mut self, s: &str) {
@@ -128,17 +128,17 @@ impl Options {
             }
         };
 
-        self.settings
-            .set_compression(compression)
-            .expect("wrong compression");
+        self.settings.set_compression(compression).expect(
+            "wrong compression",
+        );
     }
 
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
             "bup" => {
-                self.settings
-                    .use_bup_chunking(chunk_size)
-                    .expect("wrong chunking settings")
+                self.settings.use_bup_chunking(chunk_size).expect(
+                    "wrong chunking settings",
+                )
             }
             _ => {
                 printerrln!("unsupported encryption: {}", s);
@@ -274,14 +274,18 @@ fn run() -> io::Result<()> {
 
     match matches.subcommand() {
         ("init", Some(matches)) => {
-            options.set_chunking(matches
-                                         .value_of("CHUNKING").unwrap_or("bup"),
-                                     matches
-                                         .value_of("CHUNK_SIZE")
-                                         .map(|s| {
-                                                       util::parse_size(s).expect("Invalid chunk size option")
-                                                   })
-                                         .map(|u| u.trailing_zeros()));
+            options
+                .set_chunking(
+                    matches.value_of("CHUNKING").unwrap_or("bup"),
+                    matches
+                        .value_of("CHUNK_SIZE")
+                        .map(|s| {
+                            util::parse_size(s).expect(
+                                "Invalid chunk size option",
+                            )
+                        })
+                        .map(|u| u.trailing_zeros()),
+                );
             if let Some(encryption) = matches.value_of("ENCRYPTION") {
                 options.set_encryption(encryption);
             }
@@ -291,10 +295,12 @@ fn run() -> io::Result<()> {
             if let Some(nesting) = matches.value_of("NESTING") {
                 options.set_nesting(u8::from_str(nesting).unwrap());
             }
-            let _ = Repo::init(&options.dir,
-                               &|| util::read_new_passphrase(),
-                               options.settings,
-                               log)?;
+            let _ = Repo::init(
+                &options.dir,
+                &|| util::read_new_passphrase(),
+                options.settings,
+                log,
+            )?;
         }
         ("store", Some(matches)) => {
             let name = matches.value_of("NAME").expect("name agument missing");
@@ -312,8 +318,10 @@ fn run() -> io::Result<()> {
         }
         ("change_passphrase", Some(_matches)) => {
             let mut repo = Repo::open(&options.dir, log)?;
-            repo.change_passphrase(&|| read_passphrase(),
-                                   &|| read_new_passphrase())?;
+            repo.change_passphrase(
+                &|| read_passphrase(),
+                &|| read_new_passphrase(),
+            )?;
         }
         ("remove", Some(matches)) => {
             let repo = Repo::open(&options.dir, log)?;

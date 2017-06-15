@@ -1,6 +1,6 @@
+use bzip2;
 use flate2;
 use lzma;
-use bzip2;
 use sg::SGBuf;
 use std::io;
 
@@ -29,10 +29,10 @@ pub struct Deflate;
 
 impl Compression for Deflate {
     fn compress(&self, buf: SGBuf) -> io::Result<SGBuf> {
-        let mut compressor =
-            flate2::write::DeflateEncoder::new(
-                Vec::with_capacity(buf.total_len()),
-                flate2::Compression::Default);
+        let mut compressor = flate2::write::DeflateEncoder::new(
+            Vec::with_capacity(buf.total_len()),
+            flate2::Compression::Default,
+        );
 
         for sg_part in &*buf {
             compressor.write_all(sg_part).unwrap();
@@ -42,8 +42,9 @@ impl Compression for Deflate {
     }
 
     fn decompress(&self, buf: SGBuf) -> io::Result<SGBuf> {
-        let mut decompressor =
-            flate2::write::DeflateDecoder::new(Vec::with_capacity(buf.total_len()));
+        let mut decompressor = flate2::write::DeflateDecoder::new(
+            Vec::with_capacity(buf.total_len()),
+        );
 
         for part in &*buf {
             decompressor.write_all(&part)?;
@@ -56,10 +57,10 @@ pub struct Bzip2;
 
 impl Compression for Bzip2 {
     fn compress(&self, buf: SGBuf) -> io::Result<SGBuf> {
-        let mut compressor =
-            bzip2::write::BzEncoder::new(
-                Vec::with_capacity(buf.total_len()),
-                bzip2::Compression::Default);
+        let mut compressor = bzip2::write::BzEncoder::new(
+            Vec::with_capacity(buf.total_len()),
+            bzip2::Compression::Default,
+        );
 
         for sg_part in &*buf {
             compressor.write_all(sg_part).unwrap();
@@ -85,10 +86,12 @@ impl Compression for Xz2 {
     fn compress(&self, buf: SGBuf) -> io::Result<SGBuf> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.total_len());
         {
-            let mut compressor = lzma::LzmaWriter::new_compressor(&mut backing, 6).unwrap();
+            let mut compressor =
+                lzma::LzmaWriter::new_compressor(&mut backing, 6).unwrap();
             for sg_part in &*buf {
                 // compressor.write can sometimes return zero, so we can't just
-                // use write_all; see https://github.com/fpgaminer/rust-lzma/issues/13
+                // use write_all; see
+                // https://github.com/fpgaminer/rust-lzma/issues/13
                 let todo = sg_part.len();
                 let mut index = 0;
                 while {
@@ -96,7 +99,8 @@ impl Compression for Xz2 {
                     index += bytes;
 
                     index < todo
-                } {}
+                }
+                {}
             }
             compressor.finish().unwrap();
         }
@@ -106,10 +110,12 @@ impl Compression for Xz2 {
     fn decompress(&self, buf: SGBuf) -> io::Result<SGBuf> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.total_len());
         {
-            let mut decompressor = lzma::LzmaWriter::new_decompressor(&mut backing).unwrap();
+            let mut decompressor =
+                lzma::LzmaWriter::new_decompressor(&mut backing).unwrap();
             for sg_part in &*buf {
                 // compressor.write can sometimes return zero, so we can't just
-                // use write_all; see https://github.com/fpgaminer/rust-lzma/issues/13
+                // use write_all; see
+                // https://github.com/fpgaminer/rust-lzma/issues/13
                 let todo = sg_part.len();
                 let mut index = 0;
                 while {
@@ -117,7 +123,8 @@ impl Compression for Xz2 {
                     index += bytes;
 
                     index < todo
-                } {}
+                }
+                {}
             }
             decompressor.finish().unwrap();
         }

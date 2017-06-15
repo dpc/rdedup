@@ -18,15 +18,16 @@ pub struct StoredChunks {
 }
 
 impl StoredChunks {
-    pub fn new(root: &Path,
-               digest_size: usize,
-               log: Logger)
-               -> Result<StoredChunks> {
+    pub fn new(
+        root: &Path,
+        digest_size: usize,
+        log: Logger,
+    ) -> Result<StoredChunks> {
         Ok(StoredChunks {
-               dirs: vec![fs::read_dir(root)?],
-               digest_size: digest_size,
-               log: log,
-           })
+            dirs: vec![fs::read_dir(root)?],
+            digest_size: digest_size,
+            log: log,
+        })
     }
 }
 
@@ -56,11 +57,8 @@ impl Iterator for StoredChunks {
             }
             // We have landed on a file, we need to verify the file is a valid
             // chunk by parsing the hex code in the file name.
-            let name = entry
-                .file_name()
-                .to_string_lossy()
-                .to_string()
-                .into_bytes();
+            let name =
+                entry.file_name().to_string_lossy().to_string().into_bytes();
             match Vec::from_hex(name) {
                 Ok(digest) => {
                     if digest.len() == self.digest_size {

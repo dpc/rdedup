@@ -40,14 +40,16 @@ pub fn parse_size(input: &str) -> Option<u64> {
 #[test]
 fn test_parse_size() {
     // tuples that are str, expected Option<u64>
-    let tests = [("192K", Some(192 * 1024)),
-                 ("1M", Some(1024u64.pow(2))),
-                 ("Hello", None),
-                 ("12345.6789", None),
-                 ("1024B", None),
-                 ("1024A", None),
-                 ("1t", Some(1024u64.pow(4))),
-                 ("1E", Some(1024u64.pow(6)))];
+    let tests = [
+        ("192K", Some(192 * 1024)),
+        ("1M", Some(1024u64.pow(2))),
+        ("Hello", None),
+        ("12345.6789", None),
+        ("1024B", None),
+        ("1024A", None),
+        ("1t", Some(1024u64.pow(4))),
+        ("1E", Some(1024u64.pow(6))),
+    ];
 
     for test in &tests {
         let result = parse_size(test.0);

@@ -29,7 +29,8 @@ impl<T, I> SortingIterator<T, I> {
 }
 
 impl<T, I> Iterator for SortingIterator<T, I>
-    where I: Iterator<Item = (u64, T)>
+where
+    I: Iterator<Item = (u64, T)>,
 {
     type Item = T;
 
