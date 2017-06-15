@@ -35,10 +35,7 @@ fn test_chunker() {
 
     impl TestEdgeFinder {
         fn new(edges: Vec<usize>) -> Self {
-            TestEdgeFinder {
-                edges: edges,
-                i: 0,
-            }
+            TestEdgeFinder { edges: edges, i: 0 }
         }
     }
 
@@ -67,51 +64,57 @@ fn test_chunker() {
         result: &'static str,
     };
 
-    let test_cases = [Case {
-                          input: vec![0, 1, 2, 3, 4],
-                          buf_size: 2,
-                          edges: vec![1, 2, 3, 4, 5, 6],
-                          result: "[[0], [1], [2], [3], [4]]",
-                      },
-                      Case {
-                          input: vec![],
-                          buf_size: 2,
-                          edges: vec![],
-                          result: "[[]]",
-                      },
-                      Case {
-                          input: vec![],
-                          buf_size: 2,
-                          edges: vec![1, 2, 3, 4, 5, 6],
-                          result: "[[]]",
-                      },
-                      Case {
-                          input: vec![0, 1],
-                          buf_size: 1,
-                          edges: vec![2],
-                          result: "[[0, 1]]",
-                      },
-                      Case {
-                          input: vec![0, 1, 2, 3],
-                          buf_size: 2,
-                          edges: vec![],
-                          result: "[[0, 1, 2, 3]]",
-                      },
-                      Case {
-                          input: vec![0, 1, 2, 3, 4, 5],
-                          buf_size: 128,
-                          edges: vec![2],
-                          result: "[[0, 1], [2, 3, 4, 5]]",
-                      }];
+    let test_cases = [
+        Case {
+            input: vec![0, 1, 2, 3, 4],
+            buf_size: 2,
+            edges: vec![1, 2, 3, 4, 5, 6],
+            result: "[[0], [1], [2], [3], [4]]",
+        },
+        Case {
+            input: vec![],
+            buf_size: 2,
+            edges: vec![],
+            result: "[[]]",
+        },
+        Case {
+            input: vec![],
+            buf_size: 2,
+            edges: vec![1, 2, 3, 4, 5, 6],
+            result: "[[]]",
+        },
+        Case {
+            input: vec![0, 1],
+            buf_size: 1,
+            edges: vec![2],
+            result: "[[0, 1]]",
+        },
+        Case {
+            input: vec![0, 1, 2, 3],
+            buf_size: 2,
+            edges: vec![],
+            result: "[[0, 1, 2, 3]]",
+        },
+        Case {
+            input: vec![0, 1, 2, 3, 4, 5],
+            buf_size: 128,
+            edges: vec![2],
+            result: "[[0, 1], [2, 3, 4, 5]]",
+        },
+    ];
 
     for case in &test_cases {
         let r2vi = ReaderVecIter::new(case.input.as_slice(), case.buf_size);
         let mut while_ok = WhileOk::new(r2vi);
 
-        let chunker = Chunker::new(&mut while_ok,
-                                   TestEdgeFinder::new(case.edges.clone()));
-        let v: Vec<Vec<u8>> = chunker.map(|ch| {
-                let v: Vec<u8> = ch.iter()
+        let chunker = Chunker::new(
+            &mut while_ok,
+            TestEdgeFinder::new(case.edges.clone()),
+        );
+        let v: Vec<Vec<u8>> = chunker
+            .map(|ch| {
+                let v: Vec<u8> = ch.as_parts()
+                    .iter()
                     .flat_map(|arcref| (**arcref).to_owned())
                     .collect();
                 v

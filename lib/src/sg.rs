@@ -1,14 +1,11 @@
 //! Scattered-gathered buffers
 //!
 
-use DIGEST_SIZE;
 use DataType;
 use owning_ref::ArcRef;
 use rollsum;
-use sha2::{Sha256, Digest};
+use sgdata::SGData;
 use std::{io, mem};
-use std::io::Write;
-use std::ops::{Deref, DerefMut};
 use std::result::Result;
 use std::sync::Arc;
 
@@ -132,83 +129,9 @@ where
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Chunk {
-    sg: SGBuf,
+    sg: SGData,
     chunk_type: DataType,
     data_type: DataType,
-}
-
-/// Scattered-gathered buffer
-///
-/// A piece of data potentially scattered between
-/// multiple buffers.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SGBuf(Vec<ArcRef<Vec<u8>, [u8]>>);
-
-
-impl SGBuf {
-    fn new() -> Self {
-        SGBuf(vec![])
-    }
-    pub fn from_single(v: Vec<u8>) -> Self {
-        SGBuf::from_vec(vec![v])
-    }
-    pub fn from_vec(mut v: Vec<Vec<u8>>) -> Self {
-        SGBuf(
-            v.drain(..)
-                .map(|v| ArcRef::new(Arc::new(v)).map(|v| &v[..]))
-                .collect(),
-        )
-    }
-
-    pub fn total_len(&self) -> usize {
-        let mut size = 0;
-        for sg_part in &self.0 {
-            size += sg_part.len();
-        }
-        size
-    }
-
-    /// Calculate digest
-    pub fn calculate_digest(&self) -> Vec<u8> {
-        let mut sha256 = Sha256::default();
-
-        for sg_part in &self.0 {
-            sha256.input(sg_part);
-        }
-
-        let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&sha256.result());
-
-        vec_result
-    }
-
-    pub fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {
-        match self.0.len() {
-            0 => ArcRef::new(Arc::new(vec![])).map(|v| &v[..]),
-            1 => self.0[0].clone(),
-            _ => {
-                let mut v = Vec::with_capacity(self.total_len());
-                for sg_part in &self.0 {
-                    v.write_all(sg_part).unwrap();
-                }
-                ArcRef::new(Arc::new(v)).map(|v| &v[..])
-            }
-        }
-    }
-}
-
-impl Deref for SGBuf {
-    type Target = Vec<ArcRef<Vec<u8>, [u8]>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SGBuf {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }
 
 pub struct Chunker<I, EF> {
@@ -216,7 +139,7 @@ pub struct Chunker<I, EF> {
     cur_buf_edges: Option<(Arc<Vec<u8>>, Vec<usize>)>,
     cur_buf_i: usize,
     cur_edge_i: usize,
-    cur_sgbuf: SGBuf,
+    cur_sgbuf: SGData,
     chunks_returned: usize,
     edge_finder: EF,
 }
@@ -228,7 +151,7 @@ impl<I, EF> Chunker<I, EF> {
             cur_buf_edges: None,
             cur_buf_i: 0,
             cur_edge_i: 0,
-            cur_sgbuf: SGBuf::new(),
+            cur_sgbuf: SGData::empty(),
             chunks_returned: 0,
             edge_finder: edge_finder,
         }
@@ -239,7 +162,7 @@ impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
 where
     EF: EdgeFinder,
 {
-    type Item = SGBuf;
+    type Item = SGData;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -251,19 +174,19 @@ where
                     let aref = ArcRef::new(buf.clone()).map(|a| {
                         &a[self.cur_buf_i..edge]
                     });
-                    self.cur_sgbuf.push(aref);
+                    self.cur_sgbuf.as_vec_mut().push(aref);
                     self.cur_edge_i += 1;
                     self.cur_buf_i = edge;
                     self.chunks_returned += 1;
                     return Some(
-                        mem::replace(&mut self.cur_sgbuf, SGBuf::new()),
+                        mem::replace(&mut self.cur_sgbuf, SGData::empty()),
                     );
                 } else {
                     if self.cur_buf_i != buf.len() {
                         let aref = ArcRef::new(buf.clone()).map(|a| {
                             &a[self.cur_buf_i..]
                         });
-                        self.cur_sgbuf.push(aref);
+                        self.cur_sgbuf.as_vec_mut().push(aref);
                     }
                     self.cur_buf_i = 0;
                     None
@@ -272,17 +195,17 @@ where
                 self.cur_edge_i = 0;
                 let edges = self.edge_finder.find_edges(&buf[..]);
                 Some((Arc::new(buf), edges))
-            } else if self.cur_sgbuf.is_empty() {
+            } else if self.cur_sgbuf.as_parts().is_empty() {
                 if self.chunks_returned == 0 {
                     // at least one, zero sized chunk
                     self.chunks_returned += 1;
-                    return Some(SGBuf::new());
+                    return Some(SGData::empty());
                 } else {
                     return None;
                 }
             } else {
                 self.chunks_returned += 1;
-                return Some(mem::replace(&mut self.cur_sgbuf, SGBuf::new()));
+                return Some(mem::replace(&mut self.cur_sgbuf, SGData::empty()));
             }
         }
     }

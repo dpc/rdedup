@@ -21,10 +21,12 @@ extern crate crossbeam;
 extern crate slog;
 extern crate slog_perf;
 extern crate hex;
+extern crate sgdata;
 
 use fs2::FileExt;
 
 use hex::ToHex;
+use sgdata::SGData;
 use sha2::{Sha256, Digest};
 use slog::Logger;
 use slog_perf::TimeReporter;
@@ -396,10 +398,10 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
-                .decrypt(SGBuf::from_single(data), digest)?
+                .decrypt(SGData::from_single(data), digest)?
         } else {
             file.read_to_end(&mut data)?;
-            SGBuf::from_single(data)
+            SGData::from_single(data)
         };
 
         let data = if data_type.should_compress() {
@@ -410,7 +412,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
         let mut sha256 = Sha256::default();
 
-        for part in &*data {
+        for part in data.as_parts() {
             sha256.input(&*part);
         }
         let mut vec_result = vec![0u8; DIGEST_SIZE];
@@ -426,7 +428,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                 ),
             ))
         } else {
-            for part in &*data {
+            for part in data.as_parts() {
                 io::copy(&mut io::Cursor::new(part), writer)?;
             }
             Ok(())
@@ -907,7 +909,7 @@ impl Repo {
                 timer.start("writer-tx");
                 writer_tx
                     .send(ChunkWriterMessage {
-                        sg: SGBuf::from_single(digest),
+                        sg: SGData::from_single(digest),
                         digest: index_digest.clone(),
                         chunk_type: DataType::Index,
                     })

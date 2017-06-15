@@ -4,7 +4,7 @@ use {box_, pwhash, secretbox, as_base64, from_base64};
 use PassphraseFn;
 
 use hex::ToHex;
-use sg::SGBuf;
+use sgdata::SGData;
 
 use std::io;
 use std::sync::Arc;
@@ -26,17 +26,17 @@ pub trait EncryptionEngine {
 }
 
 pub trait Encrypter {
-    fn encrypt(&self, buf: SGBuf, digest: &[u8]) -> super::Result<SGBuf>;
+    fn encrypt(&self, buf: SGData, digest: &[u8]) -> super::Result<SGData>;
 }
 
 pub trait Decrypter {
-    fn decrypt(&self, buf: SGBuf, digest: &[u8]) -> io::Result<SGBuf>;
+    fn decrypt(&self, buf: SGData, digest: &[u8]) -> io::Result<SGData>;
 }
 
 pub struct NopEncrypter;
 
 impl Encrypter for NopEncrypter {
-    fn encrypt(&self, buf: SGBuf, _digest: &[u8]) -> io::Result<SGBuf> {
+    fn encrypt(&self, buf: SGData, _digest: &[u8]) -> io::Result<SGData> {
         Ok(buf)
     }
 }
@@ -44,7 +44,7 @@ impl Encrypter for NopEncrypter {
 pub struct NopDecrypter;
 
 impl Decrypter for NopDecrypter {
-    fn decrypt(&self, buf: SGBuf, _digest: &[u8]) -> io::Result<SGBuf> {
+    fn decrypt(&self, buf: SGData, _digest: &[u8]) -> io::Result<SGData> {
         Ok(buf)
     }
 }
@@ -159,7 +159,7 @@ struct Curve25519Encrypter {
 }
 
 impl Encrypter for Curve25519Encrypter {
-    fn encrypt(&self, buf: SGBuf, digest: &[u8]) -> super::Result<SGBuf> {
+    fn encrypt(&self, buf: SGData, digest: &[u8]) -> super::Result<SGData> {
 
         let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
             .expect("Nonce::from_slice failed");
@@ -167,7 +167,7 @@ impl Encrypter for Curve25519Encrypter {
         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
         let cipher =
             box_::seal(&buf.to_linear(), &nonce, &self.pub_key, &ephemeral_sec);
-        Ok(SGBuf::from_vec(vec![ephemeral_pub.0.to_vec(), cipher]))
+        Ok(SGData::from_many(vec![ephemeral_pub.0.to_vec(), cipher]))
     }
 }
 
@@ -175,7 +175,7 @@ struct Curve25519Decrypter {
     sec_key: box_::SecretKey,
 }
 impl Decrypter for Curve25519Decrypter {
-    fn decrypt(&self, buf: SGBuf, digest: &[u8]) -> io::Result<SGBuf> {
+    fn decrypt(&self, buf: SGData, digest: &[u8]) -> io::Result<SGData> {
         let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
             .unwrap();
 
@@ -201,7 +201,7 @@ impl Decrypter for Curve25519Decrypter {
             ),
         ))?;
 
-        Ok(SGBuf::from_single(box_::open(
+        Ok(SGData::from_single(box_::open(
             &buf[box_::PUBLICKEYBYTES..],
             &nonce,
             &ephemeral_pub,

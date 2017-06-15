@@ -1,0 +1,131 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+ArcRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type ArcRef<T, U = T> = OwningRef<Arc<T>, U>;$/;"	T
+AsRef for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> AsRef<T> for OwningRef<O, T> {$/;"	i
+Borrow for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Borrow<T> for OwningRef<O, T> {$/;"	i
+BoxRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type BoxRef<T, U = T> = OwningRef<Box<T>, U>;$/;"	T
+Clone for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Clone for OwningRef<O, T>$/;"	i
+CloneStableAddress	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub unsafe trait CloneStableAddress: StableAddress + Clone {}$/;"	t
+CloneStableAddress for Arc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T: ?Sized> CloneStableAddress for Arc<T> {}$/;"	i
+CloneStableAddress for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<O, T: ?Sized> CloneStableAddress for OwningRef<O, T>$/;"	i
+CloneStableAddress for Rc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T: ?Sized> CloneStableAddress for Rc<T> {}$/;"	i
+Debug for Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl Debug for Erased {$/;"	i
+Debug for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Debug for OwningRef<O, T>$/;"	i
+Deref for OwningHandle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, H> Deref for OwningHandle<O, H>$/;"	i
+Deref for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Deref for OwningRef<O, T> {$/;"	i
+DerefMut for OwningHandle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, H> DerefMut for OwningHandle<O, H>$/;"	i
+Eq for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Eq for OwningRef<O, T> where T: Eq {}$/;"	i
+Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Erased = Arc<Erased + 'a>;$/;"	T
+Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Erased = Box<Erased + 'a>;$/;"	T
+Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Erased = Rc<Erased + 'a>;$/;"	T
+Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Erased;$/;"	T
+Erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub trait Erased {}$/;"	t
+Erased for T	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<T> Erased for T {}$/;"	i
+ErasedArcRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type ErasedArcRef<U> = OwningRef<Arc<Erased>, U>;$/;"	T
+ErasedBoxRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type ErasedBoxRef<U> = OwningRef<Box<Erased>, U>;$/;"	T
+ErasedRcRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type ErasedRcRef<U> = OwningRef<Rc<Erased>, U>;$/;"	T
+Example	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    struct Example(u32, String, [u8; 3]);$/;"	s
+Foo	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    struct Foo {$/;"	s
+From for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> From<O> for OwningRef<O, T>$/;"	i
+Hash for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Hash for OwningRef<O, T> where T: Hash {$/;"	i
+IntoErased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub unsafe trait IntoErased<'a> {$/;"	t
+IntoErased for Arc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: 'a> IntoErased<'a> for Arc<T> {$/;"	i
+IntoErased for Box	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: 'a> IntoErased<'a> for Box<T> {$/;"	i
+IntoErased for Rc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: 'a> IntoErased<'a> for Rc<T> {$/;"	i
+MutexGuardRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type MutexGuardRef<'a, T, U = T> = OwningRef<MutexGuard<'a, T>, U>;$/;"	T
+Ord for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> Ord for OwningRef<O, T> where T: Ord {$/;"	i
+OwningHandle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, H> OwningHandle<O, H>$/;"	i
+OwningHandle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub struct OwningHandle<O, H>$/;"	s
+OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> OwningRef<O, T> {$/;"	i
+OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub struct OwningRef<O, T: ?Sized> {$/;"	s
+PartialEq for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> PartialEq for OwningRef<O, T> where T: PartialEq {$/;"	i
+PartialOrd for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^impl<O, T: ?Sized> PartialOrd for OwningRef<O, T> where T: PartialOrd {$/;"	i
+RcRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type RcRef<T, U = T> = OwningRef<Rc<T>, U>;$/;"	T
+RefMutRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type RefMutRef<'a, T, U = T> = OwningRef<RefMut<'a, T>, U>;$/;"	T
+RefRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type RefRef<'a, T, U = T> = OwningRef<Ref<'a, T>, U>;$/;"	T
+RwLockReadGuardRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type RwLockReadGuardRef<'a, T, U = T>$/;"	T
+RwLockWriteGuardRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type RwLockWriteGuardRef<'a, T, U = T>$/;"	T
+SGData	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^impl SGData {$/;"	i
+SGData	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^pub struct SGData(Vec<ArcRef<Vec<u8>, [u8]>>);$/;"	s
+Send for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<O: Send, T: ?Sized> Send for OwningRef<O, T> {}$/;"	i
+StableAddress	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub unsafe trait StableAddress: Deref {}$/;"	t
+StableAddress for Arc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T: ?Sized> StableAddress for Arc<T> {}$/;"	i
+StableAddress for Box	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T: ?Sized> StableAddress for Box<T> {}$/;"	i
+StableAddress for MutexGuard	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: ?Sized> StableAddress for MutexGuard<'a, T> {}$/;"	i
+StableAddress for OwningHandle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<O, H> StableAddress for OwningHandle<O, H>$/;"	i
+StableAddress for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<O, T: ?Sized> StableAddress for OwningRef<O, T> {}$/;"	i
+StableAddress for Rc	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T: ?Sized> StableAddress for Rc<T> {}$/;"	i
+StableAddress for Ref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: ?Sized> StableAddress for Ref<'a, T> {}$/;"	i
+StableAddress for RefMut	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: ?Sized> StableAddress for RefMut<'a, T> {}$/;"	i
+StableAddress for RwLockReadGuard	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: ?Sized> StableAddress for RwLockReadGuard<'a, T> {}$/;"	i
+StableAddress for RwLockWriteGuard	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<'a, T: ?Sized> StableAddress for RwLockWriteGuard<'a, T> {}$/;"	i
+StableAddress for String	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl StableAddress for String {}$/;"	i
+StableAddress for Vec	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<T> StableAddress for Vec<T> {}$/;"	i
+StringRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type StringRef = OwningRef<String, str>;$/;"	T
+Sync for OwningRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^unsafe impl<O: Sync, T: ?Sized> Sync for OwningRef<O, T> {}$/;"	i
+Target	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Target = H::Target;$/;"	T
+Target	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    type Target = T;$/;"	T
+VecRef	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^pub type VecRef<T, U = T> = OwningRef<Vec<T>, U>;$/;"	T
+as_parts	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn as_parts(&self) -> &[ArcRef<Vec<u8>, [u8]>] {$/;"	f
+as_ref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn as_ref(&self) -> &T {$/;"	f
+as_vec	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn as_vec(&self) -> &Vec<ArcRef<Vec<u8>, [u8]>> {$/;"	f
+as_vec_mut	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn as_vec_mut(&mut self) -> &mut Vec<ArcRef<Vec<u8>, [u8]>> {$/;"	f
+borrow	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn borrow(&self) -> &T {$/;"	f
+borrow	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn borrow() {$/;"	f
+clone	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn clone(&self) -> Self {$/;"	f
+cmp	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn cmp(&self, other: &Self) -> Ordering {$/;"	f
+cmp	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn cmp() {$/;"	f
+deref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn deref(&self) -> &H::Target {$/;"	f
+deref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn deref(&self) -> &T {$/;"	f
+deref_mut	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn deref_mut(&mut self) -> &mut H::Target {$/;"	f
+empty	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn empty() -> Self {$/;"	f
+eq	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn eq(&self, other: &Self) -> bool {$/;"	f
+eq	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn eq() {$/;"	f
+erase_owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn erase_owner<'a>(self) -> OwningRef<O::Erased, T>$/;"	f
+erased_owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn erased_owner() {$/;"	f
+example	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn example() -> Example {$/;"	f
+fmt	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {$/;"	f
+fmt_debug	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn fmt_debug() {$/;"	f
+from	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn from(owner: O) -> Self {$/;"	f
+from_many	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn from_many(mut v: Vec<Vec<u8>>) -> Self {$/;"	f
+from_single	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn from_single(v: Vec<u8>) -> Self {$/;"	f
+hash	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn hash() {$/;"	f
+hash	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn hash<H: Hasher>(&self, state: &mut H) {$/;"	f
+into	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn into() {$/;"	f
+into_erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn into_erased(self) -> Self::Erased { self }$/;"	f
+into_erased	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn into_erased(self) -> Self::Erased;$/;"	f
+into_inner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn into_inner() {$/;"	f
+into_inner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn into_inner(self) -> O {$/;"	f
+len	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn len(&self) -> usize {$/;"	f
+main	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^fn main() {$/;"	f
+map	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn map<F, U: ?Sized>(self, f: F) -> OwningRef<O, U>$/;"	f
+map_chained	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn map_chained() {$/;"	f
+map_chained_inference	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn map_chained_inference() {$/;"	f
+map_heap_ref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn map_heap_ref() {$/;"	f
+map_offset_ref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn map_offset_ref() {$/;"	f
+map_owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub unsafe fn map_owner<F, P>(self, f: F) -> OwningRef<P, T>$/;"	f
+map_owner_box	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn map_owner_box(self) -> OwningRef<Box<O>, T> {$/;"	f
+map_static_ref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn map_static_ref() {$/;"	f
+nested	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn nested() {$/;"	f
+new	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn new(o: O) -> Self$/;"	f
+new	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn new<F>(o: O, f: F) -> Self$/;"	f
+new_assert_stable_address	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub unsafe fn new_assert_stable_address(o: O) -> Self$/;"	f
+new_deref	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn new_deref() {$/;"	f
+non_static_erased_owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn non_static_erased_owner() {$/;"	f
+owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn owner() {$/;"	f
+owner	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn owner(&self) -> &O {$/;"	f
+owning_handle	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn owning_handle() {$/;"	f
+par_sum	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn par_sum(rc: ArcRef<[i32]>) -> i32 {$/;"	f
+partial_cmp	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {$/;"	f
+partial_cmp	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn partial_cmp() {$/;"	f
+raii_locks	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn raii_locks() {$/;"	f
+tests	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^mod tests {$/;"	m
+to_linear	/home/dpc/lab/rust/rdedup/sgdata/src/lib.rs	/^    pub fn to_linear(&self) -> ArcRef<Vec<u8>, [u8]> {$/;"	f
+total_erase	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn total_erase() {$/;"	f
+total_erase_box	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn total_erase_box() {$/;"	f
+try_map	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn try_map<F, U: ?Sized, E>(self, f: F) -> Result<OwningRef<O, U>, E>$/;"	f
+try_map1	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn try_map1() {$/;"	f
+try_map2	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn try_map2() {$/;"	f
+try_new	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    pub fn try_new<F, E>(o: O, f: F) -> Result<Self, E>$/;"	f
+try_owning_handle_err	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn try_owning_handle_err() {$/;"	f
+try_owning_handle_ok	/home/dpc/.cargo/registry/src/github.com-1ecc6299db9ec823/owning_ref-0.2.4/src/lib.rs	/^    fn try_owning_handle_ok() {$/;"	f

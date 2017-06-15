@@ -1,4 +1,5 @@
-use super::{SGBuf, DataType, Repo};
+use super::{DataType, Repo};
+use sgdata::SGData;
 use slog::Logger;
 use slog_perf::TimeReporter;
 use std::collections::HashSet;
@@ -14,7 +15,7 @@ pub struct WriteStats {
     pub new_bytes: u64,
 }
 pub struct ChunkWriterMessage {
-    pub sg: SGBuf,
+    pub sg: SGData,
     pub digest: Vec<u8>,
     pub chunk_type: DataType,
 }
@@ -117,7 +118,7 @@ impl ChunkWriterThread {
             let mut chunk_file = fs::File::create(&tmp_path).unwrap();
 
             let mut bytes_written = 0;
-            for data_part in sg.iter() {
+            for data_part in sg.as_parts() {
                 chunk_file.write_all(data_part).unwrap();
                 bytes_written += data_part.len() as u64;
             }
