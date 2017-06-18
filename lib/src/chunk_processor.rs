@@ -91,8 +91,10 @@ impl ChunkProcessor {
                     self.tx
                         .send(FileWriterMessage {
                             sg: sg,
-                            digest: digest.clone(),
-                            chunk_type: DataType::Data,
+                            path: self.repo.chunk_rel_path_by_digest(
+                                &digest,
+                                DataType::Data,
+                            ),
                         })
                         .expect("chunk_processor: tx.send");
                 }
