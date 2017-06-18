@@ -1,5 +1,5 @@
 use super::{DataType, Repo};
-use super::chunk_writer::*;
+use super::file_writer::*;
 use DIGEST_SIZE;
 use compression::ArcCompression;
 use encryption::ArcEncrypter;
@@ -22,7 +22,7 @@ pub type ChunkProcessorMessage = (
 pub struct ChunkProcessor {
     repo: Repo,
     rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-    tx: two_lock_queue::Sender<ChunkWriterMessage>,
+    tx: two_lock_queue::Sender<FileWriterMessage>,
     log: Logger,
     encrypter: ArcEncrypter,
     compressor: ArcCompression,
@@ -45,7 +45,7 @@ impl ChunkProcessor {
     pub fn new(
         repo: Repo,
         rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-        tx: two_lock_queue::Sender<ChunkWriterMessage>,
+        tx: two_lock_queue::Sender<FileWriterMessage>,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
     ) -> Self {
@@ -89,7 +89,7 @@ impl ChunkProcessor {
 
                     timer.start("tx-writer");
                     self.tx
-                        .send(ChunkWriterMessage {
+                        .send(FileWriterMessage {
                             sg: sg,
                             digest: digest.clone(),
                             chunk_type: DataType::Data,
