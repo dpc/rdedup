@@ -1,6 +1,9 @@
 target
-Cargo.lock
 testdata
 tags
 backup/
 *.bk
+.cargo/
+Cargo.lock
+!./Cargo.lock
+rusty-tags.vi
