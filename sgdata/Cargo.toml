@@ -11,4 +11,4 @@ repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
 
 [dependencies]
-owning_ref = "0.2.4"
+owning_ref = "0.3.3"
