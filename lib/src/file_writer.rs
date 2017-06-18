@@ -1,4 +1,3 @@
-use super::{DataType, Repo};
 use sgdata::SGData;
 use slog::Logger;
 use slog_perf::TimeReporter;
@@ -16,8 +15,7 @@ pub struct WriteStats {
 }
 pub struct FileWriterMessage {
     pub sg: SGData,
-    pub digest: Vec<u8>,
-    pub chunk_type: DataType,
+    pub path: PathBuf,
 }
 
 struct FileWriterSharedInner {
@@ -50,7 +48,7 @@ impl FileWriterShared {
 }
 
 pub struct FileWriterThread {
-    repo: Repo,
+    root_path: PathBuf,
     shared: FileWriterShared,
     rx: two_lock_queue::Receiver<FileWriterMessage>,
     log: Logger,
@@ -58,14 +56,15 @@ pub struct FileWriterThread {
 
 impl FileWriterThread {
     pub fn new(
-        repo: Repo,
+        root_path: PathBuf,
         shared: FileWriterShared,
         rx: two_lock_queue::Receiver<FileWriterMessage>,
+        log: Logger,
     ) -> Self {
 
         FileWriterThread {
-            log: repo.log.clone(),
-            repo: repo,
+            root_path: root_path,
+            log: log,
             shared: shared,
             rx: rx,
         }
@@ -79,12 +78,8 @@ impl FileWriterThread {
 
             t.start("processing");
 
-            let FileWriterMessage {
-                sg,
-                digest,
-                chunk_type,
-            } = msg;
-            let path = self.repo.chunk_path_by_digest(&digest, chunk_type);
+            let FileWriterMessage { sg, path } = msg;
+            let path = self.root_path.join(path);
 
             // check `in_progress` and add atomically
             // if not already there

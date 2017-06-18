@@ -907,11 +907,14 @@ impl Repo {
                 let index_digest = quick_sha256(&digest);
 
                 timer.start("writer-tx");
+                let path = self.chunk_rel_path_by_digest(
+                    &index_digest,
+                    DataType::Index,
+                );
                 writer_tx
                     .send(FileWriterMessage {
                         sg: SGData::from_single(digest),
-                        digest: index_digest.clone(),
-                        chunk_type: DataType::Index,
+                        path: path,
                     })
                     .expect("writer_tx.send(...)");
                 Ok(index_digest)
@@ -984,8 +987,12 @@ impl Repo {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 scope.spawn(move || {
-                    let thread =
-                        FileWriterThread::new(self.clone(), shared, rx);
+                    let thread = FileWriterThread::new(
+                        self.path.clone(),
+                        shared,
+                        rx,
+                        self.log.clone(),
+                    );
                     thread.run();
                 });
             }
@@ -1111,7 +1118,7 @@ impl Repo {
         ))
     }
 
-    fn chunk_path_by_digest(
+    fn chunk_rel_path_by_digest(
         &self,
         digest: &[u8],
         chunk_type: DataType,
@@ -1121,9 +1128,16 @@ impl Repo {
             DataType::Index => Path::new(config::INDEX_SUBDIR),
         };
 
-        self.config.nesting.get_path(
-            &self.path.join(i_or_c),
-            digest,
+        self.config.nesting.get_path(i_or_c, digest)
+    }
+
+    fn chunk_path_by_digest(
+        &self,
+        digest: &[u8],
+        chunk_type: DataType,
+    ) -> PathBuf {
+        self.path.join(
+            self.chunk_rel_path_by_digest(digest, chunk_type),
         )
     }
 
