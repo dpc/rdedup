@@ -52,8 +52,8 @@ use config::Chunking;
 mod sg;
 use sg::*;
 
-mod chunk_writer;
-use chunk_writer::*;
+mod file_writer;
+use file_writer::*;
 
 mod chunk_processor;
 use chunk_processor::*;
@@ -819,7 +819,7 @@ impl Repo {
         &'a self,
         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
         process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
-        writer_tx: two_lock_queue::Sender<ChunkWriterMessage>,
+        writer_tx: two_lock_queue::Sender<FileWriterMessage>,
         data_type: DataType,
     ) -> io::Result<Vec<u8>> {
 
@@ -908,7 +908,7 @@ impl Repo {
 
                 timer.start("writer-tx");
                 writer_tx
-                    .send(ChunkWriterMessage {
+                    .send(FileWriterMessage {
                         sg: SGData::from_single(digest),
                         digest: index_digest.clone(),
                         chunk_type: DataType::Index,
@@ -963,12 +963,12 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed, decrypter, compression)
     }
 
-    fn chunk_writer_thread(
+    fn start_file_writer_thread(
         &self,
-        rx: two_lock_queue::Receiver<ChunkWriterMessage>,
+        rx: two_lock_queue::Receiver<FileWriterMessage>,
     ) -> WriteStats {
 
-        let shared = ChunkWriterShared::new();
+        let shared = FileWriterShared::new();
 
         crossbeam::scope(|scope| {
             // Unlike CPU-intense workload, it's hard to come up with one
@@ -985,7 +985,7 @@ impl Repo {
                 let shared = shared.clone();
                 scope.spawn(move || {
                     let thread =
-                        ChunkWriterThread::new(self.clone(), shared, rx);
+                        FileWriterThread::new(self.clone(), shared, rx);
                     thread.run();
                 });
             }
@@ -1325,7 +1325,7 @@ impl Repo {
             });
 
             let writer =
-                scope.spawn(move || self.chunk_writer_thread(writer_rx));
+                scope.spawn(move || self.start_file_writer_thread(writer_rx));
 
             let final_digest = chunk_and_write.join();
 

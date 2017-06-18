@@ -14,25 +14,25 @@ pub struct WriteStats {
     pub new_chunks: usize,
     pub new_bytes: u64,
 }
-pub struct ChunkWriterMessage {
+pub struct FileWriterMessage {
     pub sg: SGData,
     pub digest: Vec<u8>,
     pub chunk_type: DataType,
 }
 
-struct ChunkWriterSharedInner {
+struct FileWriterSharedInner {
     write_stats: WriteStats,
     in_progress: HashSet<PathBuf>,
 }
 
 #[derive(Clone)]
-pub struct ChunkWriterShared {
-    inner: Arc<Mutex<ChunkWriterSharedInner>>,
+pub struct FileWriterShared {
+    inner: Arc<Mutex<FileWriterSharedInner>>,
 }
 
-impl ChunkWriterShared {
+impl FileWriterShared {
     pub fn new() -> Self {
-        let inner = ChunkWriterSharedInner {
+        let inner = FileWriterSharedInner {
             write_stats: WriteStats {
                 new_bytes: 0,
                 new_chunks: 0,
@@ -40,7 +40,7 @@ impl ChunkWriterShared {
             in_progress: Default::default(),
         };
 
-        ChunkWriterShared { inner: Arc::new(Mutex::new(inner)) }
+        FileWriterShared { inner: Arc::new(Mutex::new(inner)) }
     }
 
     pub fn get_stats(&self) -> WriteStats {
@@ -49,21 +49,21 @@ impl ChunkWriterShared {
     }
 }
 
-pub struct ChunkWriterThread {
+pub struct FileWriterThread {
     repo: Repo,
-    shared: ChunkWriterShared,
-    rx: two_lock_queue::Receiver<ChunkWriterMessage>,
+    shared: FileWriterShared,
+    rx: two_lock_queue::Receiver<FileWriterMessage>,
     log: Logger,
 }
 
-impl ChunkWriterThread {
+impl FileWriterThread {
     pub fn new(
         repo: Repo,
-        shared: ChunkWriterShared,
-        rx: two_lock_queue::Receiver<ChunkWriterMessage>,
+        shared: FileWriterShared,
+        rx: two_lock_queue::Receiver<FileWriterMessage>,
     ) -> Self {
 
-        ChunkWriterThread {
+        FileWriterThread {
             log: repo.log.clone(),
             repo: repo,
             shared: shared,
@@ -79,7 +79,7 @@ impl ChunkWriterThread {
 
             t.start("processing");
 
-            let ChunkWriterMessage {
+            let FileWriterMessage {
                 sg,
                 digest,
                 chunk_type,
