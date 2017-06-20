@@ -5,7 +5,6 @@ extern crate sodiumoxide;
 extern crate flate2;
 extern crate lzma;
 extern crate bzip2;
-#[cfg(test)]
 extern crate rand;
 extern crate fs2;
 extern crate serde;
@@ -22,6 +21,7 @@ extern crate slog;
 extern crate slog_perf;
 extern crate hex;
 extern crate sgdata;
+extern crate dangerous_option;
 
 use fs2::FileExt;
 
@@ -52,8 +52,8 @@ use config::Chunking;
 mod sg;
 use sg::*;
 
-mod file_writer;
-use file_writer::*;
+mod asyncio;
+use asyncio::*;
 
 mod chunk_processor;
 use chunk_processor::*;
@@ -819,7 +819,7 @@ impl Repo {
         &'a self,
         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
         process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
-        writer_tx: two_lock_queue::Sender<FileWriterMessage>,
+        aio: asyncio::AsyncIO,
         data_type: DataType,
     ) -> io::Result<Vec<u8>> {
 
@@ -836,7 +836,7 @@ impl Repo {
         let (digests_tx, digests_rx) = mpsc::channel();
 
 
-        crossbeam::scope(|scope| {
+        crossbeam::scope(move |scope| {
             let mut timer = slog_perf::TimeReporter::new(
                 "index-processor",
                 self.log.clone(),
@@ -900,7 +900,7 @@ impl Repo {
                             ),
                         ),
                         process_tx,
-                        writer_tx.clone(),
+                        aio.clone(),
                         DataType::Index,
                     )?;
 
@@ -911,12 +911,7 @@ impl Repo {
                     &index_digest,
                     DataType::Index,
                 );
-                writer_tx
-                    .send(FileWriterMessage {
-                        sg: SGData::from_single(digest),
-                        path: path,
-                    })
-                    .expect("writer_tx.send(...)");
+                aio.write_checked_idempotent(path, SGData::from_single(digest));
                 Ok(index_digest)
 
             } else {
@@ -964,43 +959,6 @@ impl Repo {
         compression: ArcCompression,
     ) -> RecordingChunkAccessor<'a> {
         RecordingChunkAccessor::new(self, accessed, decrypter, compression)
-    }
-
-    fn start_file_writer_thread(
-        &self,
-        rx: two_lock_queue::Receiver<FileWriterMessage>,
-    ) -> WriteStats {
-
-        let shared = FileWriterShared::new();
-
-        crossbeam::scope(|scope| {
-            // Unlike CPU-intense workload, it's hard to come up with one
-            // formula for best number of `fdatasync` threads for everyone.
-            // Each buffer is blocked on one chunk, so the longer the chunks,
-            // the less threads are needed to saturate the disk and so on. Some
-            // form of run-time scaling would be best. I picked some reasonable
-            // that also works well for me with defaults. --dpc
-            let thread_num = 4 * self.write_cpu_thread_num();
-
-            for _ in 0..thread_num {
-                // let self_clone = self.clone();
-                let rx = rx.clone();
-                let shared = shared.clone();
-                scope.spawn(move || {
-                    let thread = FileWriterThread::new(
-                        self.path.clone(),
-                        shared,
-                        rx,
-                        self.log.clone(),
-                    );
-                    thread.run();
-                });
-            }
-            drop(rx);
-        });
-
-
-        shared.get_stats()
     }
 
     fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
@@ -1298,29 +1256,32 @@ impl Repo {
         let _lock = self.lock_shared();
 
         let num_threads = num_cpus::get();
-        let (writer_tx, writer_rx) =
-            two_lock_queue::channel(4 * self.write_cpu_thread_num());
-
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
+
+        let (aio, stats) = asyncio::AsyncIO::new(
+            self.path.clone(),
+            self.log.clone(),
+            4 * self.write_cpu_thread_num(),
+        );
 
         // mpmc queue used  as spmc fan-out
         let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
 
-        let (final_digest, writer_stats) = crossbeam::scope(|scope| {
+        let final_digest = crossbeam::scope(|scope| {
 
             scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
 
             for _ in 0..num_threads {
                 let process_rx = process_rx.clone();
-                let writer_tx = writer_tx.clone();
+                let aio = aio.clone();
                 let encrypter = enc.encrypter.clone();
                 let compression = self.compression.clone();
                 scope.spawn(move || {
                     let processor = ChunkProcessor::new(
                         self.clone(),
                         process_rx,
-                        writer_tx,
+                        aio,
                         encrypter,
                         compression,
                     );
@@ -1333,23 +1294,19 @@ impl Repo {
                 self.chunk_and_write_data_thread(
                     Box::new(chunker_rx.into_iter()),
                     process_tx,
-                    writer_tx,
+                    aio,
                     DataType::Data,
                 )
             });
 
-            let writer =
-                scope.spawn(move || self.start_file_writer_thread(writer_rx));
-
             let final_digest = chunk_and_write.join();
 
-            let writer_stats = writer.join();
-            (final_digest, writer_stats)
+            final_digest
         });
 
-
         self.store_digest_as_name(&final_digest?, name)?;
-        Ok(writer_stats)
+
+        Ok(stats.get_stats())
     }
 }
 

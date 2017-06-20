@@ -35,6 +35,5 @@ slog = "2"
 slog-perf = "0.1"
 hex = "0.2"
 sgdata = { version = "*", path = "../sgdata" }
-
-[dev-dependencies]
 rand = "0.3.14"
+dangerous_option = { git = "https://github.com/dpc/dangerous_option.git" }

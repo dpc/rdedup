@@ -1,5 +1,5 @@
 use super::{DataType, Repo};
-use super::file_writer::*;
+use super::asyncio;
 use DIGEST_SIZE;
 use compression::ArcCompression;
 use encryption::ArcEncrypter;
@@ -22,11 +22,12 @@ pub type ChunkProcessorMessage = (
 pub struct ChunkProcessor {
     repo: Repo,
     rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-    tx: two_lock_queue::Sender<FileWriterMessage>,
+    aio: asyncio::AsyncIO,
     log: Logger,
     encrypter: ArcEncrypter,
     compressor: ArcCompression,
 }
+
 // Calculate digest
 pub fn calculate_digest(sg: &SGData) -> Vec<u8> {
     let mut sha256 = Sha256::default();
@@ -45,7 +46,7 @@ impl ChunkProcessor {
     pub fn new(
         repo: Repo,
         rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
-        tx: two_lock_queue::Sender<FileWriterMessage>,
+        aio: asyncio::AsyncIO,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
     ) -> Self {
@@ -53,7 +54,7 @@ impl ChunkProcessor {
             log: repo.log.clone(),
             repo: repo,
             rx: rx,
-            tx: tx,
+            aio: aio,
             encrypter: encrypter,
             compressor: compressor,
         }
@@ -88,15 +89,13 @@ impl ChunkProcessor {
                     };
 
                     timer.start("tx-writer");
-                    self.tx
-                        .send(FileWriterMessage {
-                            sg: sg,
-                            path: self.repo.chunk_rel_path_by_digest(
-                                &digest,
-                                DataType::Data,
-                            ),
-                        })
-                        .expect("chunk_processor: tx.send");
+                    self.aio.write_checked_idempotent(
+                        self.repo.chunk_rel_path_by_digest(
+                            &digest,
+                            DataType::Data,
+                        ),
+                        sg,
+                    );
                 }
                 timer.start("tx-digest");
                 digests_tx.send((i, digest)).expect(
