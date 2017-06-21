@@ -996,23 +996,22 @@ impl Repo {
     }
 
     fn store_digest_as_name(&self, digest: &[u8], name: &str) -> Result<()> {
-        let name_dir = self.name_dir_path();
-        fs::create_dir_all(&name_dir)?;
-        let name_path = self.name_path(name);
+        let path : PathBuf = config::NAME_SUBDIR.into();
+        let path = path.join(name);
 
-        if name_path.exists() {
+        if self.aio.read(path.clone()).wait().is_ok() {
             return Err(Error::new(
                 io::ErrorKind::AlreadyExists,
                 "name already exists",
             ));
         }
 
-        let mut file = fs::File::create(&name_path)?;
+        let mut data = vec![];
+        data.write_all(digest)?;
 
-        file.write_all(digest)?;
+        self.aio.write(path, SGData::from_single(data)).wait()?;
         Ok(())
     }
-
 
     fn reachable_recursively_insert(
         &self,
