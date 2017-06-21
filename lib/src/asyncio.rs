@@ -38,10 +38,7 @@ impl AsyncIO {
         log: Logger,
         thread_num: usize,
     ) -> Self {
-        let (tx, rx) =
-            //TODO: two_lock_queue::channel(4 * self.write_cpu_thread_num());
-            two_lock_queue::channel(4);
-
+        let (tx, rx) = two_lock_queue::channel(thread_num);
 
         let shared = AsyncIOThreadShared::new();
 
