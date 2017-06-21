@@ -1,7 +1,7 @@
 //! Config: options de/serialized to files
 //! from `settings`
 
-use {serde_yaml, PassphraseFn};
+use {serde_yaml, PassphraseFn, SGData};
 use compression;
 
 use encryption;
@@ -9,6 +9,8 @@ use encryption::{ArcDecrypter, ArcEncrypter};
 
 use hex::ToHex;
 use settings;
+
+use asyncio;
 
 use sodiumoxide::crypto::{pwhash, secretbox};
 use std::{io, fs};
@@ -47,10 +49,6 @@ pub fn version_file_path(path: &Path) -> PathBuf {
     path.join(VERSION_FILE)
 }
 
-pub fn config_yml_file_path(path: &Path) -> PathBuf {
-    path.join(CONFIG_YML_FILE)
-}
-
 pub fn write_seckey_file(
     path: &Path,
     encrypted_seckey: &[u8],
@@ -66,20 +64,13 @@ pub fn write_seckey_file(
     Ok(())
 }
 
-pub fn write_version_file(repo_path: &Path, version: u32) -> super::Result<()> {
-    let path = version_file_path(repo_path);
-    let path_tmp = path.with_extension("tmp");
-    let mut file = fs::File::create(&path_tmp)?;
+pub fn write_version_file(aio: &asyncio::AsyncIO, version: u32) -> super::Result<()> {
+    let mut v = vec![];
     {
-        let mut writer = &mut file as &mut Write;
-        write!(writer, "{}", version)?;
+        write!(&mut v, "{}", version)?;
     }
 
-    file.flush()?;
-    file.sync_data()?;
-
-    fs::rename(path_tmp, &path)?;
-
+    aio.write(VERSION_FILE.into(), SGData::from_single(v)).wait()?;
     Ok(())
 }
 
@@ -250,25 +241,14 @@ impl Repo {
     }
 
 
-    pub fn write(&self, repo_path: &Path) -> super::Result<()> {
+    pub fn write(&self, aio: &asyncio::AsyncIO) -> super::Result<()> {
 
         let config_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");
 
-        let config_path = config_yml_file_path(repo_path);
-        let config_path_tmp = config_path.with_extension("tmp");
-        let mut config_file = fs::File::create(&config_path_tmp)?;
+        aio.write(CONFIG_YML_FILE.into(), SGData::from_single(config_str.into_bytes())).wait()?;
 
-
-        (&mut config_file as &mut Write).write_all(
-            config_str.as_bytes(),
-        )?;
-        config_file.flush()?;
-        config_file.sync_data()?;
-
-        fs::rename(config_path_tmp, &config_path)?;
-
-        write_version_file(repo_path, REPO_VERSION_CURRENT)?;
+        write_version_file(aio, REPO_VERSION_CURRENT)?;
 
         Ok(())
     }

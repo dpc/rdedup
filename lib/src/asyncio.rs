@@ -37,14 +37,13 @@ impl AsyncIO {
         root_path: PathBuf,
         log: Logger,
         thread_num: usize,
-    ) -> (Self, AsyncIOThreadShared) {
+    ) -> Self {
         let (tx, rx) =
             //TODO: two_lock_queue::channel(4 * self.write_cpu_thread_num());
             two_lock_queue::channel(4);
 
 
         let shared = AsyncIOThreadShared::new();
-        let shared_copy = shared.clone();
 
         let join = (0..thread_num)
             .map(|_| {
@@ -66,15 +65,17 @@ impl AsyncIO {
         let shared = AsyncIOShared {
             join: join,
             log: log.clone(),
+            stats: shared.clone(),
         };
 
-        (
             AsyncIO {
                 shared: Arc::new(shared),
                 tx: AutoOption::new(tx),
-            },
-            shared_copy,
-        )
+            }
+    }
+
+    pub fn stats(&self) -> AsyncIOThreadShared {
+        self.shared.stats.clone()
     }
 
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
@@ -133,6 +134,7 @@ impl Drop for AsyncIO {
 pub struct AsyncIOShared {
     join: Vec<thread::JoinHandle<()>>,
     log: slog::Logger,
+    stats: AsyncIOThreadShared,
 }
 
 impl Drop for AsyncIOShared {
@@ -153,7 +155,7 @@ pub struct AsyncIOResult<T> {
 
 impl<T> AsyncIOResult<T> {
     /// Block until result arrives
-    fn wait(self) -> io::Result<T> {
+    pub fn wait(self) -> io::Result<T> {
         self.rx.recv().expect("No `AsyncIO` thread response")
     }
 }
