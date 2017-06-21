@@ -667,7 +667,6 @@ impl Repo {
         let aio = asyncio::AsyncIO::new(
             repo_path.to_owned(),
             log.clone(),
-            1,
         );
 
         Repo::ensure_repo_empty_or_new(repo_path)?;
@@ -755,7 +754,6 @@ impl Repo {
         let aio = asyncio::AsyncIO::new(
             repo_path.to_owned(),
             log.clone(),
-            4 * num_cpus::get()
         );
 
         if !repo_path.exists() {
@@ -1282,7 +1280,6 @@ impl Repo {
         let aio = asyncio::AsyncIO::new(
             self.path.clone(),
             self.log.clone(),
-            4 * self.write_cpu_thread_num(),
         );
 
         let stats = aio.stats();

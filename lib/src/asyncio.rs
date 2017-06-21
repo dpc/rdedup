@@ -2,6 +2,7 @@
 
 use INGRESS_BUFFER_SIZE;
 use rand;
+use num_cpus;
 use rand::Rng;
 use sgdata::SGData;
 use slog;
@@ -36,8 +37,8 @@ impl AsyncIO {
     pub fn new(
         root_path: PathBuf,
         log: Logger,
-        thread_num: usize,
     ) -> Self {
+        let thread_num = 4 * num_cpus::get();
         let (tx, rx) = two_lock_queue::channel(thread_num);
 
         let shared = AsyncIOThreadShared::new();
