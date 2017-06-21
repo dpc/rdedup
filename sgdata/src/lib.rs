@@ -94,19 +94,21 @@ impl SGData {
             }
         }
     }
-}
 
-// impl Deref for SGData {
-// type Target = Vec<ArcRef<Vec<u8>, [u8]>>;
-//
-// fn deref(&self) -> &Self::Target {
-// &self.0
-// }
-// }
-//
-// impl DerefMut for SGData {
-// fn deref_mut(&mut self) -> &mut Self::Target {
-// &mut self.0
-// }
-// }
-//
+    pub fn to_linear_vec(mut self) -> Vec<u8> {
+        match self.0.len() {
+            0 => vec![],
+            1 => {
+                let e = self.0.pop().unwrap();
+                Arc::try_unwrap(e.into_inner()).unwrap_or_else(|a| a.as_ref().clone())
+            },
+            _ => {
+                let mut v = Vec::with_capacity(self.len());
+                for sg_part in &self.0 {
+                    v.write_all(sg_part).unwrap();
+                }
+                v
+            }
+        }
+    }
+}

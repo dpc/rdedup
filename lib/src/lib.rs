@@ -582,6 +582,8 @@ pub struct Repo {
 
     /// Logger
     log: slog::Logger,
+
+    aio: asyncio::AsyncIO,
 }
 
 /// A reading handle
@@ -662,10 +664,16 @@ impl Repo {
             || Logger::root(slog::Discard, o!()),
         );
 
+        let aio = asyncio::AsyncIO::new(
+            repo_path.to_owned(),
+            log.clone(),
+            1,
+        );
+
         Repo::ensure_repo_empty_or_new(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
-        config.write(repo_path)?;
+        config.write(&aio)?;
 
         let compression = config.compression.to_engine();
 
@@ -674,6 +682,7 @@ impl Repo {
             config: config,
             compression: compression,
             log: log,
+            aio: aio,
         })
     }
 
@@ -741,6 +750,14 @@ impl Repo {
         let log = log.into().unwrap_or_else(
             || Logger::root(slog::Discard, o!()),
         );
+
+
+        let aio = asyncio::AsyncIO::new(
+            repo_path.to_owned(),
+            log.clone(),
+            4 * num_cpus::get()
+        );
+
         if !repo_path.exists() {
             return Err(Error::new(
                 io::ErrorKind::NotFound,
@@ -757,8 +774,10 @@ impl Repo {
             ));
         }
 
-        let file = fs::File::open(&config::config_yml_file_path(repo_path))?;
-        let config: config::Repo = serde_yaml::from_reader(file).map_err(|e| {
+        let config_data = aio.read(config::CONFIG_YML_FILE.into()).wait()?;
+        let config_data = config_data.to_linear_vec();
+
+        let config: config::Repo = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("couldn't parse yaml: {}", e.to_string()),
@@ -771,6 +790,7 @@ impl Repo {
             config: config,
             compression: compression,
             log: log,
+            aio: aio,
         })
     }
 
@@ -790,7 +810,7 @@ impl Repo {
             ));
         } else {
             self.config.encryption.change_passphrase(old_p, new_p)?;
-            self.config.write(&self.path)?;
+            self.config.write(&self.aio)?;
             Ok(())
         }
     }
@@ -1259,11 +1279,13 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let (aio, stats) = asyncio::AsyncIO::new(
+        let aio = asyncio::AsyncIO::new(
             self.path.clone(),
             self.log.clone(),
             4 * self.write_cpu_thread_num(),
         );
+
+        let stats = aio.stats();
 
         // mpmc queue used  as spmc fan-out
         let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
@@ -1304,8 +1326,8 @@ impl Repo {
             final_digest
         });
 
-        self.store_digest_as_name(&final_digest?, name)?;
 
+        self.store_digest_as_name(&final_digest?, name)?;
         Ok(stats.get_stats())
     }
 }
