@@ -33,7 +33,7 @@ use slog_perf::TimeReporter;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
-use std::{fs, io};
+use std::{io, fs};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error as StdErrorError;
@@ -389,19 +389,16 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
-        let path = self.repo.chunk_path_by_digest(digest, chunk_type);
-        let mut file = fs::File::open(path)?;
-        let mut data = Vec::with_capacity(ACCESSOR_BUFFER_SIZE);
+        let path = self.repo.chunk_rel_path_by_digest(digest, chunk_type);
+        let data = self.repo.aio.read(path).wait()?;
 
         let data = if data_type.should_encrypt() {
-            file.read_to_end(&mut data)?;
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
-                .decrypt(SGData::from_single(data), digest)?
+                .decrypt(data, digest)?
         } else {
-            file.read_to_end(&mut data)?;
-            SGData::from_single(data)
+            data
         };
 
         let data = if data_type.should_compress() {
