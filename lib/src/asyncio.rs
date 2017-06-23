@@ -214,7 +214,7 @@ impl AsyncIOThread {
         let t = TimeReporter::new("chunk-writer", log.clone());
         AsyncIOThread {
             root_path: root_path,
-            log: log,
+            log: log.new(o!("module" => "asyncio")),
             shared: shared,
             rx: rx,
             time_reporter: t,
@@ -248,6 +248,8 @@ impl AsyncIOThread {
         idempotent: bool,
         tx: Option<mpsc::Sender<io::Result<()>>>,
     ) {
+
+        trace!(self.log, "write"; "path" => %path.display());
 
         let path = self.root_path.join(path);
 
@@ -328,6 +330,8 @@ impl AsyncIOThread {
 
 
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {
+
+        trace!(self.log, "read"; "path" => %path.display());
 
         let path = self.root_path.join(path);
 

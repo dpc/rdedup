@@ -72,14 +72,17 @@ pub mod settings;
 mod util;
 use util::*;
 
+mod misc;
+use misc::*;
+
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
 
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 // TODO: Parametrize over repo chunk size
-const ACCESSOR_BUFFER_SIZE: usize = 128 * 1024;
 const DIGEST_SIZE: usize = 32;
 
+/// Type of user provided closure that will ask user for a passphrase is needed
 type PassphraseFn<'a> = &'a Fn() -> io::Result<String>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -95,61 +98,6 @@ impl DataType {
 
     fn should_encrypt(&self) -> bool {
         *self == DataType::Data
-    }
-}
-
-/// Convenient function to calculate sha256 for one continuous data block
-fn quick_sha256(data: &[u8]) -> Vec<u8> {
-
-    let mut sha256 = Sha256::default();
-    sha256.input(data);
-    let mut vec_result = vec![0u8; DIGEST_SIZE];
-    vec_result.copy_from_slice(&sha256.result());
-
-    vec_result
-}
-
-/// Derive secret key from passphrase and salt
-fn derive_key(passphrase: &str, salt: &pwhash::Salt) -> Result<secretbox::Key> {
-    let mut derived_key = secretbox::Key([0; secretbox::KEYBYTES]);
-    {
-        let secretbox::Key(ref mut kb) = derived_key;
-        pwhash::derive_key(
-            kb,
-            passphrase.as_bytes(),
-            salt,
-            pwhash::OPSLIMIT_SENSITIVE,
-            pwhash::MEMLIMIT_SENSITIVE,
-        ).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "can't derive encryption key from passphrase",
-            )
-        })?;
-    }
-
-    Ok(derived_key)
-}
-
-/// Writer that counts how many bytes were written to it
-struct CounterWriter {
-    count: u64,
-}
-
-impl CounterWriter {
-    fn new() -> Self {
-        CounterWriter { count: 0 }
-    }
-}
-
-impl Write for CounterWriter {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize> {
-        self.count += bytes.len() as u64;
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
     }
 }
 
