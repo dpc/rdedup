@@ -9,13 +9,15 @@ use slog;
 use slog::Logger;
 use slog_perf::TimeReporter;
 use std::{fs, io, thread};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::{Write, Read};
 use std::path::PathBuf;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc;
 use two_lock_queue;
 use dangerous_option::DangerousOption as AutoOption;
+
+use std;
 
 /// Message sent to a worker pool
 enum Message {
@@ -168,7 +170,7 @@ pub struct WriteStats {
 
 struct AsyncIOSharedInner {
     write_stats: WriteStats,
-    in_progress: HashSet<PathBuf>,
+    in_progress: HashMap<PathBuf, SGData>,
 }
 
 #[derive(Clone)]
@@ -271,13 +273,21 @@ impl AsyncIOThread {
 
         // check `in_progress` and add atomically
         // if not already there
-        {
+        loop {
             let mut sh = self.shared.inner.lock().unwrap();
 
-            if idempotent && sh.in_progress.contains(&path) {
-                return Ok(());
+            if  sh.in_progress.contains_key(&path) {
+                if idempotent {
+                    return Ok(());
+                } else {
+                    // a bit lame, but will do, since this should not really
+                    // happen in practice anyway
+                    drop(sh);
+                    thread::sleep(std::time::Duration::from_millis(1000));
+                }
             } else {
-                sh.in_progress.insert(path.clone());
+                sh.in_progress.insert(path.clone(), sg.clone());
+                break;
             }
         }
 
@@ -343,6 +353,17 @@ impl AsyncIOThread {
     fn read_inner(&mut self, path: PathBuf) -> io::Result<SGData> {
 
         self.time_reporter.start("read");
+
+        // check `in_progress` and return the that if present
+        {
+            let sh = self.shared.inner.lock().unwrap();
+
+            if  let Some(sg) = sh.in_progress.get(&path) {
+                return Ok(sg.clone());
+
+            }
+        }
+
 
         let mut file = fs::File::open(path)?;
 
