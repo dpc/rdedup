@@ -46,6 +46,9 @@ backup data.
 To fill the missing piece in my master backup plan, I've decided to write it
 myself using my beloved Rust programming language.
 
+With time the projects grown into improvements and features to support
+other use cases.
+
 ## How it works
 
 `rdedup` works very much like [zbackup][zbackup] and other deduplication software
@@ -104,7 +107,7 @@ If you have `cargo` installed:
 cargo install rdedup
 ```
 
-If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` for Rust, only better)
+If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` but for Rust)
 
 [rustup]: https://www.rustup.rs/
 
