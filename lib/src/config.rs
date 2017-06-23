@@ -2,6 +2,8 @@
 //! from `settings`
 
 use {serde_yaml, PassphraseFn, SGData};
+
+use asyncio;
 use compression;
 
 use encryption;
@@ -9,8 +11,6 @@ use encryption::{ArcDecrypter, ArcEncrypter};
 
 use hex::ToHex;
 use settings;
-
-use asyncio;
 
 use sodiumoxide::crypto::{pwhash, secretbox};
 use std::{io, fs};
@@ -64,13 +64,17 @@ pub fn write_seckey_file(
     Ok(())
 }
 
-pub fn write_version_file(aio: &asyncio::AsyncIO, version: u32) -> super::Result<()> {
+pub fn write_version_file(
+    aio: &asyncio::AsyncIO,
+    version: u32,
+) -> super::Result<()> {
     let mut v = vec![];
     {
         write!(&mut v, "{}", version)?;
     }
 
-    aio.write(VERSION_FILE.into(), SGData::from_single(v)).wait()?;
+    aio.write(VERSION_FILE.into(), SGData::from_single(v))
+        .wait()?;
     Ok(())
 }
 
@@ -243,10 +247,13 @@ impl Repo {
 
     pub fn write(&self, aio: &asyncio::AsyncIO) -> super::Result<()> {
 
-        let config_str =
-            serde_yaml::to_string(self).expect("yaml serialization failed");
+        let config_str = serde_yaml::to_string(self)
+            .expect("yaml serialization failed");
 
-        aio.write(CONFIG_YML_FILE.into(), SGData::from_single(config_str.into_bytes())).wait()?;
+        aio.write(
+            CONFIG_YML_FILE.into(),
+            SGData::from_single(config_str.into_bytes()),
+        ).wait()?;
 
         write_version_file(aio, REPO_VERSION_CURRENT)?;
 

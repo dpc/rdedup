@@ -1,13 +1,16 @@
 
 
 use INGRESS_BUFFER_SIZE;
-use rand;
+use dangerous_option::DangerousOption as AutoOption;
 use num_cpus;
+use rand;
 use rand::Rng;
 use sgdata::SGData;
 use slog;
 use slog::Logger;
 use slog_perf::TimeReporter;
+
+use std;
 use std::{fs, io, thread};
 use std::collections::HashMap;
 use std::io::{Write, Read};
@@ -15,9 +18,6 @@ use std::path::PathBuf;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc;
 use two_lock_queue;
-use dangerous_option::DangerousOption as AutoOption;
-
-use std;
 
 /// Message sent to a worker pool
 enum Message {
@@ -36,10 +36,7 @@ pub struct AsyncIO {
 }
 
 impl AsyncIO {
-    pub fn new(
-        root_path: PathBuf,
-        log: Logger,
-    ) -> Self {
+    pub fn new(root_path: PathBuf, log: Logger) -> Self {
         let thread_num = 4 * num_cpus::get();
         let (tx, rx) = two_lock_queue::channel(thread_num);
 
@@ -68,10 +65,10 @@ impl AsyncIO {
             stats: shared.clone(),
         };
 
-            AsyncIO {
-                shared: Arc::new(shared),
-                tx: AutoOption::new(tx),
-            }
+        AsyncIO {
+            shared: Arc::new(shared),
+            tx: AutoOption::new(tx),
+        }
     }
 
     pub fn stats(&self) -> AsyncIOThreadShared {
@@ -101,22 +98,22 @@ impl AsyncIO {
     /// Will panic the worker thread if fails, but does not require
     /// managing the result
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
-        self.tx.send(Message::Write(path, sg, false, None)).expect(
-            "channel send failed",
-        );
+        self.tx
+            .send(Message::Write(path, sg, false, None))
+            .expect("channel send failed");
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
-        self.tx.send(Message::Write(path, sg, true, None)).expect(
-            "channel send failed",
-        );
+        self.tx
+            .send(Message::Write(path, sg, true, None))
+            .expect("channel send failed");
     }
 
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Read(path, tx)).expect(
-            "channel send failed",
-        );
+        self.tx
+            .send(Message::Read(path, tx))
+            .expect("channel send failed");
         AsyncIOResult { rx: rx }
     }
 }
@@ -276,7 +273,7 @@ impl AsyncIOThread {
         loop {
             let mut sh = self.shared.inner.lock().unwrap();
 
-            if  sh.in_progress.contains_key(&path) {
+            if sh.in_progress.contains_key(&path) {
                 if idempotent {
                     return Ok(());
                 } else {
@@ -308,12 +305,17 @@ impl AsyncIOThread {
             .collect::<String>();
 
         let tmp_path = path.with_extension(format!("{}.tmp", ext));
-        // Workaround
-        // https://github.com/rust-lang/rust/issues/33707
-        let _ = fs::create_dir_all(path.parent().unwrap())?;
+        let mut chunk_file = match fs::File::create(&tmp_path) {
+            Ok(file) => Ok(file),
+            Err(_) => {
+                // Workaround
+                // https://github.com/rust-lang/rust/issues/33707
+                let _ = fs::create_dir_all(path.parent().unwrap())?;
 
-        fs::create_dir_all(path.parent().unwrap())?;
-        let mut chunk_file = fs::File::create(&tmp_path)?;
+                fs::create_dir_all(path.parent().unwrap())?;
+                fs::File::create(&tmp_path)
+            }
+        }?;
 
         let mut bytes_written = 0;
         for data_part in sg.as_parts() {
@@ -358,7 +360,7 @@ impl AsyncIOThread {
         {
             let sh = self.shared.inner.lock().unwrap();
 
-            if  let Some(sg) = sh.in_progress.get(&path) {
+            if let Some(sg) = sh.in_progress.get(&path) {
                 return Ok(sg.clone());
 
             }

@@ -256,12 +256,8 @@ impl<'a> ReadContext<'a> {
     ) -> Result<()> {
         trace!(self.log, "Traversing data"; "digest" => digest.to_hex());
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(
-                digest,
-                DataType::Data,
-                self.data_type,
-                writer,
-            )
+            accessor
+                .read_chunk_into(digest, DataType::Data, self.data_type, writer)
         } else {
             accessor.touch(digest)
         }
@@ -422,12 +418,8 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         writer: &mut Write,
     ) -> Result<()> {
         self.touch(digest)?;
-        self.raw.read_chunk_into(
-            digest,
-            chunk_type,
-            data_type,
-            writer,
-        )
+        self.raw
+            .read_chunk_into(digest, chunk_type, data_type, writer)
     }
 }
 
@@ -481,18 +473,13 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw.read_chunk_into(
-            digest,
-            chunk_type,
-            data_type,
-            writer,
-        );
+        let res = self.raw
+            .read_chunk_into(digest, chunk_type, data_type, writer);
 
         if res.is_err() {
-            self.errors.borrow_mut().push((
-                digest.to_owned(),
-                res.err().unwrap(),
-            ));
+            self.errors
+                .borrow_mut()
+                .push((digest.to_owned(), res.err().unwrap()));
         }
         Ok(())
     }
@@ -605,14 +592,10 @@ impl Repo {
     where
         L: Into<Option<Logger>>,
     {
-        let log = log.into().unwrap_or_else(
-            || Logger::root(slog::Discard, o!()),
-        );
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let aio = asyncio::AsyncIO::new(
-            repo_path.to_owned(),
-            log.clone(),
-        );
+        let aio = asyncio::AsyncIO::new(repo_path.to_owned(), log.clone());
 
         Repo::ensure_repo_empty_or_new(repo_path)?;
         Repo::init_common_dirs(repo_path)?;
@@ -644,7 +627,7 @@ impl Repo {
                 io::ErrorKind::InvalidData,
                 format!(
                     "can't parse version file; \
-                                        unsupported repo format version: {}",
+                     unsupported repo format version: {}",
                     version
                 ),
             )
@@ -656,7 +639,7 @@ impl Repo {
                 io::ErrorKind::InvalidData,
                 format!(
                     "repo version {} higher than \
-                                               supported {}; update?",
+                     supported {}; update?",
                     version,
                     config::REPO_VERSION_CURRENT
                 ),
@@ -669,8 +652,8 @@ impl Repo {
                 io::ErrorKind::InvalidData,
                 format!(
                     "repo version {} lower than \
-                                               lowest supported {}; \
-                                               restore using older version?",
+                     lowest supported {}; \
+                     restore using older version?",
                     version,
                     config::REPO_VERSION_LOWEST
                 ),
@@ -691,15 +674,11 @@ impl Repo {
     where
         L: Into<Option<Logger>>,
     {
-        let log = log.into().unwrap_or_else(
-            || Logger::root(slog::Discard, o!()),
-        );
+        let log = log.into()
+            .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
 
-        let aio = asyncio::AsyncIO::new(
-            repo_path.to_owned(),
-            log.clone(),
-        );
+        let aio = asyncio::AsyncIO::new(repo_path.to_owned(), log.clone());
 
         if !repo_path.exists() {
             return Err(Error::new(
@@ -720,7 +699,9 @@ impl Repo {
         let config_data = aio.read(config::CONFIG_YML_FILE.into()).wait()?;
         let config_data = config_data.to_linear_vec();
 
-        let config: config::Repo = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
+        let config: config::Repo = serde_yaml::from_reader(
+            config_data.as_slice(),
+        ).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("couldn't parse yaml: {}", e.to_string()),
@@ -827,10 +808,8 @@ impl Repo {
                     // TODO: Change to `enumerate_u64`
                     let mut data = chunker.enumerate();
 
-                    while let Some(i_sg) = timer.start_with(
-                        "rx-and-chunking",
-                        || data.next(),
-                    )
+                    while let Some(i_sg) = timer
+                        .start_with("rx-and-chunking", || data.next())
                     {
                         timer.start("tx");
                         let (i, sg) = i_sg;
@@ -855,17 +834,14 @@ impl Repo {
                 timer.start_with("digest-rx", || digests_rx.next())
             {
                 let mut two_first = vec![first_digest, second_digest];
-                let digest =
-                    self.chunk_and_write_data_thread(
-                        Box::new(
-                            two_first.drain(..).chain(digests_rx).map(
-                                |i_sg| i_sg,
-                            ),
-                        ),
-                        process_tx,
-                        aio.clone(),
-                        DataType::Index,
-                    )?;
+                let digest = self.chunk_and_write_data_thread(
+                    Box::new(
+                        two_first.drain(..).chain(digests_rx).map(|i_sg| i_sg),
+                    ),
+                    process_tx,
+                    aio.clone(),
+                    DataType::Index,
+                )?;
 
                 let index_digest = quick_sha256(&digest);
 
@@ -941,7 +917,7 @@ impl Repo {
     }
 
     fn store_digest_as_name(&self, digest: &[u8], name: &str) -> Result<()> {
-        let path : PathBuf = config::NAME_SUBDIR.into();
+        let path: PathBuf = config::NAME_SUBDIR.into();
         let path = path.join(name);
 
         if self.aio.read(path.clone()).wait().is_ok() {
@@ -1056,9 +1032,8 @@ impl Repo {
         digest: &[u8],
         chunk_type: DataType,
     ) -> PathBuf {
-        self.path.join(
-            self.chunk_rel_path_by_digest(digest, chunk_type),
-        )
+        self.path
+            .join(self.chunk_rel_path_by_digest(digest, chunk_type))
     }
 
     fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
@@ -1221,10 +1196,7 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let aio = asyncio::AsyncIO::new(
-            self.path.clone(),
-            self.log.clone(),
-        );
+        let aio = asyncio::AsyncIO::new(self.path.clone(), self.log.clone());
 
         let stats = aio.stats();
 

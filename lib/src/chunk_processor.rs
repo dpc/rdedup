@@ -72,8 +72,8 @@ impl ChunkProcessor {
                 let ((i, sg), digests_tx, data_type) = input;
 
                 let digest = calculate_digest(&sg);
-                let chunk_path =
-                    self.repo.chunk_path_by_digest(&digest, DataType::Data);
+                let chunk_path = self.repo
+                    .chunk_path_by_digest(&digest, DataType::Data);
                 if !chunk_path.exists() {
                     let sg = if data_type.should_compress() {
                         timer.start("compress");
@@ -90,17 +90,15 @@ impl ChunkProcessor {
 
                     timer.start("tx-writer");
                     self.aio.write_checked_idempotent(
-                        self.repo.chunk_rel_path_by_digest(
-                            &digest,
-                            DataType::Data,
-                        ),
+                        self.repo
+                            .chunk_rel_path_by_digest(&digest, DataType::Data),
                         sg,
                     );
                 }
                 timer.start("tx-digest");
-                digests_tx.send((i, digest)).expect(
-                    "chunk_processor: digests_tx.send",
-                )
+                digests_tx
+                    .send((i, digest))
+                    .expect("chunk_processor: digests_tx.send")
             } else {
                 return;
             }

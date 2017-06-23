@@ -171,9 +171,8 @@ where
             {
                 if self.cur_edge_i < edges.len() {
                     let edge = edges[self.cur_edge_i];
-                    let aref = ArcRef::new(buf.clone()).map(|a| {
-                        &a[self.cur_buf_i..edge]
-                    });
+                    let aref = ArcRef::new(buf.clone())
+                        .map(|a| &a[self.cur_buf_i..edge]);
                     self.cur_sgbuf.as_vec_mut().push(aref);
                     self.cur_edge_i += 1;
                     self.cur_buf_i = edge;
@@ -183,9 +182,8 @@ where
                     );
                 } else {
                     if self.cur_buf_i != buf.len() {
-                        let aref = ArcRef::new(buf.clone()).map(|a| {
-                            &a[self.cur_buf_i..]
-                        });
+                        let aref = ArcRef::new(buf.clone())
+                            .map(|a| &a[self.cur_buf_i..]);
                         self.cur_sgbuf.as_vec_mut().push(aref);
                     }
                     self.cur_buf_i = 0;

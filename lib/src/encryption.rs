@@ -4,12 +4,12 @@ use {box_, pwhash, secretbox, as_base64, from_base64};
 use PassphraseFn;
 
 use hex::ToHex;
+
+use misc;
 use sgdata::SGData;
 
 use std::io;
 use std::sync::Arc;
-
-use misc;
 
 pub type ArcEncrypter = Arc<Encrypter + Send + Sync>;
 pub type ArcDecrypter = Arc<Decrypter + Send + Sync>;

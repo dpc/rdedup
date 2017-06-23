@@ -98,8 +98,7 @@ impl Compression for Xz2 {
                     index += bytes;
 
                     index < todo
-                }
-                {}
+                } {}
             }
             compressor.finish().unwrap();
         }
@@ -122,8 +121,7 @@ impl Compression for Xz2 {
                     index += bytes;
 
                     index < todo
-                }
-                {}
+                } {}
             }
             decompressor.finish().unwrap();
         }
