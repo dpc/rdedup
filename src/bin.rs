@@ -48,42 +48,6 @@ macro_rules! printerr {
 }
 
 
-
-// #[derive(Copy, Clone)]
-// enum Command {
-// Help,
-// Store,
-// Load,
-// Init,
-// DU,
-// GC,
-// Remove,
-// ChangePassphrase,
-// List,
-// Verify,
-// }
-//
-// impl FromStr for Command {
-// type Err = ();
-// fn from_str(src: &str) -> Result<Command, ()> {
-// match src {
-// "help" => Ok(Command::Help),
-// "store" => Ok(Command::Store),
-// "load" => Ok(Command::Load),
-// "init" => Ok(Command::Init),
-// "rm" | "delete" | "del" => Ok(Command::Remove),
-// "ls" | "list" => Ok(Command::List),
-// "du" => Ok(Command::DU),
-// "gc" => Ok(Command::GC),
-// "chpasswd" |
-// "chpassphrase" |
-// "changepassphrase" => Ok(Command::ChangePassphrase),
-// "verify" => Ok(Command::Verify),
-// _ => Err(()),
-// }
-// }
-// }
-//
 #[derive(Clone)]
 struct Options {
     dir: PathBuf,
