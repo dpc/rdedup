@@ -11,11 +11,11 @@ use sha2::{Sha256, Digest};
 use std::{io, cmp};
 
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
 use std::path;
+use std::path::PathBuf;
 
 const PASS: &'static str = "FOO";
 const DIGEST_SIZE: usize = 32;
@@ -33,12 +33,14 @@ fn rand_tmp_dir() -> path::PathBuf {
 fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
     let mut digests = HashSet::new();
     let index_chunks = StoredChunks::new(
-        &repo.index_dir_path(),
+        &repo.aio,
+        PathBuf::from(super::config::INDEX_SUBDIR),
         DIGEST_SIZE,
         repo.log.clone(),
     )?;
     let data_chunks = StoredChunks::new(
-        &repo.chunk_dir_path(),
+        &repo.aio,
+        PathBuf::from(super::config::DATA_SUBDIR),
         DIGEST_SIZE,
         repo.log.clone(),
     )?;
@@ -466,37 +468,5 @@ fn test_custom_nesting() {
             assert_eq!(wstats.new_chunks, gstats.chunks);
             wipe(&repo);
         }
-    }
-}
-
-#[test]
-fn test_ensure_repo_empty_or_new() {
-    let mut t = env::temp_dir();
-    t.push("repo-dir-tests");
-    let ptest = &t;
-
-    if let Err(e) = fs::remove_dir_all(ptest) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("error encountered before cleanup, {}", e);
-        }
-    }
-
-    // Test a dir that does not exist
-    lib::Repo::ensure_repo_empty_or_new(ptest).unwrap();
-
-    // Test an empty directory is valid
-    fs::create_dir(ptest).unwrap();
-    lib::Repo::ensure_repo_empty_or_new(ptest).unwrap();
-
-    // Test a non empty directory is invalid
-    let mut t2 = t.clone();
-    t2.push("config.yml");
-    fs::File::create(t2).unwrap();
-    if let Err(e) = lib::Repo::ensure_repo_empty_or_new(ptest) {
-        if e.kind() != io::ErrorKind::AlreadyExists {
-            panic!("expected already exists error, got {}", e);
-        }
-    } else {
-        panic!("expected already exists error, got 'Ok'");
     }
 }

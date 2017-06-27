@@ -34,10 +34,6 @@ pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
 }
 
-pub fn version_file_path(path: &Path) -> PathBuf {
-    path.join(VERSION_FILE)
-}
-
 
 pub fn write_version_file(
     aio: &asyncio::AsyncIO,

@@ -11,13 +11,14 @@ use slog::Logger;
 use slog_perf::TimeReporter;
 
 use std;
-use std::{fs, io, thread};
+use std::{fs, io, thread, mem};
 use std::collections::HashMap;
 use std::io::{Write, Read};
 use std::path::PathBuf;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc;
 use two_lock_queue;
+use walkdir::WalkDir;
 
 /// Message sent to a worker pool
 enum Message {
@@ -26,6 +27,8 @@ enum Message {
     Write(PathBuf, SGData, bool, Option<mpsc::Sender<io::Result<()>>>),
     #[allow(unused)]
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
+    List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
+    ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
 }
 
 /// A handle to a async-io worker pool
@@ -73,6 +76,36 @@ impl AsyncIO {
 
     pub fn stats(&self) -> AsyncIOThreadShared {
         self.shared.stats.clone()
+    }
+
+    pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::List(path, tx))
+            .expect("channel send failed");
+        AsyncIOResult { rx: rx }
+    }
+
+    pub fn list_recursively(
+        &self,
+        path: PathBuf,
+    ) -> Box<Iterator<Item = io::Result<PathBuf>>> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::ListRecursively(path, tx))
+            .expect("channel send failed");
+
+        let iter = rx.into_iter().flat_map(|batch| match batch {
+            Ok(batch) => {
+                Box::new(batch.into_iter().map(Ok)) as
+                    Box<Iterator<Item = io::Result<PathBuf>>>
+            }
+            Err(e) => {
+                Box::new(Some(Err(e)).into_iter()) as
+                    Box<Iterator<Item = io::Result<PathBuf>>>
+            }
+        });
+        Box::new(iter)
     }
 
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
@@ -235,6 +268,10 @@ impl AsyncIOThread {
                         self.write(path, sg, idempotent, tx)
                     }
                     Message::Read(path, tx) => self.read(path, tx),
+                    Message::List(path, tx) => self.list(path, tx),
+                    Message::ListRecursively(path, tx) => {
+                        self.list_recursively(path, tx)
+                    }
                 }
             } else {
                 break;
@@ -382,6 +419,81 @@ impl AsyncIOThread {
             }
             buf.truncate(len);
             bufs.push(buf);
+        }
+    }
+
+    fn list(
+        &mut self,
+        path: PathBuf,
+        tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
+    ) {
+
+        trace!(self.log, "list"; "path" => %path.display());
+
+        let path = self.root_path.join(path);
+
+        let res = self.list_inner(path);
+        self.time_reporter.start("list send response");
+        tx.send(res).expect("send failed")
+    }
+
+    fn list_inner(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {
+
+        self.time_reporter.start("list");
+
+        let mut v = vec![];
+
+        let dir = fs::read_dir(path);
+
+        match dir {
+            Ok(dir) => {
+                for entry in dir {
+                    let entry = entry?;
+                    v.push(entry.path());
+                }
+                Ok(v)
+            }
+            Err(ref e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
+            Err(e) => Err(e),
+        }
+    }
+
+
+
+    fn list_recursively(
+        &mut self,
+        path: PathBuf,
+        tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
+    ) {
+
+        trace!(self.log, "list"; "path" => %path.display());
+        self.time_reporter.start("list");
+
+        let path = self.root_path.join(path);
+
+        if !path.exists() {
+            return;
+        }
+
+        let mut v = vec![];
+
+        for path in WalkDir::new(path) {
+            match path {
+                Ok(path) => {
+                    if !path.file_type().is_file() {
+                        continue;
+                    }
+                    v.push(path.path().into());
+                    if v.len() > 100 {
+                        tx.send(Ok(mem::replace(&mut v, vec![])))
+                            .expect("send failed")
+                    }
+                }
+                Err(e) => tx.send(Err(e.into())).expect("send failed"),
+            }
+        }
+        if v.len() > 0 {
+            tx.send(Ok(v)).expect("send failed")
         }
     }
 }

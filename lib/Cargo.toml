@@ -37,3 +37,4 @@ hex = "0.2"
 sgdata = { version = "*", path = "../sgdata" }
 rand = "0.3.14"
 dangerous_option = { git = "https://github.com/dpc/dangerous_option.git" }
+walkdir = "*"
