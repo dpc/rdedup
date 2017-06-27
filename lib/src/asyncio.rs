@@ -83,6 +83,7 @@ impl AsyncIO {
         AsyncIOResult { rx: rx }
     }
 
+    #[allow(dead_code)]
     pub fn write_idempotent(
         &self,
         path: PathBuf,
@@ -97,6 +98,7 @@ impl AsyncIO {
 
     /// Will panic the worker thread if fails, but does not require
     /// managing the result
+    #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
         self.tx
             .send(Message::Write(path, sg, false, None))

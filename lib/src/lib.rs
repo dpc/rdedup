@@ -46,7 +46,7 @@ use std::sync::{mpsc, Arc};
 mod iterators;
 use iterators::StoredChunks;
 
-pub mod config;
+mod config;
 use config::Chunking;
 
 mod sg;
