@@ -25,13 +25,17 @@ enum Message {
     // TODO: break into a struct
     // "bool trap"
     Write(PathBuf, SGData, bool, Option<mpsc::Sender<io::Result<()>>>),
-    #[allow(unused)]
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
 }
 
 /// A handle to a async-io worker pool
+///
+/// This object abstracts away file system asynchronous operations. In the
+/// future, it will be supplied/parametrized by an underlying logic,
+/// implementing
+/// different backends (filesystem, protocols to remote locations etc).
 #[derive(Clone)]
 pub struct AsyncIO {
     shared: Arc<AsyncIOShared>,
