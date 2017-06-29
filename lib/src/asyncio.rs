@@ -20,11 +20,16 @@ use std::sync::mpsc;
 use two_lock_queue;
 use walkdir::WalkDir;
 
+struct WriteArgs {
+    path: PathBuf,
+    data: SGData,
+    idempotent: bool,
+    complete_tx: Option<mpsc::Sender<io::Result<()>>>,
+}
+
 /// Message sent to a worker pool
 enum Message {
-    // TODO: break into a struct
-    // "bool trap"
-    Write(PathBuf, SGData, bool, Option<mpsc::Sender<io::Result<()>>>),
+    Write(WriteArgs),
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
@@ -115,7 +120,12 @@ impl AsyncIO {
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::Write(path, sg, false, Some(tx)))
+            .send(Message::Write(WriteArgs {
+                path: path,
+                data: sg,
+                idempotent: false,
+                complete_tx: Some(tx),
+            }))
             .expect("channel send failed");
         AsyncIOResult { rx: rx }
     }
@@ -128,7 +138,12 @@ impl AsyncIO {
     ) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::Write(path, sg, true, Some(tx)))
+            .send(Message::Write(WriteArgs {
+                path: path,
+                data: sg,
+                idempotent: true,
+                complete_tx: Some(tx),
+            }))
             .expect("channel send failed");
         AsyncIOResult { rx: rx }
     }
@@ -138,13 +153,23 @@ impl AsyncIO {
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
         self.tx
-            .send(Message::Write(path, sg, false, None))
+            .send(Message::Write(WriteArgs {
+                path: path,
+                data: sg,
+                idempotent: false,
+                complete_tx: None,
+            }))
             .expect("channel send failed");
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
         self.tx
-            .send(Message::Write(path, sg, true, None))
+            .send(Message::Write(WriteArgs {
+                path: path,
+                data: sg,
+                idempotent: true,
+                complete_tx: None,
+            }))
             .expect("channel send failed");
     }
 
@@ -184,6 +209,10 @@ impl Drop for AsyncIOShared {
 }
 
 /// A result of async io operation
+///
+/// It behaves a bit like a future/promise. It is happening
+/// in the background, and only calling `wait` will make sure
+/// the operations completed and return result.
 #[must_use]
 pub struct AsyncIOResult<T> {
     rx: mpsc::Receiver<io::Result<T>>,
@@ -268,9 +297,12 @@ impl AsyncIOThread {
             if let Ok(msg) = self.rx.recv() {
 
                 match msg {
-                    Message::Write(path, sg, idempotent, tx) => {
-                        self.write(path, sg, idempotent, tx)
-                    }
+                    Message::Write(WriteArgs {
+                        path,
+                        data,
+                        idempotent,
+                        complete_tx,
+                    }) => self.write(path, data, idempotent, complete_tx),
                     Message::Read(path, tx) => self.read(path, tx),
                     Message::List(path, tx) => self.list(path, tx),
                     Message::ListRecursively(path, tx) => {
