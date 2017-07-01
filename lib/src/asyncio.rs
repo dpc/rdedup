@@ -10,6 +10,8 @@ use slog;
 use slog::Logger;
 use slog_perf::TimeReporter;
 
+use fs2::FileExt;
+use config;
 use std;
 use std::{fs, io, thread, mem};
 use std::collections::HashMap;
@@ -45,6 +47,7 @@ enum Message {
 pub struct AsyncIO {
     shared: Arc<AsyncIOShared>,
     tx: AutoOption<two_lock_queue::Sender<Message>>,
+    path: PathBuf,
 }
 
 impl AsyncIO {
@@ -80,8 +83,28 @@ impl AsyncIO {
         AsyncIO {
             shared: Arc::new(shared),
             tx: AutoOption::new(tx),
+            path: root_path,
         }
     }
+
+    pub fn lock_exclusive(&self) -> io::Result<fs::File> {
+        let lock_path = config::lock_file_path(&self.path);
+
+        let file = fs::File::create(&lock_path)?;
+        file.lock_exclusive()?;
+
+        Ok(file)
+    }
+
+    pub fn lock_shared(&self) -> io::Result<fs::File> {
+        let lock_path = config::lock_file_path(&self.path);
+
+        let file = fs::File::create(&lock_path)?;
+        file.lock_shared()?;
+
+        Ok(file)
+    }
+
 
     pub fn stats(&self) -> AsyncIOThreadShared {
         self.shared.stats.clone()

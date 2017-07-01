@@ -24,8 +24,6 @@ extern crate sgdata;
 extern crate dangerous_option;
 extern crate walkdir;
 
-use fs2::FileExt;
-
 use hex::ToHex;
 use sgdata::SGData;
 use sha2::{Sha256, Digest};
@@ -654,7 +652,7 @@ impl Repo {
 
     /// List all names
     pub fn list_names(&self) -> Result<Vec<String>> {
-        let _lock = self.lock_shared();
+        let _lock = self.aio.lock_shared();
 
         self.list_names_nolock()
     }
@@ -714,7 +712,7 @@ impl Repo {
         new_p: PassphraseFn,
     ) -> Result<()> {
 
-        let _lock = self.lock_exclusive();
+        let _lock = self.aio.lock_exclusive();
 
         if self.config.version == 0 {
             return Err(Error::new(
@@ -726,24 +724,6 @@ impl Repo {
             self.config.write(&self.aio)?;
             Ok(())
         }
-    }
-
-    fn lock_exclusive(&self) -> Result<fs::File> {
-        let lock_path = config::lock_file_path(&self.path);
-
-        let file = fs::File::create(&lock_path)?;
-        file.lock_exclusive()?;
-
-        Ok(file)
-    }
-
-    fn lock_shared(&self) -> Result<fs::File> {
-        let lock_path = config::lock_file_path(&self.path);
-
-        let file = fs::File::create(&lock_path)?;
-        file.lock_shared()?;
-
-        Ok(file)
     }
 
 
@@ -1040,13 +1020,13 @@ impl Repo {
 
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
-        let _lock = self.lock_exclusive();
+        let _lock = self.aio.lock_exclusive();
         fs::remove_file(self.name_path(name))
     }
 
     pub fn gc(&self) -> Result<GcResults> {
 
-        let _lock = self.lock_exclusive();
+        let _lock = self.aio.lock_exclusive();
 
         let reachable = self.list_reachable_chunks().unwrap();
         let index_chunks = StoredChunks::new(
@@ -1087,7 +1067,7 @@ impl Repo {
         dec: &DecryptHandle,
     ) -> Result<()> {
 
-        let _lock = self.lock_shared();
+        let _lock = self.aio.lock_shared();
 
         let digest = self.name_to_digest(name)?;
 
@@ -1107,7 +1087,7 @@ impl Repo {
 
     pub fn du(&self, name: &str, dec: &DecryptHandle) -> Result<DuResults> {
 
-        let _lock = self.lock_shared();
+        let _lock = self.aio.lock_shared();
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
@@ -1137,7 +1117,7 @@ impl Repo {
         name: &str,
         dec: &DecryptHandle,
     ) -> Result<VerifyResults> {
-        let _lock = self.lock_shared();
+        let _lock = self.aio.lock_shared();
         let digest = self.name_to_digest(name)?;
 
         let mut counter = CounterWriter::new();
@@ -1169,7 +1149,7 @@ impl Repo {
         R: Read + Send,
     {
         info!(self.log, "Writing data"; "name" => name);
-        let _lock = self.lock_shared();
+        let _lock = self.aio.lock_shared();
 
         let num_threads = num_cpus::get();
         let (chunker_tx, chunker_rx) =
