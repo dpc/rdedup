@@ -877,12 +877,12 @@ impl Repo {
             );
         }
 
-        let mut file = fs::File::open(&name_path)?;
-        let mut buf = vec![];
-        file.read_to_end(&mut buf)?;
+        let path = PathBuf::from(config::NAME_SUBDIR).join(name);
 
-        debug!(self.log, "Resolved"; "name" => name, "digest" => buf.to_hex());
-        Ok(buf)
+        let data = self.aio.read(path).wait()?.to_linear_vec();
+
+        debug!(self.log, "Resolved"; "name" => name, "digest" => data.to_hex());
+        Ok(data)
     }
 
     fn store_digest_as_name(&self, digest: &[u8], name: &str) -> Result<()> {
