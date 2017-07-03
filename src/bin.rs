@@ -75,9 +75,9 @@ impl Options {
             }
         };
 
-        self.settings.set_encryption(encryption).expect(
-            "wrong encryption",
-        );
+        self.settings
+            .set_encryption(encryption)
+            .expect("wrong encryption");
     }
 
     fn set_compression(&mut self, s: &str) {
@@ -92,17 +92,17 @@ impl Options {
             }
         };
 
-        self.settings.set_compression(compression).expect(
-            "wrong compression",
-        );
+        self.settings
+            .set_compression(compression)
+            .expect("wrong compression");
     }
 
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
             "bup" => {
-                self.settings.use_bup_chunking(chunk_size).expect(
-                    "wrong chunking settings",
-                )
+                self.settings
+                    .use_bup_chunking(chunk_size)
+                    .expect("wrong chunking settings")
             }
             _ => {
                 printerrln!("unsupported encryption: {}", s);
@@ -126,7 +126,6 @@ fn validate_chunk_size(s: String) -> Result<(), String> {
     } else {
         Err("Can't parse a human readable byte-size value".into())
     }
-
 }
 
 fn validate_nesting(s: String) -> Result<(), String> {
@@ -238,18 +237,15 @@ fn run() -> io::Result<()> {
 
     match matches.subcommand() {
         ("init", Some(matches)) => {
-            options
-                .set_chunking(
-                    matches.value_of("CHUNKING").unwrap_or("bup"),
-                    matches
-                        .value_of("CHUNK_SIZE")
-                        .map(|s| {
-                            util::parse_size(s).expect(
-                                "Invalid chunk size option",
-                            )
-                        })
-                        .map(|u| u.trailing_zeros()),
-                );
+            options.set_chunking(
+                matches.value_of("CHUNKING").unwrap_or("bup"),
+                matches
+                    .value_of("CHUNK_SIZE")
+                    .map(|s| {
+                        util::parse_size(s).expect("Invalid chunk size option")
+                    })
+                    .map(|u| u.trailing_zeros()),
+            );
             if let Some(encryption) = matches.value_of("ENCRYPTION") {
                 options.set_encryption(encryption);
             }

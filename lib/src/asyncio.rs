@@ -1,7 +1,10 @@
 
 
 use INGRESS_BUFFER_SIZE;
+use config;
 use dangerous_option::DangerousOption as AutoOption;
+
+use fs2::FileExt;
 use num_cpus;
 use rand;
 use rand::Rng;
@@ -9,9 +12,6 @@ use sgdata::SGData;
 use slog;
 use slog::Logger;
 use slog_perf::TimeReporter;
-
-use fs2::FileExt;
-use config;
 use std;
 use std::{fs, io, thread, mem};
 use std::collections::HashMap;

@@ -100,8 +100,9 @@ impl SGData {
             0 => vec![],
             1 => {
                 let e = self.0.pop().unwrap();
-                Arc::try_unwrap(e.into_inner()).unwrap_or_else(|a| a.as_ref().clone())
-            },
+                Arc::try_unwrap(e.into_inner())
+                    .unwrap_or_else(|a| a.as_ref().clone())
+            }
             _ => {
                 let mut v = Vec::with_capacity(self.len());
                 for sg_part in &self.0 {
