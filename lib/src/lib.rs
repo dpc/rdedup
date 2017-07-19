@@ -932,7 +932,12 @@ impl Repo {
         let list = self.aio.list(PathBuf::from(config::NAME_SUBDIR)).wait()?;
         Ok(
             list.iter()
-                .map(|e| e.to_string_lossy().to_string())
+                .map(|e| {
+                    e.file_name()
+                        .expect("malformed name: e")
+                        .to_string_lossy()
+                        .to_string()
+                })
                 .collect(),
         )
     }
