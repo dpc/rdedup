@@ -15,7 +15,6 @@ pub trait EdgeFinder {
 
 /// Finds edges using rolling sum
 pub struct BupEdgeFinder {
-    chunk_bits: u32,
     roll: rollsum::Bup,
 }
 
@@ -38,7 +37,6 @@ impl EdgeFinder for BupEdgeFinder {
             if let Some(count) = self.roll.find_chunk_edge(&buf[ofs..len]) {
                 ofs += count;
 
-                self.roll = rollsum::Bup::new_with_chunk_bits(self.chunk_bits);
                 edges.push(ofs);
             } else {
                 break;
