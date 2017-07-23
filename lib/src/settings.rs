@@ -87,15 +87,32 @@ impl Repo {
 
     pub fn use_bup_chunking(&mut self, bits: Option<u32>) -> super::Result<()> {
         let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
-        let bup = config::Chunking::Bup { chunk_bits: bits };
+        let chunking = config::Chunking::Bup { chunk_bits: bits };
 
-        if !bup.valid() {
+        if !chunking.valid() {
             return Err(super::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid chunking algorithm defined",
             ));
         }
-        self.chunking = Chunking(bup);
+        self.chunking = Chunking(chunking);
+        Ok(())
+    }
+
+    pub fn use_gear_chunking(
+        &mut self,
+        bits: Option<u32>,
+    ) -> super::Result<()> {
+        let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
+        let chunking = config::Chunking::Gear { chunk_bits: bits };
+
+        if !chunking.valid() {
+            return Err(super::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid chunking algorithm defined",
+            ));
+        }
+        self.chunking = Chunking(chunking);
         Ok(())
     }
 

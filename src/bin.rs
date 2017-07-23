@@ -104,6 +104,11 @@ impl Options {
                     .use_bup_chunking(chunk_size)
                     .expect("wrong chunking settings")
             }
+            "gear" => {
+                self.settings
+                    .use_gear_chunking(chunk_size)
+                    .expect("wrong chunking settings")
+            }
             _ => {
                 printerrln!("unsupported encryption: {}", s);
                 process::exit(-1);
@@ -176,7 +181,7 @@ fn run() -> io::Result<()> {
         (@arg verbose: -v ... "Increase debugging level")
         (@subcommand init =>
          (about: "Create a new repository")
-         (@arg CHUNKING: --chunking possible_values(&["bup"]) +takes_value "Set chunking scheme. Default: bup")
+         (@arg CHUNKING: --chunking possible_values(&["bup", "gear"]) +takes_value "Set chunking scheme. Default: gear")
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "none"]) +takes_value "Set compression scheme. Default: deflate")
@@ -238,7 +243,7 @@ fn run() -> io::Result<()> {
     match matches.subcommand() {
         ("init", Some(matches)) => {
             options.set_chunking(
-                matches.value_of("CHUNKING").unwrap_or("bup"),
+                matches.value_of("CHUNKING").unwrap_or("gear"),
                 matches
                     .value_of("CHUNK_SIZE")
                     .map(|s| {
