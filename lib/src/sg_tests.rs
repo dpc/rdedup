@@ -39,7 +39,7 @@ fn test_chunker() {
         }
     }
 
-    impl EdgeFinder for TestEdgeFinder {
+    impl EdgeFinderTrait for TestEdgeFinder {
         fn find_edges(&mut self, buf: &[u8]) -> Vec<usize> {
 
             let mut v = vec![];

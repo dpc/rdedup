@@ -9,22 +9,23 @@ use std::{io, mem};
 use std::result::Result;
 use std::sync::Arc;
 
-pub trait EdgeFinder {
+/// For mocking in tests
+pub trait EdgeFinderTrait {
     fn find_edges(&mut self, buf: &[u8]) -> Vec<usize>;
 }
 
 /// Finds edges using rolling sum
-pub struct BupEdgeFinder {
+pub struct EdgeFinder {
     chunking: Box<chunking::Chunking>,
 }
 
-impl BupEdgeFinder {
+impl EdgeFinder {
     pub(crate) fn new(chunking: Box<chunking::Chunking>) -> Self {
-        BupEdgeFinder { chunking: chunking }
+        EdgeFinder { chunking: chunking }
     }
 }
 
-impl EdgeFinder for BupEdgeFinder {
+impl EdgeFinderTrait for EdgeFinder {
     fn find_edges(&mut self, buf: &[u8]) -> Vec<usize> {
         let mut ofs: usize = 0;
         let len = buf.len();
@@ -155,7 +156,7 @@ impl<I, EF> Chunker<I, EF> {
 
 impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
 where
-    EF: EdgeFinder,
+    EF: EdgeFinderTrait,
 {
     type Item = SGData;
 

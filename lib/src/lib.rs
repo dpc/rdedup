@@ -772,7 +772,7 @@ impl Repo {
 
                     let chunker = Chunker::new(
                         input_data_iter.into_iter(),
-                        BupEdgeFinder::new(self.config.chunking.to_engine()),
+                        EdgeFinder::new(self.config.chunking.to_engine()),
                     );
 
                     // TODO: Change to `enumerate_u64`
