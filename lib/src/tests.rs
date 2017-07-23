@@ -252,8 +252,8 @@ fn change_passphrase() {
             None,
         ).unwrap();
 
-        let enc_handle = repo.unlock_encrypt(&|| Ok(prev_passphrase.into()))
-            .unwrap();
+        let enc_handle =
+            repo.unlock_encrypt(&|| Ok(prev_passphrase.into())).unwrap();
 
         repo.write("data", &mut io::Cursor::new(&data_before), &enc_handle)
             .unwrap();
@@ -271,8 +271,8 @@ fn change_passphrase() {
 
     {
         let repo = lib::Repo::open(dir_path, None).unwrap();
-        let dec_handle = repo.unlock_decrypt(&|| Ok(prev_passphrase.into()))
-            .unwrap();
+        let dec_handle =
+            repo.unlock_decrypt(&|| Ok(prev_passphrase.into())).unwrap();
         let mut data_after = vec![];
         repo.read("data", &mut data_after, &dec_handle).unwrap();
 

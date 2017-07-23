@@ -46,13 +46,14 @@ mod iterators;
 use iterators::StoredChunks;
 
 mod config;
-use config::Chunking;
 
 mod sg;
 use sg::*;
 
 mod asyncio;
 use asyncio::*;
+
+mod chunking;
 
 mod chunk_processor;
 use chunk_processor::*;
@@ -539,7 +540,9 @@ impl Repo {
         info!(self.log, "Opening read handle");
         let decrypter = self.config.encryption.decrypter(pass)?;
 
-        Ok(DecryptHandle { decrypter: decrypter })
+        Ok(DecryptHandle {
+            decrypter: decrypter,
+        })
 
     }
 
@@ -551,7 +554,9 @@ impl Repo {
         let encrypter = self.config.encryption.encrypter(pass)?;
 
 
-        Ok(EncryptHandle { encrypter: encrypter })
+        Ok(EncryptHandle {
+            encrypter: encrypter,
+        })
     }
 
     pub fn path(&self) -> &Path {
@@ -765,20 +770,16 @@ impl Repo {
                         self.log.clone(),
                     );
 
-                    let chunk_bits = match self.config.chunking {
-                        Chunking::Bup { chunk_bits: bits } => bits,
-                    };
-
                     let chunker = Chunker::new(
                         input_data_iter.into_iter(),
-                        BupEdgeFinder::new(chunk_bits),
+                        BupEdgeFinder::new(self.config.chunking.to_engine()),
                     );
 
                     // TODO: Change to `enumerate_u64`
                     let mut data = chunker.enumerate();
 
-                    while let Some(i_sg) = timer
-                        .start_with("rx-and-chunking", || data.next())
+                    while let Some(i_sg) =
+                        timer.start_with("rx-and-chunking", || data.next())
                     {
                         timer.start("tx");
                         let (i, sg) = i_sg;

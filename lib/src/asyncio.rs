@@ -276,7 +276,9 @@ impl AsyncIOThreadShared {
             in_progress: Default::default(),
         };
 
-        AsyncIOThreadShared { inner: Arc::new(Mutex::new(inner)) }
+        AsyncIOThreadShared {
+            inner: Arc::new(Mutex::new(inner)),
+        }
     }
 
     pub fn get_stats(&self) -> WriteStats {

@@ -15,7 +15,7 @@ name = "rdedup_lib"
 path = "src/lib.rs"
 
 [dependencies]
-rollsum = "0.2.1"
+rollsum = { git = "https://github.com/dpc/rsroll.git", rev="44b37b1" }
 sha2 = "0.5"
 argparse = "0.2.1"
 sodiumoxide = { version = "0.0.14", features = ["serde"] }

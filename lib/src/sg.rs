@@ -2,8 +2,8 @@
 //!
 
 use DataType;
+use chunking;
 use owning_ref::ArcRef;
-use rollsum;
 use sgdata::SGData;
 use std::{io, mem};
 use std::result::Result;
@@ -15,15 +15,12 @@ pub trait EdgeFinder {
 
 /// Finds edges using rolling sum
 pub struct BupEdgeFinder {
-    roll: rollsum::Bup,
+    chunking: Box<chunking::Chunking>,
 }
 
 impl BupEdgeFinder {
-    pub fn new(chunk_bits: u32) -> Self {
-        BupEdgeFinder {
-            chunk_bits: chunk_bits,
-            roll: rollsum::Bup::new_with_chunk_bits(chunk_bits),
-        }
+    pub(crate) fn new(chunking: Box<chunking::Chunking>) -> Self {
+        BupEdgeFinder { chunking: chunking }
     }
 }
 
@@ -34,7 +31,7 @@ impl EdgeFinder for BupEdgeFinder {
         let mut edges = vec![];
 
         while ofs < len {
-            if let Some(count) = self.roll.find_chunk_edge(&buf[ofs..len]) {
+            if let Some(count) = self.chunking.find_chunk_edge(&buf[ofs..len]) {
                 ofs += count;
 
                 edges.push(ofs);

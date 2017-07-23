@@ -178,8 +178,8 @@ struct Curve25519Decrypter {
 }
 impl Decrypter for Curve25519Decrypter {
     fn decrypt(&self, buf: SGData, digest: &[u8]) -> io::Result<SGData> {
-        let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
-            .unwrap();
+        let nonce =
+            box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES]).unwrap();
 
         let buf = buf.to_linear();
 

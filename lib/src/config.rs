@@ -4,6 +4,7 @@
 use {serde_yaml, PassphraseFn, SGData};
 
 use asyncio;
+use chunking;
 use compression;
 
 use encryption;
@@ -60,12 +61,16 @@ pub enum Chunking {
     /// and 30 (1KB to 1GB)
     #[serde(rename = "bup")]
     Bup { chunk_bits: u32 },
+    #[serde(rename = "gear")]
+    Gear { chunk_bits: u32 },
 }
 
 /// Default implementation for the `Chunking`
 impl Default for Chunking {
     fn default() -> Chunking {
-        Chunking::Bup { chunk_bits: DEFAULT_BUP_CHUNK_BITS }
+        Chunking::Bup {
+            chunk_bits: DEFAULT_BUP_CHUNK_BITS,
+        }
     }
 }
 
@@ -73,6 +78,18 @@ impl Chunking {
     pub fn valid(self) -> bool {
         match self {
             Chunking::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
+            Chunking::Gear { chunk_bits: bits } => 30 >= bits && bits >= 10,
+        }
+    }
+
+    pub(crate) fn to_engine(&self) -> Box<chunking::Chunking> {
+        match *self {
+            Chunking::Bup { chunk_bits } => Box::new(
+                chunking::Bup::new(chunk_bits),
+            ),
+            Chunking::Gear { chunk_bits } => Box::new(
+                chunking::Gear::new(chunk_bits),
+            ),
         }
     }
 }
@@ -218,8 +235,8 @@ impl Repo {
 
     pub fn write(&self, aio: &asyncio::AsyncIO) -> super::Result<()> {
 
-        let config_str = serde_yaml::to_string(self)
-            .expect("yaml serialization failed");
+        let config_str =
+            serde_yaml::to_string(self).expect("yaml serialization failed");
 
         aio.write(
             CONFIG_YML_FILE.into(),
