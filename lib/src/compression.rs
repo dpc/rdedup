@@ -1,11 +1,14 @@
 use bzip2;
 use flate2;
 use lzma;
+use owning_ref::ArcRef;
 use sgdata::SGData;
+use std;
 use std::io;
 
-use std::io::Write;
+use std::io::{Write, Read};
 use std::sync::Arc;
+use zstd;
 
 pub type ArcCompression = Arc<Compression + Send + Sync>;
 
@@ -124,6 +127,71 @@ impl Compression for Xz2 {
                 } {}
             }
             decompressor.finish().unwrap();
+        }
+        Ok(SGData::from_single(backing))
+    }
+}
+
+
+pub struct Zstd;
+
+struct SGReader<'a> {
+    parts: &'a [ArcRef<Vec<u8>, [u8]>],
+    parts_i: usize,
+    part_offset: usize,
+}
+
+impl<'a> SGReader<'a> {
+    fn new(parts: &'a SGData) -> Self {
+        SGReader {
+            parts: parts.as_parts(),
+            parts_i: 0,
+            part_offset: 0,
+        }
+    }
+}
+
+impl<'a> io::Read for SGReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        loop {
+            if self.parts_i >= self.parts.len() {
+                return Ok(0);
+            }
+            let cur_slice = &self.parts[self.parts_i][self.part_offset..];
+            if cur_slice.is_empty() {
+                self.parts_i += 1;
+                continue;
+            }
+            let to_copy = std::cmp::min(buf.len(), cur_slice.len());
+
+            buf[..to_copy].clone_from_slice(&cur_slice[..to_copy]);
+            self.part_offset += to_copy;
+
+            return Ok(to_copy);
+        }
+    }
+}
+
+impl Compression for Zstd {
+    fn compress(&self, buf: SGData) -> io::Result<SGData> {
+        let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
+        {
+            let mut compressor = zstd::Encoder::new(&mut backing, 5).unwrap();
+            for sg_part in buf.as_parts() {
+                compressor.write_all(&sg_part).unwrap()
+            }
+            compressor.finish().unwrap();
+        }
+        Ok(SGData::from_single(backing))
+    }
+
+    fn decompress(&self, buf: SGData) -> io::Result<SGData> {
+        let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
+        {
+            // Ehh... https://github.com/gyscos/zstd-rs/issues/34
+            let mut reader = SGReader::new(&buf);
+            let mut decompressor = zstd::Decoder::new(&mut reader).unwrap();
+            let _ = decompressor.read_to_end(&mut backing)?;
         }
         Ok(SGData::from_single(backing))
     }

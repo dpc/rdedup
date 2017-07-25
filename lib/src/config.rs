@@ -103,6 +103,8 @@ pub enum Compression {
     Xz2,
     #[serde(rename = "bzip2")]
     Bzip2,
+    #[serde(rename = "zstd")]
+    Zstd,
     #[serde(rename = "none")]
     None,
 }
@@ -120,6 +122,7 @@ impl Compression {
             Compression::Deflate => Arc::new(compression::Deflate),
             Compression::Xz2 => Arc::new(compression::Xz2),
             Compression::Bzip2 => Arc::new(compression::Bzip2),
+            Compression::Zstd => Arc::new(compression::Zstd),
         }
     }
 }

@@ -8,6 +8,7 @@ pub enum Compression {
     Deflate,
     Xz2,
     Bzip2,
+    Zstd,
     None,
 }
 
@@ -23,6 +24,7 @@ impl Compression {
             Compression::Deflate => config::Compression::Deflate,
             Compression::Xz2 => config::Compression::Xz2,
             Compression::Bzip2 => config::Compression::Bzip2,
+            Compression::Zstd => config::Compression::Zstd,
             Compression::None => config::Compression::None,
         }
     }

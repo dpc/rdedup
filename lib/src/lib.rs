@@ -23,6 +23,7 @@ extern crate hex;
 extern crate sgdata;
 extern crate dangerous_option;
 extern crate walkdir;
+extern crate zstd;
 
 use hex::ToHex;
 use sgdata::SGData;
