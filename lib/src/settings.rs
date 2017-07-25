@@ -60,12 +60,32 @@ impl Nesting {
     }
 }
 
+#[derive(Clone)]
+pub enum Hashing {
+    Sha256,
+}
+
+impl Hashing {
+    pub fn to_config(&self) -> config::Hashing {
+        match *self {
+            Hashing::Sha256 => config::Hashing::Sha256,
+        }
+    }
+}
+
+impl Default for Hashing {
+    fn default() -> Self {
+        Hashing::Sha256
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Repo {
     pub(crate) encryption: Encryption,
     pub(crate) compression: Compression,
     pub(crate) chunking: Chunking,
     pub(crate) nesting: Nesting,
+    pub(crate) hashing: Hashing,
 }
 
 impl Repo {

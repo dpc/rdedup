@@ -9,6 +9,7 @@ use compression;
 
 use encryption;
 use encryption::{ArcDecrypter, ArcEncrypter};
+use hashing;
 
 use hex::ToHex;
 use settings;
@@ -127,6 +128,27 @@ impl Compression {
     }
 }
 
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum Hashing {
+    #[serde(rename = "sha256")]
+    Sha256,
+}
+
+impl Default for Hashing {
+    fn default() -> Hashing {
+        Hashing::Sha256
+    }
+}
+
+impl Hashing {
+    pub(crate) fn to_hasher(&self) -> hashing::ArcHasher {
+        match *self {
+            Hashing::Sha256 => Arc::new(hashing::Sha256),
+        }
+    }
+}
+
 /// Types of supported encryption
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -209,6 +231,8 @@ pub struct Repo {
     pub compression: Compression,
     #[serde(default)]
     pub nesting: Nesting,
+    #[serde(default)]
+    pub hashing: Hashing,
 }
 
 
@@ -231,6 +255,7 @@ impl Repo {
             encryption: encryption,
             compression: settings.compression.to_config(),
             nesting: settings.nesting.to_config(),
+            hashing: settings.hashing.to_config(),
         })
 
     }

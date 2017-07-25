@@ -1,11 +1,9 @@
 use super::{DataType, Repo};
 use super::asyncio;
-use DIGEST_SIZE;
 use compression::ArcCompression;
 use encryption::ArcEncrypter;
+use hashing::ArcHasher;
 use sgdata::SGData;
-use sha2::Digest;
-use sha2::Sha256;
 use slog::Logger;
 use slog_perf::TimeReporter;
 use std::sync::mpsc;
@@ -26,20 +24,7 @@ pub struct ChunkProcessor {
     log: Logger,
     encrypter: ArcEncrypter,
     compressor: ArcCompression,
-}
-
-// Calculate digest
-pub fn calculate_digest(sg: &SGData) -> Vec<u8> {
-    let mut sha256 = Sha256::default();
-
-    for sg_part in sg.as_parts() {
-        sha256.input(sg_part);
-    }
-
-    let mut vec_result = vec![0u8; DIGEST_SIZE];
-    vec_result.copy_from_slice(&sha256.result());
-
-    vec_result
+    hasher: ArcHasher,
 }
 
 impl ChunkProcessor {
@@ -49,6 +34,7 @@ impl ChunkProcessor {
         aio: asyncio::AsyncIO,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
+        hasher: ArcHasher,
     ) -> Self {
         ChunkProcessor {
             log: repo.log.clone(),
@@ -57,6 +43,7 @@ impl ChunkProcessor {
             aio: aio,
             encrypter: encrypter,
             compressor: compressor,
+            hasher: hasher,
         }
     }
 
@@ -71,7 +58,7 @@ impl ChunkProcessor {
 
                 let ((i, sg), digests_tx, data_type) = input;
 
-                let digest = calculate_digest(&sg);
+                let digest = self.hasher.calculate_digest(&sg);
                 let chunk_path =
                     self.repo.chunk_path_by_digest(&digest, DataType::Data);
                 if !chunk_path.exists() {

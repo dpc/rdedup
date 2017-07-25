@@ -54,6 +54,7 @@ use sg::*;
 mod asyncio;
 use asyncio::*;
 
+mod hashing;
 mod chunking;
 
 mod chunk_processor;
@@ -512,6 +513,7 @@ pub struct Repo {
     config: config::Repo,
 
     compression: compression::ArcCompression,
+    hasher: hashing::ArcHasher,
 
     /// Logger
     log: slog::Logger,
@@ -596,11 +598,13 @@ impl Repo {
         config.write(&aio)?;
 
         let compression = config.compression.to_engine();
+        let hasher = config.hashing.to_hasher();
 
         Ok(Repo {
             path: repo_path.into(),
             config: config,
             compression: compression,
+            hasher: hasher,
             log: log,
             aio: aio,
         })
@@ -702,10 +706,12 @@ impl Repo {
         })?;
 
         let compression = config.compression.to_engine();
+        let hasher = config.hashing.to_hasher();
         Ok(Repo {
             path: repo_path.to_owned(),
             config: config,
             compression: compression,
+            hasher: hasher,
             log: log,
             aio: aio,
         })
@@ -1178,6 +1184,7 @@ impl Repo {
                 let aio = aio.clone();
                 let encrypter = enc.encrypter.clone();
                 let compression = self.compression.clone();
+                let hasher = self.hasher.clone();
                 scope.spawn(move || {
                     let processor = ChunkProcessor::new(
                         self.clone(),
@@ -1185,6 +1192,7 @@ impl Repo {
                         aio,
                         encrypter,
                         compression,
+                        hasher,
                     );
                     processor.run();
                 });
