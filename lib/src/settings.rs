@@ -63,12 +63,14 @@ impl Nesting {
 #[derive(Clone)]
 pub enum Hashing {
     Sha256,
+    Blake2b,
 }
 
 impl Hashing {
     pub fn to_config(&self) -> config::Hashing {
         match *self {
             Hashing::Sha256 => config::Hashing::Sha256,
+            Hashing::Blake2b => config::Hashing::Blake2b,
         }
     }
 }
@@ -104,6 +106,11 @@ impl Repo {
         compression: Compression,
     ) -> io::Result<()> {
         self.compression = compression;
+        Ok(())
+    }
+
+    pub fn set_hashing(&mut self, hashing: Hashing) -> io::Result<()> {
+        self.hashing = hashing;
         Ok(())
     }
 

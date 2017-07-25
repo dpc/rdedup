@@ -16,7 +16,6 @@ path = "src/lib.rs"
 
 [dependencies]
 rollsum = { git = "https://github.com/dpc/rsroll.git", rev="44b37b1" }
-sha2 = "0.5"
 argparse = "0.2.1"
 sodiumoxide = { version = "0.0.14", features = ["serde"] }
 flate2 = "0.2"
@@ -39,3 +38,6 @@ rand = "0.3.14"
 dangerous_option = { git = "https://github.com/dpc/dangerous_option.git" }
 walkdir = "*"
 zstd = "*"
+sha2 = "0.6"
+blake2 = "0.6"
+digest = "0.6"

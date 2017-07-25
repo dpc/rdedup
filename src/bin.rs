@@ -117,6 +117,25 @@ impl Options {
         };
     }
 
+    fn set_hashing(&mut self, s: &str) {
+        match s {
+            "sha256" => {
+                self.settings
+                    .set_hashing(lib::settings::Hashing::Sha256)
+                    .expect("wrong hashing settings")
+            }
+            "blake2b" => {
+                self.settings
+                    .set_hashing(lib::settings::Hashing::Blake2b)
+                    .expect("wrong hashing settings")
+            }
+            _ => {
+                printerrln!("unsupported hashing: {}", s);
+                process::exit(-1);
+            }
+        };
+    }
+
     fn set_nesting(&mut self, level: u8) {
         self.settings.set_nesting(level).expect("invalid nesting");
     }
@@ -187,6 +206,7 @@ fn run() -> io::Result<()> {
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
          (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
+         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: sha256")
         )
         (@subcommand store =>
          (about: "Store data from repository")
@@ -260,6 +280,9 @@ fn run() -> io::Result<()> {
             }
             if let Some(nesting) = matches.value_of("NESTING") {
                 options.set_nesting(u8::from_str(nesting).unwrap());
+            }
+            if let Some(hashing) = matches.value_of("HASHING") {
+                options.set_hashing(hashing);
             }
             let _ = Repo::init(
                 &options.dir,

@@ -24,10 +24,11 @@ extern crate sgdata;
 extern crate dangerous_option;
 extern crate walkdir;
 extern crate zstd;
+extern crate blake2;
+extern crate digest;
 
 use hex::ToHex;
 use sgdata::SGData;
-use sha2::{Sha256, Digest};
 use slog::Logger;
 use slog_perf::TimeReporter;
 
@@ -353,13 +354,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             data
         };
 
-        let mut sha256 = Sha256::default();
-
-        for part in data.as_parts() {
-            sha256.input(&*part);
-        }
-        let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&sha256.result());
+        let vec_result = self.repo.hasher.calculate_digest(&data);
 
         if vec_result != digest {
             Err(io::Error::new(
@@ -820,7 +815,7 @@ impl Repo {
                     DataType::Index,
                 )?;
 
-                let index_digest = quick_sha256(&digest);
+                let index_digest = self.hasher.calculate_digest_simple(&digest);
 
                 timer.start("writer-tx");
                 let path = self.chunk_rel_path_by_digest(

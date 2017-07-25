@@ -1,19 +1,5 @@
-use DIGEST_SIZE;
-
-use sha2::{Sha256, Digest};
 use sodiumoxide::crypto::{pwhash, secretbox};
 use std::io;
-
-/// Convenient function to calculate sha256 for one continuous data block
-pub fn quick_sha256(data: &[u8]) -> Vec<u8> {
-
-    let mut sha256 = Sha256::default();
-    sha256.input(data);
-    let mut vec_result = vec![0u8; DIGEST_SIZE];
-    vec_result.copy_from_slice(&sha256.result());
-
-    vec_result
-}
 
 /// Derive secret key from passphrase and salt
 pub fn derive_key(

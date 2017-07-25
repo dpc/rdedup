@@ -133,6 +133,8 @@ impl Compression {
 pub enum Hashing {
     #[serde(rename = "sha256")]
     Sha256,
+    #[serde(rename = "blake2b")]
+    Blake2b,
 }
 
 impl Default for Hashing {
@@ -145,6 +147,7 @@ impl Hashing {
     pub(crate) fn to_hasher(&self) -> hashing::ArcHasher {
         match *self {
             Hashing::Sha256 => Arc::new(hashing::Sha256),
+            Hashing::Blake2b => Arc::new(hashing::Blake2b),
         }
     }
 }
