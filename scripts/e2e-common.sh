@@ -1,8 +1,12 @@
 test_data_path=/tmp/rdedup-e2e-test.data
-chunking_list=`cargo run --release -- init --help | grep chunking | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-encryptiton_list=`cargo run --release -- init --help | grep encryption | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-compression_list=`cargo run --release -- init --help | grep compression | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-hashing_list=`cargo run --release -- init --help | grep hashing | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
+chunking_list=$(cargo run --release -- init --chunking '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+encryptiton_list=$(cargo run --release -- init --encryption '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+compression_list=$(cargo run --release -- init --compression '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+hashing_list=$(cargo run --release -- init --hashing '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
 
 export RDEDUP_DIR=/tmp/rdedup-e2e-test.repo
 export RDEDUP_PASSPHRASE=testing
