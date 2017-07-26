@@ -160,6 +160,7 @@ impl<'a> io::Read for SGReader<'a> {
             let cur_slice = &self.parts[self.parts_i][self.part_offset..];
             if cur_slice.is_empty() {
                 self.parts_i += 1;
+                self.part_offset = 0;
                 continue;
             }
             let to_copy = std::cmp::min(buf.len(), cur_slice.len());
