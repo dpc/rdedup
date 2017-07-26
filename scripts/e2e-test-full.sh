@@ -11,10 +11,6 @@ source "$my_dir/e2e-common.sh"
 # init
 dd if=/dev/urandom of=$test_data_path bs=1024 count=$((1024 * 32))
 
-chunking_list=`rdedup init --help | grep chunking | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-encryptiton_list=`rdedup init --help | grep encryption | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-compression_list=`rdedup init --help | grep compression | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
-hashing_list=`rdedup init --help | grep hashing | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
 for chunking in $chunking_list  ; do
   for chunk_size in 2K 512K 16M ; do
     for compression in $compression_list ; do

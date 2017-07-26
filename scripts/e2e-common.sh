@@ -1,4 +1,9 @@
 test_data_path=/tmp/rdedup-e2e-test.data
+chunking_list=`cargo run --release -- init --help | grep chunking | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
+encryptiton_list=`cargo run --release -- init --help | grep encryption | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
+compression_list=`cargo run --release -- init --help | grep compression | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
+hashing_list=`cargo run --release -- init --help | grep hashing | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ','`
+
 export RDEDUP_DIR=/tmp/rdedup-e2e-test.repo
 export RDEDUP_PASSPHRASE=testing
 export RUST_BACKTRACE=1
