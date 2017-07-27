@@ -738,7 +738,7 @@ impl Repo {
     fn chunk_and_write_data_thread<'a>(
         &'a self,
         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
-        process_tx: two_lock_queue::Sender<ChunkProcessorMessage>,
+        process_tx: two_lock_queue::Sender<chunk_processor::Message>,
         aio: asyncio::AsyncIO,
         data_type: DataType,
     ) -> io::Result<Vec<u8>> {
@@ -786,9 +786,11 @@ impl Repo {
                         timer.start("tx");
                         let (i, sg) = i_sg;
                         process_tx
-                            .send(
-                                ((i as u64, sg), digests_tx.clone(), data_type),
-                            )
+                            .send(chunk_processor::Message {
+                                data: (i as u64, sg),
+                                response_tx: digests_tx.clone(),
+                                data_type: data_type,
+                            })
                             .expect("process_tx.send(...)")
                     }
                     drop(digests_tx);

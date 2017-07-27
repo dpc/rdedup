@@ -9,17 +9,15 @@ use slog_perf::TimeReporter;
 use std::sync::mpsc;
 use two_lock_queue;
 
-// TODO: Make a struct
-pub type ChunkProcessorMessage = (
-    (u64, SGData),
-    mpsc::Sender<(u64, Vec<u8>)>,
-    DataType,
-);
-
+pub struct Message {
+    pub data: (u64, SGData),
+    pub data_type: DataType,
+    pub response_tx: mpsc::Sender<(u64, Vec<u8>)>,
+}
 
 pub struct ChunkProcessor {
     repo: Repo,
-    rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
+    rx: two_lock_queue::Receiver<Message>,
     aio: asyncio::AsyncIO,
     log: Logger,
     encrypter: ArcEncrypter,
@@ -30,7 +28,7 @@ pub struct ChunkProcessor {
 impl ChunkProcessor {
     pub fn new(
         repo: Repo,
-        rx: two_lock_queue::Receiver<ChunkProcessorMessage>,
+        rx: two_lock_queue::Receiver<Message>,
         aio: asyncio::AsyncIO,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
@@ -56,7 +54,12 @@ impl ChunkProcessor {
             if let Ok(input) = self.rx.recv() {
                 timer.start("processing");
 
-                let ((i, sg), digests_tx, data_type) = input;
+                let Message {
+                    data,
+                    response_tx,
+                    data_type,
+                } = input;
+                let (sg_id, sg) = data;
 
                 let digest = self.hasher.calculate_digest(&sg);
                 let chunk_path =
@@ -83,8 +86,8 @@ impl ChunkProcessor {
                     );
                 }
                 timer.start("tx-digest");
-                digests_tx
-                    .send((i, digest))
+                response_tx
+                    .send((sg_id, digest))
                     .expect("chunk_processor: digests_tx.send")
             } else {
                 return;
