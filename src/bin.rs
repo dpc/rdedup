@@ -206,7 +206,7 @@ fn run() -> io::Result<()> {
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
          (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
-         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: sha256")
+         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: blake2b")
         )
         (@subcommand store =>
          (about: "Store data from repository")

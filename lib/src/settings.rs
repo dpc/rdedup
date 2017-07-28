@@ -77,7 +77,7 @@ impl Hashing {
 
 impl Default for Hashing {
     fn default() -> Self {
-        Hashing::Sha256
+        Hashing::Blake2b
     }
 }
 
