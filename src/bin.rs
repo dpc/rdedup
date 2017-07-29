@@ -307,6 +307,7 @@ fn run() -> io::Result<()> {
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
+         (@arg COMPRESSION_LEVEL : --("compression-level") +takes_value "Set compression level where negative numbers mean \"faster\" and positive ones \"smaller\". Default: 0")
          (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
          (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: blake2b")
         )
@@ -379,6 +380,10 @@ fn run() -> io::Result<()> {
             }
             if let Some(compression) = matches.value_of("COMPRESSION") {
                 options.set_compression(compression);
+            }
+            if let Some(compression_level) =
+                matches.value_of("COMPRESSION_LEVEL") {
+                options.settings.set_compression_level(i32::from_str(compression_level).unwrap());
             }
             if let Some(nesting) = matches.value_of("NESTING") {
                 options.set_nesting(u8::from_str(nesting).unwrap());

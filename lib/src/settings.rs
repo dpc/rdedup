@@ -19,12 +19,14 @@ impl Default for Compression {
 }
 
 impl Compression {
-    pub fn to_config(&self) -> config::Compression {
+    pub fn to_config(&self, level: i32) -> config::Compression {
         match *self {
-            Compression::Deflate => config::Compression::Deflate,
-            Compression::Xz2 => config::Compression::Xz2,
-            Compression::Bzip2 => config::Compression::Bzip2,
-            Compression::Zstd => config::Compression::Zstd,
+            Compression::Deflate =>
+                config::Compression::Deflate(config::Deflate::new(level)),
+            Compression::Xz2 => config::Compression::Xz2(config::Xz2::new(level)),
+            Compression::Bzip2 =>
+                config::Compression::Bzip2(config::Bzip2::new(level)),
+            Compression::Zstd => config::Compression::Zstd(config::Zstd::new(level)),
             Compression::None => config::Compression::None,
         }
     }
@@ -85,6 +87,7 @@ impl Default for Hashing {
 pub struct Repo {
     pub(crate) encryption: Encryption,
     pub(crate) compression: Compression,
+    pub(crate) compression_level: i32,
     pub(crate) chunking: Chunking,
     pub(crate) nesting: Nesting,
     pub(crate) hashing: Hashing,
@@ -108,6 +111,12 @@ impl Repo {
         self.compression = compression;
         Ok(())
     }
+
+    pub fn set_compression_level(
+        &mut self,
+        level: i32) {
+        self.compression_level = level;
+        }
 
     pub fn set_hashing(&mut self, hashing: Hashing) -> io::Result<()> {
         self.hashing = hashing;

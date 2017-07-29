@@ -4,7 +4,7 @@ use lzma;
 use owning_ref::ArcRef;
 use sgdata::SGData;
 use std;
-use std::io;
+use std::{io, cmp};
 
 use std::io::{Write, Read};
 use std::sync::Arc;
@@ -28,13 +28,31 @@ impl Compression for NoCompression {
     }
 }
 
-pub struct Deflate;
+pub struct Deflate {
+    level: flate2::Compression,
+}
+
+impl Deflate {
+    pub fn new(level : i32) -> Self {
+        let level = if level < 0 {
+            flate2::Compression::Fast
+        } else if level > 0{
+            flate2::Compression::Best
+        } else {
+            flate2::Compression::Default
+        };
+
+        Deflate {
+            level: level,
+        }
+    }
+}
 
 impl Compression for Deflate {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut compressor = flate2::write::DeflateEncoder::new(
             Vec::with_capacity(buf.len()),
-            flate2::Compression::Default,
+            self.level,
         );
 
         for sg_part in buf.as_parts() {
@@ -55,13 +73,31 @@ impl Compression for Deflate {
     }
 }
 
-pub struct Bzip2;
+pub struct Bzip2 {
+    level: bzip2::Compression,
+}
+
+impl Bzip2 {
+    pub fn new(level : i32) -> Self {
+        let level = if level < 0 {
+            bzip2::Compression::Fastest
+        } else if level > 0 {
+            bzip2::Compression::Best
+        } else {
+            bzip2::Compression::Default
+        };
+
+        Bzip2 {
+            level: level,
+        }
+    }
+}
 
 impl Compression for Bzip2 {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut compressor = bzip2::write::BzEncoder::new(
             Vec::with_capacity(buf.len()),
-            bzip2::Compression::Default,
+            self.level,
         );
 
         for sg_part in buf.as_parts() {
@@ -82,14 +118,26 @@ impl Compression for Bzip2 {
     }
 }
 
-pub struct Xz2;
+pub struct Xz2 {
+    level: u32,
+}
+
+impl Xz2 {
+    pub fn new(level : i32) -> Self {
+        let level = cmp::min(cmp::max(level + 6, 0), 10) as u32;
+
+        Xz2 {
+            level: level,
+        }
+    }
+}
 
 impl Compression for Xz2 {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
             let mut compressor =
-                lzma::LzmaWriter::new_compressor(&mut backing, 6).unwrap();
+                lzma::LzmaWriter::new_compressor(&mut backing, self.level).unwrap();
             for sg_part in buf.as_parts() {
                 // compressor.write can sometimes return zero, so we can't just
                 // use write_all; see
@@ -133,7 +181,17 @@ impl Compression for Xz2 {
 }
 
 
-pub struct Zstd;
+pub struct Zstd {
+    level: i32,
+}
+
+impl Zstd {
+    pub fn new(level : i32) -> Self {
+        Zstd {
+            level: level,
+        }
+    }
+}
 
 struct SGReader<'a> {
     parts: &'a [ArcRef<Vec<u8>, [u8]>],
@@ -177,7 +235,7 @@ impl Compression for Zstd {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
-            let mut compressor = zstd::Encoder::new(&mut backing, 5).unwrap();
+            let mut compressor = zstd::Encoder::new(&mut backing, self.level).unwrap();
             for sg_part in buf.as_parts() {
                 compressor.write_all(&sg_part).unwrap()
             }
