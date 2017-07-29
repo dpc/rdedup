@@ -1,4 +1,4 @@
-# rdedup - data deduplication with compression and public key encryption
+<!-- README.md is auto-generated from README.tpl with `cargo readme` -->
 
 <p align="center">
   <a href="https://travis-ci.org/dpc/rdedup">
@@ -13,97 +13,60 @@
   <br>
 </p>
 
+# rdedup
 
-## Introduction
+`rdedup` is the data deduplication engine and backup software
 
+`rdedup` is written in Rust and provides both command line tool
+and library API (`rdedup-lib`).
 
-`rdedup` is a tool providing data deduplication with compression and public key
-encryption written in Rust programming language. The primary use case is storing
-deduplicated and encrypted backups.
+`rdedup` is generally similar to existing software like
+ duplicacy, restic, attic, duplicity, zbackup, etc.
 
-**Warning: beta quality software ahead** - I use rdedup personally for a long while
-and it works well and noone reported any problems. I would really appreciate feedback
-from people using `rdedup`.
+ ## Features
 
-### My use case
+ * support for public-key encryption (the only tool like that I'm aware of,
+   and primary reason `rdedup` was created)
+ * flat-file synchronization friendly (Dropbox, syncthing) backend
+   * cloud backends are WIP
+ * garbage collection
+ * variety of supported algorithms:
+   * chunking: bup, gear
+   * hashing: blake2b, sha256
+   * compression: deflate, xz2, bzip2, zstd, none
+   * encryption: curve25519, none
+   * very easy to add new ones
+   * check `rdedup init --help` output for up-to-date list
+ * extreme performance and parallelism - see [Rust fearless
+   concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
+ * attention to reliability (eg. `rdedup` is using `fsync` + `rename`
+   to avoid data corruption even in case of hardware crash)
 
-I use [rdup][rdup] to create backup archive, and [syncthing][syncthing] to
-duplicate my backups over a lot of systems. Some of them are more trusted
-(desktops with disk-level encryption, firewalls, stored in the vault etc.), and
-some not so much (semi-personal laptops, phones etc.)
+### Strong parts
 
-As my backups tend to contain a lot of shared data (even backups taken on
-different systems), it makes perfect sense to deduplicate them.
+It's written in Rust. It's a modern language, that is actually really nice to use.
+Rust makes it easy to have a very robust and fast software.
 
-However I don't want one of my hosts being physically or
-remotely compromised, give access to data inside all my backups from all my
-systems.  Existing deduplication software like [ddar][ddar] or
-[zbackup][zbackup] provide encryption, but only symmetrical ([zbackup
-issue][zbackup-issue], [ddar issue][ddar-issue]) which means you have to share
-the same key on all your hosts and one compromised system gives access to all your
-backup data.
+The author is a nice person, welcomes contributions, and helps users. Or at
+least he's trying... :)
 
-To fill the missing piece in my master backup plan, I've decided to write it
-myself using my beloved Rust programming language.
+### Shortcomings and missing features:
 
-With time the projects grown into improvements and features to support
-other use cases.
+`rdedup` currently does not implement own backup/restore functionality (own
+directory traversal), and because of that it's typically paired with `tar`
+or `rdup` tools. Built-in directory traversal could improve deduplication
+ratio for workloads with many small files.
 
-## How it works
+Garbage collection could be optimized and made more scalable.
 
-`rdedup` works very much like [zbackup][zbackup] and other deduplication software
-with a little twist:
+Cloud storage integrations are missing. The architecture to support it is
+mostly implemented, but the actual backends are not.
 
-* Thanks to public key cryptography, secure passpharse is required only
-  when restoring data, while adding and deduplicating new data does not.
-* Everything is synchronization friendly. Dropbox, Syncthing and similar
-  should work fine for data synchronization.
-
-When storing data, `rdedup` will split it into smaller pieces - *chunks* - using
-rolling sum, and store each *chunk* under unique id (sha256 *digest*) in a
-special format directory: *repo*. Then the whole backup will be described as
-*index*: a list of *digests*.
-
-*Index* will be stored internally just like the data itself. Recursively, this
-reduces each backup to one unique *digest*, which is saved under given *name*.
-
-When restoring data, `rdedup` will read the *index*, then restore the data, reading
-each *chunk* listed in it.
-
-Thanks to rolling sum chunking scheme, when saving frequently similar data, a
-lot of common *chunks* will be reused, saving space.
-
-What makes `rdedup` unique, is that every time new *repo* directory is created,
-a pair of keys (public and secret) is generated. Public key is saved in the
-storage directory in plain text, while secret key is encrypted with key
-derived from a passphrase.
-
-Every time `rdedup` saves a new chunk file, its data is encrypted using public
-key so it can only be decrypted using the corresponding secret key. This way
-new data can always be added, with full deduplication, while only restoring
-data requires providing the passphrase to unlock the private key.
-
-Nice little detail: `rdedup` supports removing old *names* and no longer
-needed chunks (garbage collection) without passphrase. Only the data chunks
-are encrypted, making operations like garbage collection safe even on untrusted
-machines.
-
-### Technical Details
-
-* [bup][bup] methods of splitting files into chunks is used
-* sha256 sum of chunk data is used as digest id
-* [libsodium][libsodium]'s [sealed boxes][libsodium-sealed-boxes-doc] are used for encryption/decryption:
-  * ephemeral keys are used for sealing
-  * chunk digest is used as nonce
-* private key is encrypted using [libsodium][libsodium] `crypto secretbox`
-  using random nonce, and key derived from passphrase using password hashing
-  and random salt
-
-## Installation
+### Installation
 
 If you have `cargo` installed:
 
-```
+```rust
 cargo install rdedup
 ```
 
@@ -111,10 +74,11 @@ If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` but f
 
 [rustup]: https://www.rustup.rs/
 
-In case of troubles, check [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
-or report a new one!
+In case of troubles, check
+[rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+or report a new one (sorry)!
 
-## Usage
+### Usage
 
 See `rdedup -h` for help.
 
@@ -127,15 +91,16 @@ Supported commands:
 * `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
 * `rdedup gc` - remove any no longer reachable data
 
+Check `rdedup init --help` for repository configuration options.
 
 In combination with [rdup][rdup] this can be used to store and restore your backup like this:
 
-```
+```rust
 rdup -x /dev/null "$HOME" | rdedup store home
 rdedup load home | rdup-up "$HOME.restored"
 ```
 
-Rdedup is data agnostic, so formats like `tar`, `cpio` and other will work,
+`rdedup` is data agnostic, so formats like `tar`, `cpio` and other will work,
 but to get benefits of deduplication, archive format should not be compressed
 or encrypted already.
 
@@ -146,9 +111,7 @@ or encrypted already.
 [zbackup-issue]: https://github.com/zbackup/zbackup/issues/109
 [ddar]: https://github.com/basak/ddar/
 [ddar-issue]: https://github.com/basak/ddar/issues/10
-[libsodium-sealed-boxes-doc]: https://download.libsodium.org/doc/public-key_cryptography/sealed_boxes.html
-[libsodium]: https://github.com/jedisct1/libsodium
 
 # License
 
-MPL-2
+`rdedup` is licensed under: MPL-2.0

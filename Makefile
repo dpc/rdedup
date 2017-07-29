@@ -40,6 +40,12 @@ bench:
 travistest:
 	for i in `seq 1`; do make test || exit 1 ; done
 
+.PHONY: readme
+readme: README.md
+
+README.md: README.tpl src/bin.rs
+	cargo readme > README.md
+
 .PHONY: longtest
 longtest:
 	@echo "Running longtest. Press Ctrl+C to stop at any time"
