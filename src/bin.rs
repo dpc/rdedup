@@ -87,6 +87,11 @@
 //! but to get benefits of deduplication, archive format should not be compressed
 //! or encrypted already.
 //!
+//! # `RDEDUP_PASSPHRASE` environment variable
+//!
+//! While it's not advised, if `RDEDUP_PASSPHRASE` is defined, it will be used
+//! instead of interactively asking user for password.
+//!
 //! [bup]: https://github.com/bup/bup/
 //! [rdup]: https://github.com/miekg/rdup
 //! [syncthing]: https://syncthing.net
