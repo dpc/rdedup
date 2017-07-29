@@ -15,6 +15,18 @@ exclude = ["lib/**/*"]
 name = "rdedup"
 path = "src/bin.rs"
 
+[profile.dev]
+opt-level = 0
+debug = true
+lto = false
+debug-assertions = true
+
+[profile.test]
+opt-level = 2
+debug = true
+lto = false
+debug-assertions = true
+
 [profile.release]
 opt-level = 3
 debug = true

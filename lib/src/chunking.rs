@@ -19,7 +19,7 @@ impl Bup {
 
 impl Chunking for Bup {
     fn find_chunk_edge(&mut self, data: &[u8]) -> Option<usize> {
-        self.engine.find_chunk_edge(data)
+        self.engine.find_chunk_edge(data).map(|u| u.0 as usize)
     }
 }
 
@@ -39,7 +39,6 @@ impl Gear {
 
 impl Chunking for Gear {
     fn find_chunk_edge(&mut self, data: &[u8]) -> Option<usize> {
-        self.engine.find_chunk_edge(data)
-
+        self.engine.find_chunk_edge(data).map(|u| u.0 as usize)
     }
 }
