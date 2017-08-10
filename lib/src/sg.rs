@@ -97,8 +97,11 @@ pub struct Chunk {
 
 pub(crate) struct Chunker<I> {
     iter: I,
-    cur_sg: Vec<ArcRef<Vec<u8>, [u8]>>,
-    cur_buf: Option<ArcRef<Vec<u8>, [u8]>>,
+    /// Pieces of chunk to return next, but yet
+    /// not complete
+    incomplete_chunk: Vec<ArcRef<Vec<u8>, [u8]>>,
+    /// Data that wasn't chunked yet
+    pending: Option<ArcRef<Vec<u8>, [u8]>>,
 
     chunks_returned: usize,
     chunking: Box<chunking::Chunking>,
@@ -108,8 +111,8 @@ impl<I> Chunker<I> {
     pub fn new(iter: I, chunking: Box<chunking::Chunking>) -> Self {
         Chunker {
             iter: iter,
-            cur_sg: Vec::new(),
-            cur_buf: None,
+            incomplete_chunk: Vec::new(),
+            pending: None,
             chunks_returned: 0,
             chunking: chunking,
         }
@@ -122,28 +125,29 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
     fn next(&mut self) -> Option<Self::Item> {
 
         loop {
-            if self.cur_buf.is_none() {
-                self.cur_buf = self.iter
+            if self.pending.is_none() {
+                self.pending = self.iter
                     .next()
                     .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()));
             }
 
-            if let Some(buf) = self.cur_buf.take() {
+            if let Some(buf) = self.pending.take() {
                 if let Some((last, rest)) = self.chunking.find_chunk(&*buf) {
-                    self.cur_sg.push(buf.clone().map(|cur| &cur[..last.len()]));
-                    self.cur_buf = if rest.is_empty() {
+                    self.incomplete_chunk
+                        .push(buf.clone().map(|cur| &cur[..last.len()]));
+                    self.pending = if rest.is_empty() {
                         None
                     } else {
                         Some(buf.clone().map(|cur| &cur[last.len()..]))
                     };
                     self.chunks_returned += 1;
                     return Some(SGData::from_vec(
-                        mem::replace(&mut self.cur_sg, vec![]),
+                        mem::replace(&mut self.incomplete_chunk, vec![]),
                     ));
                 }
-                self.cur_sg.push(buf);
+                self.incomplete_chunk.push(buf);
             } else {
-                if self.cur_sg.is_empty() {
+                if self.incomplete_chunk.is_empty() {
                     if self.chunks_returned == 0 {
                         // at least one, zero sized chunk
                         self.chunks_returned += 1;
@@ -154,7 +158,7 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                 } else {
                     self.chunks_returned += 1;
                     return Some(SGData::from_vec(
-                        mem::replace(&mut self.cur_sg, vec![]),
+                        mem::replace(&mut self.incomplete_chunk, vec![]),
                     ));
                 }
             }
