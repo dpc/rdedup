@@ -9,42 +9,6 @@ use std::{io, mem};
 use std::result::Result;
 use std::sync::Arc;
 
-/*
-/// For mocking in tests
-pub trait EdgeFinderTrait {
-    fn find_edges(&mut self, buf: &[u8]) -> Vec<usize>;
-}
-
-/// Finds edges using rolling sum
-pub struct EdgeFinder {
-    chunking: Box<chunking::Chunking>,
-}
-
-impl EdgeFinder {
-    pub(crate) fn new(chunking: Box<chunking::Chunking>) -> Self {
-        EdgeFinder { chunking: chunking }
-    }
-}
-
-impl EdgeFinderTrait for EdgeFinder {
-    fn find_edges(&mut self, buf: &[u8]) -> Vec<usize> {
-        let mut ofs: usize = 0;
-        let len = buf.len();
-        let mut edges = vec![];
-
-        while ofs < len {
-            if let Some(count) = self.chunking.find_chunk(&buf[ofs..len]) {
-                ofs += count;
-
-                edges.push(ofs);
-            } else {
-                break;
-            }
-        }
-        edges
-    }
-}
-*/
 pub struct ReaderVecIter<R: io::Read> {
     reader: R,
     buf_size: usize,
@@ -196,50 +160,6 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
             }
         }
     }
-
-    /*fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            self.cur_buf_edges = if let Some((buf, edges)) =
-                self.cur_buf_edges.clone()
-            {
-                if self.cur_edge_i < edges.len() {
-                    let edge = edges[self.cur_edge_i];
-                    let aref = ArcRef::new(buf.clone())
-                        .map(|a| &a[self.cur_buf_i..edge]);
-                    self.cur_sgbuf.as_vec_mut().push(aref);
-                    self.cur_edge_i += 1;
-                    self.cur_buf_i = edge;
-                    self.chunks_returned += 1;
-                    return Some(
-                        mem::replace(&mut self.cur_sgbuf, SGData::empty()),
-                    );
-                } else {
-                    if self.cur_buf_i != buf.len() {
-                        let aref = ArcRef::new(buf.clone())
-                            .map(|a| &a[self.cur_buf_i..]);
-                        self.cur_sgbuf.as_vec_mut().push(aref);
-                    }
-                    self.cur_buf_i = 0;
-                    None
-                }
-            } else if let Some(buf) = self.iter.next() {
-                self.cur_edge_i = 0;
-                let edges = self.edge_finder.find_edges(&buf[..]);
-                Some((Arc::new(buf), edges))
-            } else if self.cur_sgbuf.as_parts().is_empty() {
-                if self.chunks_returned == 0 {
-                    // at least one, zero sized chunk
-                    self.chunks_returned += 1;
-                    return Some(SGData::empty());
-                } else {
-                    return None;
-                }
-            } else {
-                self.chunks_returned += 1;
-                return Some(mem::replace(&mut self.cur_sgbuf, SGData::empty()));
-            }
-        }
-    }*/
 }
 
 #[cfg(test)]
