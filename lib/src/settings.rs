@@ -21,12 +21,18 @@ impl Default for Compression {
 impl Compression {
     pub fn to_config(&self, level: i32) -> config::Compression {
         match *self {
-            Compression::Deflate =>
-                config::Compression::Deflate(config::Deflate::new(level)),
-            Compression::Xz2 => config::Compression::Xz2(config::Xz2::new(level)),
-            Compression::Bzip2 =>
-                config::Compression::Bzip2(config::Bzip2::new(level)),
-            Compression::Zstd => config::Compression::Zstd(config::Zstd::new(level)),
+            Compression::Deflate => {
+                config::Compression::Deflate(config::Deflate::new(level))
+            }
+            Compression::Xz2 => {
+                config::Compression::Xz2(config::Xz2::new(level))
+            }
+            Compression::Bzip2 => {
+                config::Compression::Bzip2(config::Bzip2::new(level))
+            }
+            Compression::Zstd => {
+                config::Compression::Zstd(config::Zstd::new(level))
+            }
             Compression::None => config::Compression::None,
         }
     }
@@ -112,11 +118,9 @@ impl Repo {
         Ok(())
     }
 
-    pub fn set_compression_level(
-        &mut self,
-        level: i32) {
+    pub fn set_compression_level(&mut self, level: i32) {
         self.compression_level = level;
-        }
+    }
 
     pub fn set_hashing(&mut self, hashing: Hashing) -> io::Result<()> {
         self.hashing = hashing;
@@ -126,6 +130,23 @@ impl Repo {
     pub fn use_bup_chunking(&mut self, bits: Option<u32>) -> super::Result<()> {
         let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
         let chunking = config::Chunking::Bup { chunk_bits: bits };
+
+        if !chunking.valid() {
+            return Err(super::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid chunking algorithm defined",
+            ));
+        }
+        self.chunking = Chunking(chunking);
+        Ok(())
+    }
+
+    pub fn use_fastcdc_chunking(
+        &mut self,
+        bits: Option<u32>,
+    ) -> super::Result<()> {
+        let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
+        let chunking = config::Chunking::FastCDC { chunk_bits: bits };
 
         if !chunking.valid() {
             return Err(super::Error::new(

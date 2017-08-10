@@ -4,9 +4,9 @@ use lzma;
 use owning_ref::ArcRef;
 use sgdata::SGData;
 use std;
-use std::{io, cmp};
+use std::{cmp, io};
 
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::sync::Arc;
 use zstd;
 
@@ -33,18 +33,16 @@ pub struct Deflate {
 }
 
 impl Deflate {
-    pub fn new(level : i32) -> Self {
+    pub fn new(level: i32) -> Self {
         let level = if level < 0 {
             flate2::Compression::Fast
-        } else if level > 0{
+        } else if level > 0 {
             flate2::Compression::Best
         } else {
             flate2::Compression::Default
         };
 
-        Deflate {
-            level: level,
-        }
+        Deflate { level: level }
     }
 }
 
@@ -78,7 +76,7 @@ pub struct Bzip2 {
 }
 
 impl Bzip2 {
-    pub fn new(level : i32) -> Self {
+    pub fn new(level: i32) -> Self {
         let level = if level < 0 {
             bzip2::Compression::Fastest
         } else if level > 0 {
@@ -87,9 +85,7 @@ impl Bzip2 {
             bzip2::Compression::Default
         };
 
-        Bzip2 {
-            level: level,
-        }
+        Bzip2 { level: level }
     }
 }
 
@@ -123,12 +119,10 @@ pub struct Xz2 {
 }
 
 impl Xz2 {
-    pub fn new(level : i32) -> Self {
+    pub fn new(level: i32) -> Self {
         let level = cmp::min(cmp::max(level + 6, 0), 10) as u32;
 
-        Xz2 {
-            level: level,
-        }
+        Xz2 { level: level }
     }
 }
 
@@ -137,7 +131,8 @@ impl Compression for Xz2 {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
             let mut compressor =
-                lzma::LzmaWriter::new_compressor(&mut backing, self.level).unwrap();
+                lzma::LzmaWriter::new_compressor(&mut backing, self.level)
+                    .unwrap();
             for sg_part in buf.as_parts() {
                 // compressor.write can sometimes return zero, so we can't just
                 // use write_all; see
@@ -186,10 +181,8 @@ pub struct Zstd {
 }
 
 impl Zstd {
-    pub fn new(level : i32) -> Self {
-        Zstd {
-            level: level,
-        }
+    pub fn new(level: i32) -> Self {
+        Zstd { level: level }
     }
 }
 
@@ -235,7 +228,8 @@ impl Compression for Zstd {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
-            let mut compressor = zstd::Encoder::new(&mut backing, self.level).unwrap();
+            let mut compressor =
+                zstd::Encoder::new(&mut backing, self.level).unwrap();
             for sg_part in buf.as_parts() {
                 compressor.write_all(&sg_part).unwrap()
             }

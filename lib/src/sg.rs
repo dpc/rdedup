@@ -9,6 +9,7 @@ use std::{io, mem};
 use std::result::Result;
 use std::sync::Arc;
 
+/*
 /// For mocking in tests
 pub trait EdgeFinderTrait {
     fn find_edges(&mut self, buf: &[u8]) -> Vec<usize>;
@@ -32,7 +33,7 @@ impl EdgeFinderTrait for EdgeFinder {
         let mut edges = vec![];
 
         while ofs < len {
-            if let Some(count) = self.chunking.find_chunk_edge(&buf[ofs..len]) {
+            if let Some(count) = self.chunking.find_chunk(&buf[ofs..len]) {
                 ofs += count;
 
                 edges.push(ofs);
@@ -43,7 +44,7 @@ impl EdgeFinderTrait for EdgeFinder {
         edges
     }
 }
-
+*/
 pub struct ReaderVecIter<R: io::Read> {
     reader: R,
     buf_size: usize,
@@ -130,37 +131,73 @@ pub struct Chunk {
     data_type: DataType,
 }
 
-pub struct Chunker<I, EF> {
+pub(crate) struct Chunker<I> {
     iter: I,
-    cur_buf_edges: Option<(Arc<Vec<u8>>, Vec<usize>)>,
-    cur_buf_i: usize,
-    cur_edge_i: usize,
-    cur_sgbuf: SGData,
+    cur_sg: Vec<ArcRef<Vec<u8>, [u8]>>,
+    cur_buf: Option<ArcRef<Vec<u8>, [u8]>>,
+
     chunks_returned: usize,
-    edge_finder: EF,
+    chunking: Box<chunking::Chunking>,
 }
 
-impl<I, EF> Chunker<I, EF> {
-    pub fn new(iter: I, edge_finder: EF) -> Self {
+impl<I> Chunker<I> {
+    pub fn new(iter: I, chunking: Box<chunking::Chunking>) -> Self {
         Chunker {
             iter: iter,
-            cur_buf_edges: None,
-            cur_buf_i: 0,
-            cur_edge_i: 0,
-            cur_sgbuf: SGData::empty(),
+            cur_sg: Vec::new(),
+            cur_buf: None,
             chunks_returned: 0,
-            edge_finder: edge_finder,
+            chunking: chunking,
         }
     }
 }
 
-impl<I: Iterator<Item = Vec<u8>>, EF> Iterator for Chunker<I, EF>
-where
-    EF: EdgeFinderTrait,
-{
+impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
     type Item = SGData;
 
     fn next(&mut self) -> Option<Self::Item> {
+
+        loop {
+            if self.cur_buf.is_none() {
+                self.cur_buf = self.iter
+                    .next()
+                    .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()));
+            }
+
+            if let Some(buf) = self.cur_buf.take() {
+                if let Some((last, rest)) = self.chunking.find_chunk(&*buf) {
+                    self.cur_sg.push(buf.clone().map(|cur| &cur[..last.len()]));
+                    self.cur_buf = if rest.is_empty() {
+                        None
+                    } else {
+                        Some(buf.clone().map(|cur| &cur[last.len()..]))
+                    };
+                    self.chunks_returned += 1;
+                    return Some(SGData::from_vec(
+                        mem::replace(&mut self.cur_sg, vec![]),
+                    ));
+                }
+                self.cur_sg.push(buf);
+            } else {
+                if self.cur_sg.is_empty() {
+                    if self.chunks_returned == 0 {
+                        // at least one, zero sized chunk
+                        self.chunks_returned += 1;
+                        return Some(SGData::empty());
+                    } else {
+                        return None;
+                    }
+                } else {
+                    self.chunks_returned += 1;
+                    return Some(SGData::from_vec(
+                        mem::replace(&mut self.cur_sg, vec![]),
+                    ));
+                }
+            }
+        }
+    }
+
+    /*fn next(&mut self) -> Option<Self::Item> {
         loop {
             self.cur_buf_edges = if let Some((buf, edges)) =
                 self.cur_buf_edges.clone()
@@ -202,7 +239,7 @@ where
                 return Some(mem::replace(&mut self.cur_sgbuf, SGData::empty()));
             }
         }
-    }
+    }*/
 }
 
 #[cfg(test)]

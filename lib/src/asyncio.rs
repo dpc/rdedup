@@ -13,11 +13,11 @@ use slog;
 use slog::Logger;
 use slog_perf::TimeReporter;
 use std;
-use std::{fs, io, thread, mem};
+use std::{fs, io, mem, thread};
 use std::collections::HashMap;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use two_lock_queue;
 use walkdir::WalkDir;
@@ -128,14 +128,10 @@ impl AsyncIO {
             .expect("channel send failed");
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
-            Ok(batch) => {
-                Box::new(batch.into_iter().map(Ok)) as
-                    Box<Iterator<Item = io::Result<PathBuf>>>
-            }
-            Err(e) => {
-                Box::new(Some(Err(e)).into_iter()) as
-                    Box<Iterator<Item = io::Result<PathBuf>>>
-            }
+            Ok(batch) => Box::new(batch.into_iter().map(Ok)) as
+                Box<Iterator<Item = io::Result<PathBuf>>>,
+            Err(e) => Box::new(Some(Err(e)).into_iter()) as
+                Box<Iterator<Item = io::Result<PathBuf>>>,
         });
         Box::new(iter)
     }

@@ -45,6 +45,10 @@ impl SGData {
         SGData::from_many(vec![v])
     }
 
+    pub fn from_vec(v: Vec<ArcRef<Vec<u8>, [u8]>>) -> Self {
+        SGData(v)
+    }
+
     pub fn from_many(mut v: Vec<Vec<u8>>) -> Self {
         SGData(
             v.drain(..)

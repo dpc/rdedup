@@ -71,10 +71,8 @@ impl Iterator for StoredChunks {
                         // chunk
                         // file.
                     }
-                    Err(e) => {
-                        trace!(self.log, "skipping";
-                               "path" => %name, "error" => %e)
-                    }
+                    Err(e) => trace!(self.log, "skipping";
+                               "path" => %name, "error" => %e),
                 }
             } else {
                 return None;

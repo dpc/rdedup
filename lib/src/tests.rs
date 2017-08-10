@@ -6,9 +6,9 @@ use hex::ToHex;
 use iterators::StoredChunks;
 use rand::{self, Rng};
 use settings;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
-use std::{io, cmp};
+use std::{cmp, io};
 
 use std::collections::HashSet;
 use std::fs;

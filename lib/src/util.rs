@@ -1,4 +1,4 @@
-use {serde, box_, secretbox, pwhash, base64};
+use {box_, pwhash, secretbox, serde, base64};
 use serde::Deserialize;
 use std::io;
 

@@ -14,7 +14,7 @@
 //!    * cloud backends are WIP
 //!  * garbage collection
 //!  * variety of supported algorithms:
-//!    * chunking: bup, gear
+//!    * chunking: bup, gear, fastcdc
 //!    * hashing: blake2b, sha256
 //!    * compression: deflate, xz2, bzip2, zstd, none
 //!    * encryption: curve25519, none
@@ -27,7 +27,8 @@
 //!
 //! ## Strong parts
 //!
-//! It's written in Rust. It's a modern language, that is actually really nice to use.
+//! It's written in Rust. It's a modern language, that is actually really nice
+//! to use.
 //! Rust makes it easy to have a very robust and fast software.
 //!
 //! The author is a nice person, welcomes contributions, and helps users. Or at
@@ -53,12 +54,15 @@
 //! cargo install rdedup
 //! ```
 //!
-//! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm` but for Rust)
+//! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
+//! but for Rust)
 //!
 //! [rustup]: https://www.rustup.rs/
 //!
 //! In case of troubles, check
-//! [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+//! [rdedup building
+//! issues](https://github.
+//! com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 //! or report a new one (sorry)!
 //!
 //! ## Usage
@@ -67,24 +71,31 @@
 //!
 //! Supported commands:
 //!
-//! * `rdedup init` - create a *repo* directory with keypair used for encryption.
+//! * `rdedup init` - create a *repo* directory with keypair used for
+//! encryption.
 //! * `rdedup ls` - list all stored names.
-//! * `rdedup store <name>` - store data read from standard input under given *name*.
-//! * `rdedup load <name>` - load data stored under given *name* and write it on standard output
-//! * `rdedup rm <name>` - remove the given *name*. This by itself does not remove the data.
+//! * `rdedup store <name>` - store data read from standard input under given
+//! *name*.
+//! * `rdedup load <name>` - load data stored under given *name* and write it
+//! on standard output
+//! * `rdedup rm <name>` - remove the given *name*. This by itself does not
+//! remove the data.
 //! * `rdedup gc` - remove any no longer reachable data
 //!
 //! Check `rdedup init --help` for repository configuration options.
 //!
-//! In combination with [rdup][rdup] this can be used to store and restore your backup like this:
+//! In combination with [rdup][rdup] this can be used to store and restore your
+//! backup like this:
 //!
 //! ```
 //! rdup -x /dev/null "$HOME" | rdedup store home
 //! rdedup load home | rdup-up "$HOME.restored"
 //! ```
 //!
-//! `rdedup` is data agnostic, so formats like `tar`, `cpio` and other will work,
-//! but to get benefits of deduplication, archive format should not be compressed
+//! `rdedup` is data agnostic, so formats like `tar`, `cpio` and other will
+//! work,
+//! but to get benefits of deduplication, archive format should not be
+//! compressed
 //! or encrypted already.
 //!
 //! # `RDEDUP_PASSPHRASE` environment variable
@@ -116,7 +127,7 @@ use lib::Repo;
 use lib::settings;
 use serialize::hex::ToHex;
 use slog::Drain;
-use std::{io, process, env};
+use std::{env, io, process};
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -202,16 +213,15 @@ impl Options {
 
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
-            "bup" => {
-                self.settings
-                    .use_bup_chunking(chunk_size)
-                    .expect("wrong chunking settings")
-            }
-            "gear" => {
-                self.settings
-                    .use_gear_chunking(chunk_size)
-                    .expect("wrong chunking settings")
-            }
+            "bup" => self.settings
+                .use_bup_chunking(chunk_size)
+                .expect("wrong chunking settings"),
+            "gear" => self.settings
+                .use_gear_chunking(chunk_size)
+                .expect("wrong chunking settings"),
+            "fastcdc" => self.settings
+                .use_fastcdc_chunking(chunk_size)
+                .expect("wrong chunking settings"),
             _ => {
                 printerrln!("unsupported encryption: {}", s);
                 process::exit(-1);
@@ -221,16 +231,12 @@ impl Options {
 
     fn set_hashing(&mut self, s: &str) {
         match s {
-            "sha256" => {
-                self.settings
-                    .set_hashing(lib::settings::Hashing::Sha256)
-                    .expect("wrong hashing settings")
-            }
-            "blake2b" => {
-                self.settings
-                    .set_hashing(lib::settings::Hashing::Blake2b)
-                    .expect("wrong hashing settings")
-            }
+            "sha256" => self.settings
+                .set_hashing(lib::settings::Hashing::Sha256)
+                .expect("wrong hashing settings"),
+            "blake2b" => self.settings
+                .set_hashing(lib::settings::Hashing::Blake2b)
+                .expect("wrong hashing settings"),
             _ => {
                 printerrln!("unsupported hashing: {}", s);
                 process::exit(-1);
@@ -245,7 +251,7 @@ impl Options {
 
 
 mod util;
-use util::{read_passphrase, read_new_passphrase};
+use util::{read_new_passphrase, read_passphrase};
 
 fn validate_chunk_size(s: String) -> Result<(), String> {
     if let Some(_) = util::parse_size(&s) {
@@ -303,7 +309,7 @@ fn run() -> io::Result<()> {
         (@arg verbose: -v ... "Increase debugging level")
         (@subcommand init =>
          (about: "Create a new repository")
-         (@arg CHUNKING: --chunking possible_values(&["bup", "gear"]) +takes_value "Set chunking scheme. Default: gear")
+         (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"]) +takes_value "Set chunking scheme. Default: gear")
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
@@ -382,8 +388,11 @@ fn run() -> io::Result<()> {
                 options.set_compression(compression);
             }
             if let Some(compression_level) =
-                matches.value_of("COMPRESSION_LEVEL") {
-                options.settings.set_compression_level(i32::from_str(compression_level).unwrap());
+                matches.value_of("COMPRESSION_LEVEL")
+            {
+                options.settings.set_compression_level(
+                    i32::from_str(compression_level).unwrap(),
+                );
             }
             if let Some(nesting) = matches.value_of("NESTING") {
                 options.set_nesting(u8::from_str(nesting).unwrap());

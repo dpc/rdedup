@@ -64,6 +64,8 @@ pub enum Chunking {
     Bup { chunk_bits: u32 },
     #[serde(rename = "gear")]
     Gear { chunk_bits: u32 },
+    #[serde(rename = "fastcdc")]
+    FastCDC { chunk_bits: u32 },
 }
 
 /// Default implementation for the `Chunking`
@@ -80,17 +82,21 @@ impl Chunking {
         match self {
             Chunking::Bup { chunk_bits: bits } => 30 >= bits && bits >= 10,
             Chunking::Gear { chunk_bits: bits } => 30 >= bits && bits >= 10,
+            Chunking::FastCDC { chunk_bits: bits } => 30 >= bits && bits >= 10,
         }
     }
 
     pub(crate) fn to_engine(&self) -> Box<chunking::Chunking> {
         match *self {
-            Chunking::Bup { chunk_bits } => Box::new(
-                chunking::Bup::new(chunk_bits),
-            ),
-            Chunking::Gear { chunk_bits } => Box::new(
-                chunking::Gear::new(chunk_bits),
-            ),
+            Chunking::Bup { chunk_bits } => {
+                Box::new(chunking::Bup::new(chunk_bits))
+            }
+            Chunking::Gear { chunk_bits } => {
+                Box::new(chunking::Gear::new(chunk_bits))
+            }
+            Chunking::FastCDC { chunk_bits } => {
+                Box::new(chunking::FastCDC::new(chunk_bits))
+            }
         }
     }
 }
@@ -103,9 +109,7 @@ pub struct Deflate {
 
 impl Deflate {
     pub fn new(level: i32) -> Self {
-        Deflate {
-            level: level,
-        }
+        Deflate { level: level }
     }
 }
 
@@ -117,9 +121,7 @@ pub struct Bzip2 {
 
 impl Bzip2 {
     pub fn new(level: i32) -> Self {
-        Bzip2 {
-            level: level,
-        }
+        Bzip2 { level: level }
     }
 }
 
@@ -132,9 +134,7 @@ pub struct Zstd {
 
 impl Zstd {
     pub fn new(level: i32) -> Self {
-        Zstd {
-            level: level,
-        }
+        Zstd { level: level }
     }
 }
 
@@ -147,9 +147,7 @@ pub struct Xz2 {
 
 impl Xz2 {
     pub fn new(level: i32) -> Self {
-        Xz2 {
-            level: level,
-        }
+        Xz2 { level: level }
     }
 }
 
@@ -171,9 +169,7 @@ pub enum Compression {
 
 impl Default for Compression {
     fn default() -> Compression {
-        Compression::Deflate(Deflate {
-            level: 0
-        })
+        Compression::Deflate(Deflate { level: 0 })
     }
 }
 
@@ -181,7 +177,9 @@ impl Compression {
     pub(crate) fn to_engine(&self) -> compression::ArcCompression {
         match *self {
             Compression::None => Arc::new(compression::NoCompression),
-            Compression::Deflate(d) => Arc::new(compression::Deflate::new(d.level)),
+            Compression::Deflate(d) => {
+                Arc::new(compression::Deflate::new(d.level))
+            }
             Compression::Xz2(d) => Arc::new(compression::Xz2::new(d.level)),
             Compression::Bzip2(d) => Arc::new(compression::Bzip2::new(d.level)),
             Compression::Zstd(d) => Arc::new(compression::Zstd::new(d.level)),
@@ -317,8 +315,9 @@ impl Repo {
             version: REPO_VERSION_CURRENT,
             chunking: settings.chunking.0,
             encryption: encryption,
-            compression:
-                settings.compression.to_config(settings.compression_level),
+            compression: settings
+                .compression
+                .to_config(settings.compression_level),
             nesting: settings.nesting.to_config(),
             hashing: settings.hashing.to_config(),
         })

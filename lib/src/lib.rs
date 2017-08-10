@@ -34,11 +34,11 @@ use slog_perf::TimeReporter;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
-use std::{io, fs};
+use std::{fs, io};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error as StdErrorError;
-use std::io::{Read, Write, Result, Error};
+use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
@@ -774,7 +774,7 @@ impl Repo {
 
                     let chunker = Chunker::new(
                         input_data_iter.into_iter(),
-                        EdgeFinder::new(self.config.chunking.to_engine()),
+                        self.config.chunking.to_engine(),
                     );
 
                     // TODO: Change to `enumerate_u64`

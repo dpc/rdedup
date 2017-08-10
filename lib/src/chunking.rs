@@ -1,8 +1,11 @@
 use rollsum;
 
+use rollsum::CDC;
+
 /// Abstraction over the specific chunking algorithms being used
 pub(crate) trait Chunking {
-    fn find_chunk_edge(&mut self, &[u8]) -> Option<usize>;
+    fn find_chunk<'a>(&mut self, buf: &'a [u8])
+        -> Option<(&'a [u8], &'a [u8])>;
 }
 
 pub(crate) struct Bup {
@@ -18,8 +21,11 @@ impl Bup {
 }
 
 impl Chunking for Bup {
-    fn find_chunk_edge(&mut self, data: &[u8]) -> Option<usize> {
-        self.engine.find_chunk_edge(data).map(|u| u.0 as usize)
+    fn find_chunk<'a>(
+        &mut self,
+        buf: &'a [u8],
+    ) -> Option<(&'a [u8], &'a [u8])> {
+        self.engine.find_chunk(buf)
     }
 }
 
@@ -38,7 +44,33 @@ impl Gear {
 
 
 impl Chunking for Gear {
-    fn find_chunk_edge(&mut self, data: &[u8]) -> Option<usize> {
-        self.engine.find_chunk_edge(data).map(|u| u.0 as usize)
+    fn find_chunk<'a>(
+        &mut self,
+        buf: &'a [u8],
+    ) -> Option<(&'a [u8], &'a [u8])> {
+        self.engine.find_chunk(buf)
+    }
+}
+
+pub(crate) struct FastCDC {
+    engine: rollsum::FastCDC,
+}
+
+
+impl FastCDC {
+    pub fn new(bits: u32) -> Self {
+        FastCDC {
+            engine: rollsum::FastCDC::new_with_chunk_bits(bits),
+        }
+    }
+}
+
+
+impl Chunking for FastCDC {
+    fn find_chunk<'a>(
+        &mut self,
+        buf: &'a [u8],
+    ) -> Option<(&'a [u8], &'a [u8])> {
+        self.engine.find_chunk(buf)
     }
 }
