@@ -406,7 +406,7 @@ impl AsyncIOThread {
             Err(_) => {
                 // Workaround
                 // https://github.com/rust-lang/rust/issues/33707
-                let _ = fs::create_dir_all(path.parent().unwrap())?;
+                let _ = fs::create_dir_all(path.parent().unwrap());
 
                 fs::create_dir_all(path.parent().unwrap())?;
                 fs::File::create(&tmp_path)
