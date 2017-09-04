@@ -125,20 +125,15 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
     fn next(&mut self) -> Option<Self::Item> {
 
         loop {
-            if self.pending.is_none() {
-                self.pending = self.iter
-                    .next()
-                    .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()));
-            }
-
-            if let Some(buf) = self.pending.take() {
+            if let Some(buf) = self.pending.take()
+                .or_else(|| self.iter
+                         .next()
+                         .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()))) {
                 if let Some((last, rest)) = self.chunking.find_chunk(&*buf) {
                     self.incomplete_chunk
                         .push(buf.clone().map(|cur| &cur[..last.len()]));
-                    self.pending = if rest.is_empty() {
-                        None
-                    } else {
-                        Some(buf.clone().map(|cur| &cur[last.len()..]))
+                    if !rest.is_empty() {
+                        self.pending = Some(buf.clone().map(|cur| &cur[last.len()..]))
                     };
                     self.chunks_returned += 1;
                     return Some(SGData::from_vec(
@@ -146,7 +141,12 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                     ));
                 }
                 self.incomplete_chunk.push(buf);
-            } else if self.incomplete_chunk.is_empty() {
+            } else if !self.incomplete_chunk.is_empty() {
+                self.chunks_returned += 1;
+                return Some(SGData::from_vec(
+                        mem::replace(&mut self.incomplete_chunk, vec![]),
+                        ));
+            } else {
                 if self.chunks_returned == 0 {
                     // at least one, zero sized chunk
                     self.chunks_returned += 1;
@@ -154,11 +154,6 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                 } else {
                     return None;
                 }
-            } else {
-                self.chunks_returned += 1;
-                return Some(SGData::from_vec(
-                        mem::replace(&mut self.incomplete_chunk, vec![]),
-                        ));
             }
         }
     }
