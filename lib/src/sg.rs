@@ -19,7 +19,6 @@ where
     R: io::Read,
 {
     pub fn new(reader: R, buf_size: usize) -> Self {
-
         ReaderVecIter {
             reader: reader,
             buf_size: buf_size,
@@ -34,7 +33,6 @@ where
     type Item = io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         let mut buf: Vec<u8> = vec![0u8; self.buf_size];
         match self.reader.read(&mut buf) {
             Ok(len) => {
@@ -60,7 +58,6 @@ impl<I, E> WhileOk<I, E> {
     where
         I: Iterator<Item = Result<O, E>>,
     {
-
         WhileOk {
             e: None,
             i: into_iter.into_iter(),
@@ -123,17 +120,18 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
     type Item = SGData;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         loop {
-            if let Some(buf) = self.pending.take()
-                .or_else(|| self.iter
-                         .next()
-                         .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()))) {
+            if let Some(buf) = self.pending.take().or_else(|| {
+                self.iter
+                    .next()
+                    .map(|v| ArcRef::new(Arc::new(v)).map(|a| a.as_slice()))
+            }) {
                 if let Some((last, rest)) = self.chunking.find_chunk(&*buf) {
                     self.incomplete_chunk
                         .push(buf.clone().map(|cur| &cur[..last.len()]));
                     if !rest.is_empty() {
-                        self.pending = Some(buf.clone().map(|cur| &cur[last.len()..]))
+                        self.pending =
+                            Some(buf.clone().map(|cur| &cur[last.len()..]))
                     };
                     self.chunks_returned += 1;
                     return Some(SGData::from_vec(
@@ -144,8 +142,8 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
             } else if !self.incomplete_chunk.is_empty() {
                 self.chunks_returned += 1;
                 return Some(SGData::from_vec(
-                        mem::replace(&mut self.incomplete_chunk, vec![]),
-                        ));
+                    mem::replace(&mut self.incomplete_chunk, vec![]),
+                ));
             } else {
                 if self.chunks_returned == 0 {
                     // at least one, zero sized chunk

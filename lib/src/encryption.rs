@@ -67,7 +67,6 @@ pub struct Curve25519 {
 
 impl Curve25519 {
     pub fn new(passphrase_f: PassphraseFn) -> super::Result<Self> {
-
         let (pk, sk) = box_::gen_keypair();
         let passphrase = passphrase_f()?;
 
@@ -92,7 +91,6 @@ impl Curve25519 {
         &self,
         passphrase_f: &Fn() -> io::Result<String>,
     ) -> io::Result<box_::SecretKey> {
-
         let passphrase = passphrase_f()?;
 
         let derived_key = misc::derive_key(&passphrase, &self.salt)?;
@@ -105,12 +103,12 @@ impl Curve25519 {
                     )
                 })?;
 
-        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(
-            || io::Error::new(
+        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+            io::Error::new(
                 io::ErrorKind::InvalidData,
                 "plain secret key in a wrong format",
-            ),
-        )?)
+            )
+        })?)
     }
 
     fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {
@@ -138,14 +136,11 @@ impl EncryptionEngine for Curve25519 {
         self.sealed_sec_key = sealed_sk;
 
         Ok(())
-
     }
     fn encrypter(&self, _pass: PassphraseFn) -> io::Result<ArcEncrypter> {
-
         let key = self.unseal_encrypt()?;
 
         Ok(Arc::new(Curve25519Encrypter { pub_key: key }))
-
     }
     fn decrypter(
         &self,
@@ -162,7 +157,6 @@ struct Curve25519Encrypter {
 
 impl Encrypter for Curve25519Encrypter {
     fn encrypt(&self, buf: SGData, digest: &[u8]) -> super::Result<SGData> {
-
         let nonce = box_::Nonce::from_slice(&digest[0..box_::NONCEBYTES])
             .expect("Nonce::from_slice failed");
 
@@ -195,13 +189,15 @@ impl Decrypter for Curve25519Decrypter {
 
         let ephemeral_pub = box_::PublicKey::from_slice(
             &buf[..box_::PUBLICKEYBYTES],
-        ).ok_or_else(|| io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "Can't read ephemeral public key from chunk: {}",
-                digest.to_hex()
-            ),
-        ))?;
+        ).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Can't read ephemeral public key from chunk: {}",
+                    digest.to_hex()
+                ),
+            )
+        })?;
 
         Ok(SGData::from_single(box_::open(
             &buf[box_::PUBLICKEYBYTES..],

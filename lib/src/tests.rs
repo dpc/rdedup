@@ -68,7 +68,6 @@ struct ExampleDataGen {
 
 impl ExampleDataGen {
     fn new(kb: usize) -> Self {
-
         ExampleDataGen {
             a: rand_data(1024 * 2),
             b: rand_data(1024 * 2),
@@ -136,7 +135,6 @@ fn zero_size() {
         let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
         repo.write("zero", &mut io::Cursor::new(zero), &enc_handle)
             .unwrap();
-
     }
 
     let mut read_zero = Vec::new();
@@ -387,7 +385,6 @@ fn test_custom_chunking_size() {
     for &bits in &[9, 10, 17, 20, 30, 31] {
         let dir_path = rand_tmp_dir();
         {
-
             let mut settings = settings::Repo::new();
             let result = settings.use_bup_chunking(Some(bits));
 
@@ -420,7 +417,6 @@ fn test_custom_nesting() {
     for &level in &[0, 1, 4, 31, 64] {
         let dir_path = rand_tmp_dir();
         {
-
             let mut settings = settings::Repo::new();
             let result = settings.set_nesting(level);
 

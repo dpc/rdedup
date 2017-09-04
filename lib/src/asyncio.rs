@@ -59,7 +59,6 @@ impl AsyncIO {
 
         let join = (0..thread_num)
             .map(|_| {
-
                 let rx = rx.clone();
                 let shared = shared.clone();
                 let log = log.clone();
@@ -219,7 +218,6 @@ pub struct AsyncIOShared {
 
 impl Drop for AsyncIOShared {
     fn drop(&mut self) {
-
         trace!(self.log, "Waiting for all threads to finish");
         for join in self.join.drain(..) {
             join.join().expect("AsyncIO worker thread panicked")
@@ -298,7 +296,6 @@ impl AsyncIOThread {
         rx: two_lock_queue::Receiver<Message>,
         log: Logger,
     ) -> Self {
-
         let t = TimeReporter::new("chunk-writer", log.clone());
         AsyncIOThread {
             root_path: root_path,
@@ -310,13 +307,10 @@ impl AsyncIOThread {
     }
 
     pub fn run(&mut self) {
-
         loop {
-
             self.time_reporter.start("rx");
 
             if let Ok(msg) = self.rx.recv() {
-
                 match msg {
                     Message::Write(WriteArgs {
                         path,
@@ -343,7 +337,6 @@ impl AsyncIOThread {
         idempotent: bool,
         tx: Option<mpsc::Sender<io::Result<()>>>,
     ) {
-
         trace!(self.log, "write"; "path" => %path.display());
 
         let path = self.root_path.join(path);
@@ -361,7 +354,6 @@ impl AsyncIOThread {
         idempotent: bool,
         sg: SGData,
     ) -> io::Result<()> {
-
         self.time_reporter.start("processing write");
 
         // check `in_progress` and add atomically
@@ -438,7 +430,6 @@ impl AsyncIOThread {
 
 
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {
-
         trace!(self.log, "read"; "path" => %path.display());
 
         let path = self.root_path.join(path);
@@ -449,7 +440,6 @@ impl AsyncIOThread {
     }
 
     fn read_inner(&mut self, path: PathBuf) -> io::Result<SGData> {
-
         self.time_reporter.start("read");
 
         // check `in_progress` and return the that if present
@@ -458,7 +448,6 @@ impl AsyncIOThread {
 
             if let Some(sg) = sh.in_progress.get(&path) {
                 return Ok(sg.clone());
-
             }
         }
 
@@ -467,7 +456,6 @@ impl AsyncIOThread {
 
         let mut bufs = Vec::new();
         loop {
-
             let mut buf: Vec<u8> = vec![0u8; INGRESS_BUFFER_SIZE];
             let len = file.read(&mut buf[..])?;
 
@@ -484,7 +472,6 @@ impl AsyncIOThread {
         path: PathBuf,
         tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
     ) {
-
         trace!(self.log, "list"; "path" => %path.display());
 
         let path = self.root_path.join(path);
@@ -495,7 +482,6 @@ impl AsyncIOThread {
     }
 
     fn list_inner(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {
-
         self.time_reporter.start("list");
 
         let mut v = vec![];
@@ -522,7 +508,6 @@ impl AsyncIOThread {
         path: PathBuf,
         tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
     ) {
-
         trace!(self.log, "list"; "path" => %path.display());
         self.time_reporter.start("list");
 

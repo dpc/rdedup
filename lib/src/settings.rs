@@ -105,7 +105,6 @@ impl Repo {
     }
 
     pub fn set_encryption(&mut self, encryption: Encryption) -> io::Result<()> {
-
         self.encryption = encryption;
         Ok(())
     }

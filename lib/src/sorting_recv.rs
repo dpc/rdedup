@@ -35,7 +35,6 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         loop {
             if let Some(item) = self.early_items.remove(&self.next_i) {
                 self.next_i += 1;

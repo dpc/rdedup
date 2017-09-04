@@ -20,8 +20,9 @@
 //!    * encryption: curve25519, none
 //!    * very easy to add new ones
 //!    * check `rdedup init --help` output for up-to-date list
-//!  * extreme performance and parallelism - see [Rust fearless
-//!    concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
+//!  * extreme performance and parallelism - see
+//!    [Rust fearless concurrency in `rdedup`]
+//!    (https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
 //!  * attention to reliability (eg. `rdedup` is using `fsync` + `rename`
 //!    to avoid data corruption even in case of hardware crash)
 //!
@@ -111,15 +112,15 @@
 //! [ddar]: https://github.com/basak/ddar/
 //! [ddar-issue]: https://github.com/basak/ddar/issues/10
 
-extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate clap;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
+extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate slog;
-extern crate slog_term;
 extern crate slog_async;
+extern crate slog_term;
 
 
 use lib::Repo;
@@ -254,7 +255,9 @@ use util::{read_new_passphrase, read_passphrase};
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn validate_chunk_size(s: String) -> Result<(), String> {
-    util::parse_size(&s).map(|_| ()).ok_or_else(|| "Can't parse a human readable byte-size value".into())
+    util::parse_size(&s)
+        .map(|_| ())
+        .ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
@@ -302,17 +305,28 @@ fn run() -> io::Result<()> {
         (version: env!("CARGO_PKG_VERSION"))
         (author: "Dawid Ciężarkiewicz <dpc@dpc.pw>")
         (about: "Data deduplication toolkit")
-        (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. Override `RDEDUP_DIR` environment variable.")
+        (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. \
+         Override `RDEDUP_DIR` environment variable.")
         (@arg verbose: -v ... "Increase debugging level")
         (@subcommand init =>
          (about: "Create a new repository")
-         (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"]) +takes_value "Set chunking scheme. Default: gear")
-         (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
-         (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
-         (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
-         (@arg COMPRESSION_LEVEL : --("compression-level") +takes_value "Set compression level where negative numbers mean \"faster\" and positive ones \"smaller\". Default: 0")
-         (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
-         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: blake2b")
+         (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"])
+          +takes_value "Set chunking scheme. Default: gear")
+         (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size}
+          +takes_value "Set average chunk size")
+         (@arg ENCRYPTION: --encryption possible_values(&["curve25519", "none"])
+          +takes_value "Set encryption scheme. Default: curve25519")
+         (@arg COMPRESSION : --compression possible_values(
+                 &["deflate", "xz2", "zstd", "none"]
+                 )
+          +takes_value "Set compression scheme. Default: deflate")
+         (@arg COMPRESSION_LEVEL : --("compression-level")
+          +takes_value "Set compression level where negative numbers mean \
+          \"faster\" and positive ones \"smaller\". Default: 0")
+         (@arg NESTING: --nesting {validate_nesting}
+          +takes_value "Set level of folder nesting. Default: 2")
+         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"])
+          +takes_value "Set hashing scheme. Default: blake2b")
         )
         (@subcommand store =>
          (about: "Store data from repository")
@@ -347,8 +361,7 @@ fn run() -> io::Result<()> {
          (@arg NAME: +required ... "Names to check")
         )
 
-        )
-        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        ).setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
 

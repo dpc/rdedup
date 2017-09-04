@@ -51,7 +51,6 @@ impl Iterator for StoredChunks {
             let next = self.paths.next();
 
             if let Some(next) = next {
-
                 let name = match next {
                     Ok(name) => name,
                     Err(e) => return Some(Err(e)),

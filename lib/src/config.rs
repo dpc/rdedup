@@ -104,7 +104,7 @@ impl Chunking {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Deflate {
     #[serde(rename = "level")]
-    level: i32,
+    level:                        i32,
 }
 
 impl Deflate {
@@ -116,7 +116,7 @@ impl Deflate {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Bzip2 {
     #[serde(rename = "level")]
-    level: i32,
+    level:                        i32,
 }
 
 impl Bzip2 {
@@ -129,7 +129,7 @@ impl Bzip2 {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Zstd {
     #[serde(rename = "level")]
-    level: i32,
+    level:                        i32,
 }
 
 impl Zstd {
@@ -142,7 +142,7 @@ impl Zstd {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Xz2 {
     #[serde(rename = "level")]
-    level: i32,
+    level:                        i32,
 }
 
 impl Xz2 {
@@ -235,19 +235,15 @@ impl encryption::EncryptionEngine for Encryption {
                 c.change_passphrase(old_p, new_p)
             }
         }
-
     }
 
     fn encrypter(&self, pass: PassphraseFn) -> io::Result<ArcEncrypter> {
-
         match *self {
             Encryption::None => Ok(Arc::new(encryption::NopEncrypter)),
             Encryption::Curve25519(ref c) => c.encrypter(pass),
         }
-
     }
     fn decrypter(&self, pass: PassphraseFn) -> io::Result<ArcDecrypter> {
-
         match *self {
             Encryption::None => Ok(Arc::new(encryption::NopDecrypter)),
             Encryption::Curve25519(ref c) => c.decrypter(pass),
@@ -303,7 +299,6 @@ impl Repo {
         pass: PassphraseFn,
         settings: settings::Repo,
     ) -> io::Result<Self> {
-
         let encryption = match settings.encryption {
             settings::Encryption::Curve25519 => {
                 Encryption::Curve25519(encryption::Curve25519::new(pass)?)
@@ -321,12 +316,10 @@ impl Repo {
             nesting: settings.nesting.to_config(),
             hashing: settings.hashing.to_config(),
         })
-
     }
 
 
     pub fn write(&self, aio: &asyncio::AsyncIO) -> super::Result<()> {
-
         let config_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");
 

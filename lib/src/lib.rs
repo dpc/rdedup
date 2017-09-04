@@ -1,30 +1,30 @@
-extern crate rollsum;
-extern crate sha2;
-extern crate sodiumoxide;
-extern crate flate2;
-extern crate lzma;
+extern crate base64;
+extern crate blake2;
 extern crate bzip2;
-extern crate rand;
+extern crate crossbeam;
+extern crate dangerous_option;
+extern crate digest;
+extern crate flate2;
 extern crate fs2;
+extern crate hex;
+extern crate lzma;
+extern crate num_cpus;
+extern crate owning_ref;
+extern crate rand;
+extern crate rollsum;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_yaml;
-extern crate base64;
-extern crate owning_ref;
-extern crate two_lock_queue;
-extern crate num_cpus;
-extern crate crossbeam;
+extern crate sgdata;
+extern crate sha2;
 #[macro_use]
 extern crate slog;
 extern crate slog_perf;
-extern crate hex;
-extern crate sgdata;
-extern crate dangerous_option;
+extern crate sodiumoxide;
+extern crate two_lock_queue;
 extern crate walkdir;
 extern crate zstd;
-extern crate blake2;
-extern crate digest;
 
 use hex::ToHex;
 use sgdata::SGData;
@@ -258,8 +258,12 @@ impl<'a> ReadContext<'a> {
     ) -> Result<()> {
         trace!(self.log, "Traversing data"; "digest" => digest.to_hex());
         if let Some(writer) = self.writer.take() {
-            accessor
-                .read_chunk_into(digest, DataType::Data, self.data_type, writer)
+            accessor.read_chunk_into(
+                digest,
+                DataType::Data,
+                self.data_type,
+                writer,
+            )
         } else {
             accessor.touch(digest)
         }
@@ -270,7 +274,6 @@ impl<'a> ReadContext<'a> {
         accessor: &'a ChunkAccessor,
         digest: &[u8],
     ) -> Result<()> {
-
         let chunk_type = accessor.repo().chunk_type(digest)?;
 
         let s = &*accessor as &ChunkAccessor;
@@ -469,8 +472,9 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.to_owned());
         }
-        let res = self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer);
+        let res =
+            self.raw
+                .read_chunk_into(digest, chunk_type, data_type, writer);
 
         if res.is_err() {
             self.errors
@@ -540,7 +544,6 @@ impl Repo {
         Ok(DecryptHandle {
             decrypter: decrypter,
         })
-
     }
 
     pub fn unlock_encrypt(
@@ -607,7 +610,6 @@ impl Repo {
     #[allow(unknown_lints)]
     #[allow(absurd_extreme_comparisons)]
     fn read_and_validate_version(aio: &AsyncIO) -> Result<u32> {
-
         let version = aio.read(PathBuf::from(config::VERSION_FILE))
             .wait()?
             .to_linear_vec();
@@ -690,14 +692,13 @@ impl Repo {
         let config_data = aio.read(config::CONFIG_YML_FILE.into()).wait()?;
         let config_data = config_data.to_linear_vec();
 
-        let config: config::Repo = serde_yaml::from_reader(
-            config_data.as_slice(),
-        ).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("couldn't parse yaml: {}", e.to_string()),
-            )
-        })?;
+        let config: config::Repo =
+            serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("couldn't parse yaml: {}", e.to_string()),
+                )
+            })?;
 
         let compression = config.compression.to_engine();
         let hasher = config.hashing.to_hasher();
@@ -717,7 +718,6 @@ impl Repo {
         old_p: PassphraseFn,
         new_p: PassphraseFn,
     ) -> Result<()> {
-
         let _lock = self.aio.lock_exclusive();
 
         if self.config.version == 0 {
@@ -741,7 +741,6 @@ impl Repo {
         aio: asyncio::AsyncIO,
         data_type: DataType,
     ) -> io::Result<Vec<u8>> {
-
         // Note: This channel is intentionally unbounded
         // The processing loop runs in sort of a loop (actually more of a
         // recursive spiral). Unless this channel is unbounded it's possible
@@ -765,7 +764,6 @@ impl Repo {
             scope.spawn({
                 let process_tx = process_tx.clone();
                 move || {
-
                     let mut timer = slog_perf::TimeReporter::new(
                         "chunker",
                         self.log.clone(),
@@ -819,13 +817,13 @@ impl Repo {
                 let index_digest = self.hasher.calculate_digest_simple(&digest);
 
                 timer.start("writer-tx");
-                let path = self.chunk_rel_path_by_digest(
-                    &index_digest,
-                    DataType::Index,
-                );
+                let path =
+                    self.chunk_rel_path_by_digest(
+                        &index_digest,
+                        DataType::Index,
+                    );
                 aio.write_checked_idempotent(path, SGData::from_single(digest));
                 Ok(index_digest)
-
             } else {
                 Ok(first_digest)
             }
@@ -949,7 +947,6 @@ impl Repo {
 
     /// Return all reachable chunks
     fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
-
         let mut reachable_digests = HashSet::new();
         let all_names = self.list_names_nolock()?;
         for name in &all_names {
@@ -1034,7 +1031,6 @@ impl Repo {
     }
 
     pub fn gc(&self) -> Result<GcResults> {
-
         let _lock = self.aio.lock_exclusive();
 
         let reachable = self.list_reachable_chunks().unwrap();
@@ -1075,7 +1071,6 @@ impl Repo {
         writer: &mut W,
         dec: &DecryptHandle,
     ) -> Result<()> {
-
         let _lock = self.aio.lock_shared();
 
         let digest = self.name_to_digest(name)?;
@@ -1095,7 +1090,6 @@ impl Repo {
     }
 
     pub fn du(&self, name: &str, dec: &DecryptHandle) -> Result<DuResults> {
-
         let _lock = self.aio.lock_shared();
         let digest = self.name_to_digest(name)?;
 
@@ -1172,7 +1166,6 @@ impl Repo {
         let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
 
         let final_digest = crossbeam::scope(|scope| {
-
             scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
 
             for _ in 0..num_threads {
