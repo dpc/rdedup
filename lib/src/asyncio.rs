@@ -255,6 +255,12 @@ struct AsyncIOSharedInner {
     in_progress: HashMap<PathBuf, SGData>,
 }
 
+impl Drop for AsyncIOSharedInner {
+    fn drop(&mut self) {
+        assert!(self.in_progress.is_empty());
+    }
+}
+
 #[derive(Clone)]
 pub struct AsyncIOThreadShared {
     inner: Arc<Mutex<AsyncIOSharedInner>>,
@@ -287,6 +293,7 @@ struct AsyncIOThread {
     rx: two_lock_queue::Receiver<Message>,
     log: Logger,
     time_reporter: TimeReporter,
+    rand_ext: String,
 }
 
 impl AsyncIOThread {
@@ -303,6 +310,10 @@ impl AsyncIOThread {
             shared: shared,
             rx: rx,
             time_reporter: t,
+            rand_ext: rand::thread_rng()
+                .gen_ascii_chars()
+                .take(20)
+                .collect::<String>(),
         }
     }
 
@@ -387,12 +398,7 @@ impl AsyncIOThread {
         // write file to disk
         self.time_reporter.start("write");
 
-        let ext = rand::thread_rng()
-            .gen_ascii_chars()
-            .take(20)
-            .collect::<String>();
-
-        let tmp_path = path.with_extension(format!("{}.tmp", ext));
+        let tmp_path = path.with_extension(format!("{}.tmp", self.rand_ext));
         let mut chunk_file = match fs::File::create(&tmp_path) {
             Ok(file) => Ok(file),
             Err(_) => {
