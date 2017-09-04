@@ -312,7 +312,7 @@ fn run() -> io::Result<()> {
          (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"]) +takes_value "Set chunking scheme. Default: gear")
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size} +takes_value "Set average chunk size")
          (@arg ENCRYPTION: --encryption  possible_values(&["curve25519", "none"]) +takes_value "Set encryption scheme. Default: curve25519")
-         (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "bzip2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
+         (@arg COMPRESSION : --compression possible_values(&["deflate", "xz2", "zstd", "none"]) +takes_value "Set compression scheme. Default: deflate")
          (@arg COMPRESSION_LEVEL : --("compression-level") +takes_value "Set compression level where negative numbers mean \"faster\" and positive ones \"smaller\". Default: 0")
          (@arg NESTING: --nesting {validate_nesting} +takes_value "Set level of folder nesting. Default: 2")
          (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"]) +takes_value "Set hashing scheme. Default: blake2b")
