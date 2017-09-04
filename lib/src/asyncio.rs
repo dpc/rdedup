@@ -549,7 +549,7 @@ impl AsyncIOThread {
                 Err(e) => tx.send(Err(e.into())).expect("send failed"),
             }
         }
-        if v.len() > 0 {
+        if !v.is_empty() {
             tx.send(Ok(v)).expect("send failed")
         }
     }

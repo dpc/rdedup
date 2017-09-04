@@ -1,6 +1,5 @@
 extern crate rollsum;
 extern crate sha2;
-extern crate argparse;
 extern crate sodiumoxide;
 extern crate flate2;
 extern crate lzma;
@@ -567,7 +566,7 @@ impl Repo {
         if !list.is_err() && !list.unwrap().is_empty() {
             return Err(Error::new(
                 io::ErrorKind::AlreadyExists,
-                format!("repo dir must not exist or be empty to be used"),
+                "repo dir must not exist or be empty to be used",
             ));
         }
         Ok(())
@@ -684,7 +683,7 @@ impl Repo {
         if version == 0 {
             return Err(Error::new(
                 io::ErrorKind::NotFound,
-                format!("rdedup v0 config format not supported"),
+                "rdedup v0 config format not supported",
             ));
         }
 
@@ -722,10 +721,10 @@ impl Repo {
         let _lock = self.aio.lock_exclusive();
 
         if self.config.version == 0 {
-            return Err(Error::new(
+            Err(Error::new(
                 io::ErrorKind::NotFound,
-                format!("rdedup v0 config format not supported"),
-            ));
+                "rdedup v0 config format not supported",
+            ))
         } else {
             self.config.encryption.change_passphrase(old_p, new_p)?;
             self.config.write(&self.aio)?;
@@ -1205,9 +1204,7 @@ impl Repo {
                 )
             });
 
-            let final_digest = chunk_and_write.join();
-
-            final_digest
+            chunk_and_write.join()
         });
 
 

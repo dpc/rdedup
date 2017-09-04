@@ -146,21 +146,19 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                     ));
                 }
                 self.incomplete_chunk.push(buf);
-            } else {
-                if self.incomplete_chunk.is_empty() {
-                    if self.chunks_returned == 0 {
-                        // at least one, zero sized chunk
-                        self.chunks_returned += 1;
-                        return Some(SGData::empty());
-                    } else {
-                        return None;
-                    }
-                } else {
+            } else if self.incomplete_chunk.is_empty() {
+                if self.chunks_returned == 0 {
+                    // at least one, zero sized chunk
                     self.chunks_returned += 1;
-                    return Some(SGData::from_vec(
-                        mem::replace(&mut self.incomplete_chunk, vec![]),
-                    ));
+                    return Some(SGData::empty());
+                } else {
+                    return None;
                 }
+            } else {
+                self.chunks_returned += 1;
+                return Some(SGData::from_vec(
+                        mem::replace(&mut self.incomplete_chunk, vec![]),
+                        ));
             }
         }
     }

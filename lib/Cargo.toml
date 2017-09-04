@@ -16,7 +16,6 @@ path = "src/lib.rs"
 
 [dependencies]
 rollsum = { git = "https://github.com/dpc/rsroll.git", branch="rdedup" }
-argparse = "0.2.1"
 sodiumoxide = { version = "0.0.14", features = ["serde"] }
 flate2 = "0.2"
 rust-lzma = "0.2"

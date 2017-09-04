@@ -65,7 +65,7 @@ impl Compression for Deflate {
             flate2::write::DeflateDecoder::new(Vec::with_capacity(buf.len()));
 
         for part in buf.as_parts() {
-            decompressor.write_all(&part)?;
+            decompressor.write_all(part)?;
         }
         Ok(SGData::from_single(decompressor.finish()?))
     }
@@ -108,7 +108,7 @@ impl Compression for Bzip2 {
             bzip2::write::BzDecoder::new(Vec::with_capacity(buf.len()));
 
         for sg_part in buf.as_parts() {
-            decompressor.write_all(&sg_part)?;
+            decompressor.write_all(sg_part)?;
         }
         Ok(SGData::from_single(decompressor.finish()?))
     }
@@ -231,7 +231,7 @@ impl Compression for Zstd {
             let mut compressor =
                 zstd::Encoder::new(&mut backing, self.level).unwrap();
             for sg_part in buf.as_parts() {
-                compressor.write_all(&sg_part).unwrap()
+                compressor.write_all(sg_part).unwrap()
             }
             compressor.finish().unwrap();
         }

@@ -105,8 +105,8 @@ impl Curve25519 {
                     )
                 })?;
 
-        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or(
-            io::Error::new(
+        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(
+            || io::Error::new(
                 io::ErrorKind::InvalidData,
                 "plain secret key in a wrong format",
             ),
@@ -195,7 +195,7 @@ impl Decrypter for Curve25519Decrypter {
 
         let ephemeral_pub = box_::PublicKey::from_slice(
             &buf[..box_::PUBLICKEYBYTES],
-        ).ok_or(io::Error::new(
+        ).ok_or_else(|| io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
                 "Can't read ephemeral public key from chunk: {}",

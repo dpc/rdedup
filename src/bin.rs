@@ -111,7 +111,6 @@
 //! [ddar]: https://github.com/basak/ddar/
 //! [ddar-issue]: https://github.com/basak/ddar/issues/10
 
-extern crate log;
 extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate clap;
@@ -253,14 +252,12 @@ impl Options {
 mod util;
 use util::{read_new_passphrase, read_passphrase};
 
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn validate_chunk_size(s: String) -> Result<(), String> {
-    if let Some(_) = util::parse_size(&s) {
-        Ok(())
-    } else {
-        Err("Can't parse a human readable byte-size value".into())
-    }
+    util::parse_size(&s).map(|_| ()).ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn validate_nesting(s: String) -> Result<(), String> {
     let msg = "nesting must be an integer between 0 and 31";
     let levels = match u8::from_str(s.as_str()) {
@@ -357,13 +354,11 @@ fn run() -> io::Result<()> {
 
     let dir = if let Some(dir) = matches.value_of_os("REPO_DIR") {
         PathBuf::from(dir)
+    } else if let Some(dir) = env::var_os("RDEDUP_DIR") {
+        PathBuf::from(dir)
     } else {
-        if let Some(dir) = env::var_os("RDEDUP_DIR") {
-            PathBuf::from(dir)
-        } else {
-            printerrln!("Repository dir path not specified");
-            process::exit(-1);
-        }
+        printerrln!("Repository dir path not specified");
+        process::exit(-1);
     };
 
     let mut options = Options::new(dir);
@@ -411,7 +406,7 @@ fn run() -> io::Result<()> {
             let name = matches.value_of("NAME").expect("name agument missing");
             let repo = Repo::open(&options.dir, log)?;
             let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
-            let stats = repo.write(&name, &mut io::stdin(), &enc)?;
+            let stats = repo.write(name, &mut io::stdin(), &enc)?;
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
         }
@@ -419,7 +414,7 @@ fn run() -> io::Result<()> {
             let name = matches.value_of("NAME").expect("name agument missing");
             let repo = Repo::open(&options.dir, log)?;
             let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
-            repo.read(&name, &mut io::stdout(), &dec)?;
+            repo.read(name, &mut io::stdout(), &dec)?;
         }
         ("change_passphrase", Some(_matches)) => {
             let mut repo = Repo::open(&options.dir, log)?;
@@ -439,7 +434,7 @@ fn run() -> io::Result<()> {
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
 
             for name in matches.values_of("NAME").expect("names missing") {
-                let result = repo.du(&name, &dec)?;
+                let result = repo.du(name, &dec)?;
                 println!("{} chunks", result.chunks);
                 println!("{} bytes", result.bytes);
             }
@@ -462,7 +457,7 @@ fn run() -> io::Result<()> {
             let repo = Repo::open(&options.dir, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
             for name in matches.values_of("NAME").expect("values") {
-                let results = repo.verify(&name, &dec)?;
+                let results = repo.verify(name, &dec)?;
                 println!("scanned {} chunk(s)", results.scanned);
                 println!("found {} corrupted chunk(s)", results.errors.len());
                 for err in results.errors {
