@@ -403,7 +403,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             ))
         } else {
             for part in data.as_parts() {
-                io::copy(&mut io::Cursor::new(part), writer)?;
+                writer.write_all(&*part)?;
             }
             Ok(())
         }
