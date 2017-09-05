@@ -56,3 +56,9 @@ where
         }
     }
 }
+
+impl<T, I> Drop for SortingIterator<T, I> {
+    fn drop(&mut self) {
+        assert!(self.early_items.is_empty());
+    }
+}

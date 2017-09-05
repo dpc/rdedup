@@ -66,12 +66,14 @@ impl ChunkProcessor {
                     self.repo.chunk_path_by_digest(&digest, DataType::Data);
                 if !chunk_path.exists() {
                     let sg = if data_type.should_compress() {
+                        trace!(self.log, "compress"; "path" => %chunk_path.display());
                         timer.start("compress");
                         self.compressor.compress(sg).unwrap()
                     } else {
                         sg
                     };
                     let sg = if data_type.should_encrypt() {
+                        trace!(self.log, "encrypt"; "path" => %chunk_path.display());
                         timer.start("encrypt");
                         self.encrypter.encrypt(sg, &digest).unwrap()
                     } else {
@@ -84,6 +86,8 @@ impl ChunkProcessor {
                             .chunk_rel_path_by_digest(&digest, DataType::Data),
                         sg,
                     );
+                } else {
+                    trace!(self.log, "already exists"; "path" => %chunk_path.display());
                 }
                 timer.start("tx-digest");
                 response_tx

@@ -30,6 +30,7 @@ use hex::ToHex;
 use sgdata::SGData;
 use slog::Logger;
 use slog_perf::TimeReporter;
+use slog::FnValue;
 
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 
@@ -110,9 +111,10 @@ impl DataType {
 ///
 /// For every digest written to it, it will access the corresponding chunk and
 /// write it into `writer` that it wraps.
-struct IndexTranslator<'a> {
+struct IndexTranslator<'a, 'b> {
     accessor: &'a ChunkAccessor,
     digest: Vec<u8>,
+    parent_digest: &'b [u8],
     writer: Option<&'a mut Write>,
     data_type: DataType,
     decrypter: Option<ArcDecrypter>,
@@ -120,9 +122,10 @@ struct IndexTranslator<'a> {
     log: Logger,
 }
 
-impl<'a> IndexTranslator<'a> {
+impl<'a, 'b> IndexTranslator<'a, 'b> {
     fn new(
         accessor: &'a ChunkAccessor,
+        parent_digest: &'b [u8],
         writer: Option<&'a mut Write>,
         data_type: DataType,
         decrypter: Option<ArcDecrypter>,
@@ -133,6 +136,7 @@ impl<'a> IndexTranslator<'a> {
             accessor: accessor,
             digest: vec![],
             data_type: data_type,
+            parent_digest: parent_digest,
             decrypter: decrypter,
             compression: compression,
             writer: writer,
@@ -141,8 +145,12 @@ impl<'a> IndexTranslator<'a> {
     }
 }
 
-impl<'a> Write for IndexTranslator<'a> {
+impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
+    // TODO: This is copying too much. Could be not copying anything, unless
+    // bytes < DIGEST_SIZE
     fn write(&mut self, mut bytes: &[u8]) -> Result<usize> {
+        assert!(!bytes.is_empty());
+
         let total_len = bytes.len();
         loop {
             let has_already = self.digest.len();
@@ -153,34 +161,45 @@ impl<'a> Write for IndexTranslator<'a> {
 
             let needs = DIGEST_SIZE - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
+            assert_eq!(self.digest.len(), DIGEST_SIZE);
+
             bytes = &bytes[needs..];
             let &mut IndexTranslator {
                 accessor,
                 ref mut digest,
+                ref parent_digest,
                 data_type,
                 ref decrypter,
                 ref compression,
                 ref mut writer,
                 ..
             } = self;
-            if let Some(ref mut writer) = *writer {
+            let res = if let Some(ref mut writer) = *writer {
                 let mut traverser = ReadContext::new(
                     Some(writer),
+                    &parent_digest,
                     data_type,
                     decrypter.clone(),
                     compression.clone(),
                     self.log.clone(),
                 );
-                traverser.read_recursively(accessor, digest)?;
+                traverser.read_recursively(accessor, digest)
             } else {
-                accessor.touch(digest)?
-            }
+                accessor.touch(digest)
+            };
             digest.clear();
+            res?;
         }
     }
 
     fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
+    fn drop(&mut self) {
+        assert!(self.digest.is_empty());
     }
 }
 
@@ -195,6 +214,7 @@ struct ReadContext<'a> {
     compression: ArcCompression,
     /// The type of the data to be read
     data_type: DataType,
+    parent_digest: &'a [u8],
 
     log: Logger,
 }
@@ -202,6 +222,7 @@ struct ReadContext<'a> {
 impl<'a> ReadContext<'a> {
     fn new(
         writer: Option<&'a mut Write>,
+        parent_digest: &'a [u8],
         data_type: DataType,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
@@ -209,6 +230,7 @@ impl<'a> ReadContext<'a> {
     ) -> Self {
         ReadContext {
             writer: writer,
+            parent_digest: parent_digest,
             data_type: data_type,
             decrypter: decrypter,
             compression: compression,
@@ -221,7 +243,10 @@ impl<'a> ReadContext<'a> {
         accessor: &'a ChunkAccessor,
         digest: &[u8],
     ) -> Result<()> {
-        trace!(self.log, "Traversing index"; "digest" => digest.to_hex());
+        trace!(self.log, "Traversing index";
+               "parent" => FnValue(|_| self.parent_digest.to_hex()),
+               "digest" => FnValue(|_| digest.to_hex()),
+               );
         let mut index_data = vec![];
         accessor.read_chunk_into(
             digest,
@@ -234,6 +259,7 @@ impl<'a> ReadContext<'a> {
 
         let mut translator = IndexTranslator::new(
             accessor,
+            digest,
             self.writer.take(),
             self.data_type,
             self.decrypter.clone(),
@@ -243,6 +269,7 @@ impl<'a> ReadContext<'a> {
 
         let mut sub_traverser = ReadContext::new(
             Some(&mut translator),
+            digest,
             DataType::Index,
             None,
             self.compression.clone(),
@@ -256,7 +283,10 @@ impl<'a> ReadContext<'a> {
         accessor: &'a ChunkAccessor,
         digest: &[u8],
     ) -> Result<()> {
-        trace!(self.log, "Traversing data"; "digest" => digest.to_hex());
+        trace!(self.log, "Traversing data";
+               "parent" => FnValue(|_| self.parent_digest.to_hex()),
+               "digest" => FnValue(|_| digest.to_hex()),
+               );
         if let Some(writer) = self.writer.take() {
             accessor.read_chunk_into(
                 digest,
@@ -274,6 +304,10 @@ impl<'a> ReadContext<'a> {
         accessor: &'a ChunkAccessor,
         digest: &[u8],
     ) -> Result<()> {
+        trace!(self.log, "Reading recursively";
+               "parent" => FnValue(|_| self.parent_digest.to_hex()),
+               "digest" => FnValue(|_| digest.to_hex()),
+               );
         let chunk_type = accessor.repo().chunk_type(digest)?;
 
         let s = &*accessor as &ChunkAccessor;
@@ -914,6 +948,7 @@ impl Repo {
 
         let mut traverser = ReadContext::new(
             None,
+            digest,
             DataType::Data,
             None,
             self.compression.clone(),
@@ -1081,6 +1116,7 @@ impl Repo {
         );
         let mut traverser = ReadContext::new(
             Some(writer),
+            &[],
             DataType::Data,
             Some(dec.decrypter.clone()),
             self.compression.clone(),
@@ -1102,6 +1138,7 @@ impl Repo {
         {
             let mut traverser = ReadContext::new(
                 Some(&mut counter),
+                &[],
                 DataType::Data,
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
@@ -1132,6 +1169,7 @@ impl Repo {
         {
             let mut traverser = ReadContext::new(
                 Some(&mut counter),
+                &[],
                 DataType::Data,
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
