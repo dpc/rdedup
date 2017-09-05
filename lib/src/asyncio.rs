@@ -257,7 +257,7 @@ struct AsyncIOSharedInner {
 
 impl Drop for AsyncIOSharedInner {
     fn drop(&mut self) {
-        assert!(self.in_progress.is_empty());
+        debug_assert!(self.in_progress.is_empty());
     }
 }
 

@@ -156,12 +156,16 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
             let has_already = self.digest.len();
             if (has_already + bytes.len()) < DIGEST_SIZE {
                 self.digest.extend_from_slice(bytes);
+
+                trace!(self.log, "left with a buffer";
+                       "digest" => FnValue(|_| self.digest.to_hex()),
+                       );
                 return Ok(total_len);
             }
 
             let needs = DIGEST_SIZE - has_already;
             self.digest.extend_from_slice(&bytes[..needs]);
-            assert_eq!(self.digest.len(), DIGEST_SIZE);
+            debug_assert_eq!(self.digest.len(), DIGEST_SIZE);
 
             bytes = &bytes[needs..];
             let &mut IndexTranslator {
@@ -199,7 +203,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
 impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
     fn drop(&mut self) {
-        assert!(self.digest.is_empty());
+        debug_assert!(self.digest.is_empty());
     }
 }
 
@@ -840,9 +844,7 @@ impl Repo {
             {
                 let mut two_first = vec![first_digest, second_digest];
                 let digest = self.chunk_and_write_data_thread(
-                    Box::new(
-                        two_first.drain(..).chain(digests_rx).map(|i_sg| i_sg),
-                    ),
+                    Box::new(two_first.drain(..).chain(digests_rx)),
                     process_tx,
                     aio.clone(),
                     DataType::Index,
