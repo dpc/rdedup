@@ -203,7 +203,9 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
 impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
     fn drop(&mut self) {
-        debug_assert_eq!(self.digest.len(), 0);
+        if !std::thread::panicking() {
+            debug_assert_eq!(self.digest.len(), 0);
+        }
     }
 }
 
@@ -255,7 +257,7 @@ impl<'a> ReadContext<'a> {
         accessor.read_chunk_into(
             digest,
             DataType::Index,
-            DataType::Index,
+            self.data_type,
             &mut index_data,
         )?;
 
@@ -379,7 +381,8 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         let path = self.repo.chunk_rel_path_by_digest(digest, chunk_type);
         let data = self.repo.aio.read(path).wait()?;
 
-        let data = if data_type.should_encrypt() {
+        let data = if data_type.should_encrypt() && chunk_type.should_encrypt()
+        {
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
@@ -388,11 +391,12 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             data
         };
 
-        let data = if data_type.should_compress() {
-            self.compression.decompress(data)?
-        } else {
-            data
-        };
+        let data =
+            if data_type.should_compress() && chunk_type.should_compress() {
+                self.compression.decompress(data)?
+            } else {
+                data
+            };
 
         let vec_result = self.repo.hasher.calculate_digest(&data);
 
