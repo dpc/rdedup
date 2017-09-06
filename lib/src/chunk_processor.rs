@@ -72,6 +72,7 @@ impl ChunkProcessor {
                     } else {
                         sg
                     };
+
                     let sg = if data_type.should_encrypt() {
                         trace!(self.log, "encrypt"; "path" => %chunk_path.display());
                         timer.start("encrypt");

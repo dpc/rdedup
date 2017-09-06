@@ -417,7 +417,6 @@ impl AsyncIOThread {
             bytes_written += data_part.len() as u64;
         }
 
-
         self.time_reporter.start("fsync");
 
         chunk_file.sync_data()?;

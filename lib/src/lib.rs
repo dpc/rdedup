@@ -134,7 +134,7 @@ impl<'a, 'b> IndexTranslator<'a, 'b> {
     ) -> Self {
         IndexTranslator {
             accessor: accessor,
-            digest: vec![],
+            digest: Vec::with_capacity(DIGEST_SIZE),
             data_type: data_type,
             parent_digest: parent_digest,
             decrypter: decrypter,
@@ -203,7 +203,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
 impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
     fn drop(&mut self) {
-        debug_assert!(self.digest.is_empty());
+        debug_assert_eq!(self.digest.len(), 0);
     }
 }
 
@@ -251,7 +251,7 @@ impl<'a> ReadContext<'a> {
                "parent" => FnValue(|_| self.parent_digest.to_hex()),
                "digest" => FnValue(|_| digest.to_hex()),
                );
-        let mut index_data = vec![];
+        let mut index_data = Vec::with_capacity(DIGEST_SIZE);
         accessor.read_chunk_into(
             digest,
             DataType::Index,
@@ -934,7 +934,7 @@ impl Repo {
             ));
         }
 
-        let mut data = vec![];
+        let mut data = Vec::with_capacity(256);
         data.write_all(digest)?;
 
         self.aio.write(path, SGData::from_single(data)).wait()?;
