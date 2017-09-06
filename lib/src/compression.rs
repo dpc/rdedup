@@ -139,12 +139,10 @@ impl Compression for Xz2 {
                 // https://github.com/fpgaminer/rust-lzma/issues/13
                 let todo = sg_part.len();
                 let mut index = 0;
-                while {
+                while index < todo {
                     let bytes = compressor.write(&sg_part[index..]).unwrap();
                     index += bytes;
-
-                    index < todo
-                } {}
+                }
             }
             compressor.finish().unwrap();
         }
@@ -162,12 +160,10 @@ impl Compression for Xz2 {
                 // https://github.com/fpgaminer/rust-lzma/issues/13
                 let todo = sg_part.len();
                 let mut index = 0;
-                while {
+                while index < todo {
                     let bytes = decompressor.write(&sg_part[index..]).unwrap();
                     index += bytes;
-
-                    index < todo
-                } {}
+                }
             }
             decompressor.finish().unwrap();
         }
