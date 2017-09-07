@@ -7,8 +7,10 @@ set -o nounset
 my_dir="$(dirname "$0")"
 source "$my_dir/e2e-common.sh"
 
+cargo build --release || exit 1
+
 # init
-dd if=/dev/urandom of=$test_data_path bs=1024 count=$((1024 * 32))
+dd if=/dev/urandom of=$test_data_path bs=1024 count=$(($RANDOM % 128))
 
 for chunking in $chunking_list  ; do
   for compression in $compression_list ; do
