@@ -388,7 +388,7 @@ dependencies = [
  "num_cpus 1.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "owning_ref 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
- "rollsum 0.2.1 (git+https://github.com/dpc/rsroll.git?branch=rdedup)",
+ "rollsum 0.2.1 (git+https://github.com/dpc/rsroll.git?rev=609723ec7927ef9c593251e54842092ea3d3639f)",
  "rust-lzma 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -411,7 +411,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "rollsum"
 version = "0.2.1"
-source = "git+https://github.com/dpc/rsroll.git?branch=rdedup#ab855c394ffb507ed82b956253cf46b979090b7a"
+source = "git+https://github.com/dpc/rsroll.git?rev=609723ec7927ef9c593251e54842092ea3d3639f#609723ec7927ef9c593251e54842092ea3d3639f"
 
 [[package]]
 name = "rpassword"
@@ -775,7 +775,7 @@ dependencies = [
 "checksum quote 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "7a6e920b65c65f10b2ae65c831a81a073a89edd28c7cce89475bff467ab4167a"
 "checksum rand 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)" = "eb250fd207a4729c976794d03db689c9be1d634ab5a1c9da9492a13d8fecbcdf"
 "checksum redox_syscall 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)" = "8dde11f18c108289bef24469638a04dce49da56084f2d50618b226e47eb04509"
-"checksum rollsum 0.2.1 (git+https://github.com/dpc/rsroll.git?branch=rdedup)" = "<none>"
+"checksum rollsum 0.2.1 (git+https://github.com/dpc/rsroll.git?rev=609723ec7927ef9c593251e54842092ea3d3639f)" = "<none>"
 "checksum rpassword 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "320da1dfcf5c570a6c07ff60bb7cd4cdc986d2ea89caea139f2247371ab6a1df"
 "checksum rust-lzma 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6765d37542f590bad98db0514eda612995a71100d91ac3929710bf93b5ba90a5"
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
