@@ -317,7 +317,7 @@ fn run() -> io::Result<()> {
          (@arg ENCRYPTION: --encryption possible_values(&["curve25519", "none"])
           +takes_value "Set encryption scheme. Default: curve25519")
          (@arg COMPRESSION : --compression possible_values(
-                 &["deflate", "xz2", "zstd", "none"]
+                 &["deflate", "xz2", "zstd", "bzip2", "none"]
                  )
           +takes_value "Set compression scheme. Default: deflate")
          (@arg COMPRESSION_LEVEL : --("compression-level")

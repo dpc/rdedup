@@ -41,7 +41,7 @@ pub fn write_version_file(
     aio: &asyncio::AsyncIO,
     version: u32,
 ) -> super::Result<()> {
-    let mut v = vec![];
+    let mut v = Vec::with_capacity(4 * 1024);
     {
         write!(&mut v, "{}", version)?;
     }

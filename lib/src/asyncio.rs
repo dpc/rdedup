@@ -459,7 +459,7 @@ impl AsyncIOThread {
 
         let mut file = fs::File::open(path)?;
 
-        let mut bufs = Vec::new();
+        let mut bufs = Vec::with_capacity(16 * 1024 / INGRESS_BUFFER_SIZE);
         loop {
             let mut buf: Vec<u8> = vec![0u8; INGRESS_BUFFER_SIZE];
             let len = file.read(&mut buf[..])?;
@@ -489,7 +489,7 @@ impl AsyncIOThread {
     fn list_inner(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {
         self.time_reporter.start("list");
 
-        let mut v = vec![];
+        let mut v = Vec::with_capacity(128);
 
         let dir = fs::read_dir(path);
 
@@ -522,7 +522,7 @@ impl AsyncIOThread {
             return;
         }
 
-        let mut v = vec![];
+        let mut v = Vec::with_capacity(128);
 
         for path in WalkDir::new(path) {
             match path {
