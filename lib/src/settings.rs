@@ -67,6 +67,17 @@ impl Default for PWHash {
     }
 }
 
+impl<'a> From<&'a str> for PWHash {
+    fn from(s : &str) -> Self {
+        match s {
+            "weak" => PWHash::Weak,
+            "interactive" => PWHash::Interactive,
+            "strong" => PWHash::Strong,
+            _ => panic!("Wrong pwhash strenght string"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Nesting(u8);
 impl Default for Nesting {
@@ -131,7 +142,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn set_phwash(&mut self, pwhash : PWHash) {
+    pub fn set_pwhash(&mut self, pwhash : PWHash) {
         self.pwhash = pwhash;
     }
 

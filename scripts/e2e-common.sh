@@ -18,22 +18,25 @@ hashing_list=$($RDEDUP_CMD init --hashing '?' 2>&1 | grep values \
 run_e2e_test() {
   args=""
   if [ ! -z "$1" ]; then
-    args="$args --chunking $1"
+    args="$args --pwhash $1"
   fi
   if [ ! -z "$2" ]; then
-    args="$args --chunk-size $2"
+    args="$args --chunking $2"
   fi
   if [ ! -z "$3" ]; then
-    args="$args --compression $3"
+    args="$args --chunk-size $3"
   fi
   if [ ! -z "$4" ]; then
-    args="$args --encryption $4"
+    args="$args --compression $4"
   fi
   if [ ! -z "$5" ]; then
-    args="$args --hashing $5"
+    args="$args --encryption $5"
   fi
   if [ ! -z "$6" ]; then
-    args="$args --nesting $6"
+    args="$args --hashing $6"
+  fi
+  if [ ! -z "$7" ]; then
+    args="$args --nesting $7"
   fi
 
   src_digest=$(cat $test_data_path | shasum)

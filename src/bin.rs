@@ -310,6 +310,8 @@ fn run() -> io::Result<()> {
         (@arg verbose: -v ... "Increase debugging level")
         (@subcommand init =>
          (about: "Create a new repository")
+         (@arg PWHASH: --pwhash possible_values(&["strong", "interactive", "weak"])
+          +takes_value "Set pwhash strength. Default: strong")
          (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"])
           +takes_value "Set chunking scheme. Default: gear")
          (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size}
@@ -391,6 +393,9 @@ fn run() -> io::Result<()> {
             );
             if let Some(encryption) = matches.value_of("ENCRYPTION") {
                 options.set_encryption(encryption);
+            }
+            if let Some(pwhash) = matches.value_of("PWHASH") {
+                options.settings.set_pwhash(settings::PWHash::from(pwhash));
             }
             if let Some(compression) = matches.value_of("COMPRESSION") {
                 options.set_compression(compression);

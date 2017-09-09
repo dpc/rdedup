@@ -10,7 +10,7 @@ source "$my_dir/e2e-common.sh"
 cargo build --release || exit 1
 
 # init
-dd if=/dev/urandom of=$test_data_path bs=1024 count=$(($RANDOM % 128 + $RANDOM % 128))
+dd if=/dev/urandom of=$test_data_path bs=1024 count=$((64 + $RANDOM % 16 + $RANDOM % 16 ))
 
 for chunking in $chunking_list  ; do
   for compression in $compression_list ; do
@@ -18,7 +18,7 @@ for chunking in $chunking_list  ; do
       for hashing in $hashing_list ; do
         chunk_size=""
         nesting=""
-        run_e2e_test "$chunking" "$chunk_size" "$compression" "$encryption" "$hashing" "$nesting"
+        run_e2e_test "weak" "$chunking" "$chunk_size" "$compression" "$encryption" "$hashing" "$nesting"
       done
     done
   done

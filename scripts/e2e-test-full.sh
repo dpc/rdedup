@@ -18,7 +18,7 @@ for chunking in $chunking_list  ; do
       for encryption in $encryptiton_list ; do
         for hashing in $hashing_list ; do
           for nesting in 0 1 12 ; do
-            run_e2e_test "$chunking" "$chunk_size" "$compression" "$encryption" "$hashing" "$nesting"
+            run_e2e_test "weak" "$chunking" "$chunk_size" "$compression" "$encryption" "$hashing" "$nesting"
           done
         done
       done
