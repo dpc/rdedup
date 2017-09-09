@@ -31,7 +31,7 @@ debug-assertions = true
 opt-level = 3
 debug = true
 lto = true
-debug-assertions = true
+debug-assertions = false
 
 [workspace]
 
