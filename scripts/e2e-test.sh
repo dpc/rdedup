@@ -10,7 +10,7 @@ source "$my_dir/e2e-common.sh"
 cargo build --release || exit 1
 
 # init
-dd if=/dev/urandom of=$test_data_path bs=1024 count=$((64 + $RANDOM % 16 + $RANDOM % 16 ))
+dd if=/dev/urandom of=$test_data_path bs=1024 count=$((64000 + $RANDOM % 16000 + $RANDOM % 16000)) 1>/dev/null
 
 for chunking in $chunking_list  ; do
   for compression in $compression_list ; do
