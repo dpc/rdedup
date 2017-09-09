@@ -1,19 +1,21 @@
-test_data_path=/tmp/rdedup-e2e-test.data
-chunking_list=$(cargo run --release -- init --chunking '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
-encryptiton_list=$(cargo run --release -- init --encryption '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
-compression_list=$(cargo run --release -- init --compression '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
-hashing_list=$(cargo run --release -- init --hashing '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
 
+export RDEDUP_CMD="./target/release/rdedup"
 export RDEDUP_DIR=/tmp/rdedup-e2e-test.repo
 export RDEDUP_PASSPHRASE=testing
 export RUST_BACKTRACE=1
 
-run_e2e_test() {
 
+test_data_path=/tmp/rdedup-e2e-test.data
+chunking_list=$($RDEDUP_CMD init --chunking '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+encryptiton_list=$($RDEDUP_CMD init --encryption '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+compression_list=$($RDEDUP_CMD init --compression '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+hashing_list=$($RDEDUP_CMD init --hashing '?' 2>&1 | grep values \
+  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+
+run_e2e_test() {
   args=""
   if [ ! -z "$1" ]; then
     args="$args --chunking $1"
@@ -38,11 +40,11 @@ run_e2e_test() {
   if [ -d $RDEDUP_DIR ]; then
     rm -rf $RDEDUP_DIR
   fi
-  cargo run --release -- init $args
+  $RDEDUP_CMD init $args
 
-  cat $test_data_path | cargo run --release store test
+  cat $test_data_path | $RDEDUP_CMD store test
 
-  restored_digest=$(cargo run --release load test | shasum)
+  restored_digest=$($RDEDUP_CMD load test | shasum)
 
   if [ "$src_digest" != "$restored_digest" ]; then
     echo "restore data corrupted $src_digest != $restored_digest"
