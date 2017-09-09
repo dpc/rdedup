@@ -13,11 +13,11 @@ cargo build --release || exit 1
 dd if=/dev/urandom of=$test_data_path bs=1024 count=$(($RANDOM % 128))
 
 for chunking in $chunking_list  ; do
-  for chunk_size in 2K 512K 16M ; do
+  for chunk_size in 1K 512K 16M ; do
     for compression in $compression_list ; do
       for encryption in $encryptiton_list ; do
         for hashing in $hashing_list ; do
-          for nesting in 0 1 4 12 ; do
+          for nesting in 0 1 12 ; do
             run_e2e_test "$chunking" "$chunk_size" "$compression" "$encryption" "$hashing" "$nesting"
           done
         done
