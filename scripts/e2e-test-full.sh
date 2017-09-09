@@ -10,7 +10,7 @@ source "$my_dir/e2e-common.sh"
 cargo build --release || exit 1
 
 # init
-dd if=/dev/urandom of=$test_data_path bs=1024 count=$(($RANDOM % 128))
+dd if=/dev/urandom of=$test_data_path bs=1024 count=$(($RANDOM % 128 + $RANDOM % 128))
 
 for chunking in $chunking_list  ; do
   for chunk_size in 1K 512K 16M ; do

@@ -40,10 +40,14 @@ run_e2e_test() {
   if [ -d $RDEDUP_DIR ]; then
     rm -rf $RDEDUP_DIR
   fi
+
+  echo "Running $RDEDUP_CMD init $args"
   $RDEDUP_CMD init $args
 
+  echo "Running $RDEDUP_CMD store"
   cat $test_data_path | $RDEDUP_CMD store test
 
+  echo "Running $RDEDUP_CMD load"
   restored_digest=$($RDEDUP_CMD load test | shasum)
 
   if [ "$src_digest" != "$restored_digest" ]; then
