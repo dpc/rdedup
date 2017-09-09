@@ -367,7 +367,7 @@ dependencies = [
  "rdedup-lib 2.0.0-0.2",
  "rpassword 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog-async 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog-term 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -395,7 +395,7 @@ dependencies = [
  "serde_yaml 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "sgdata 0.1.0",
  "sha2 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog-perf 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sodiumoxide 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "two-lock-queue 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "slog"
-version = "2.0.9"
+version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -502,7 +502,7 @@ name = "slog-async"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "take_mut 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "thread_local 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -512,7 +512,7 @@ name = "slog-perf"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -522,7 +522,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "isatty 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "term 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "thread_local 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -785,7 +785,7 @@ dependencies = [
 "checksum serde_derive 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)" = "978fd866f4d4872084a81ccc35e275158351d3b9fe620074e7d7504b816b74ba"
 "checksum serde_yaml 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f8bd3f24ad8c7bcd34a6d70ba676dc11302b96f4f166aa5f947762e01098844d"
 "checksum sha2 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d963c78ce367df26d7ea8b8cc655c651b42e8a1e584e869c1e17dae3ccb116a"
-"checksum slog 2.0.9 (registry+https://github.com/rust-lang/crates.io-index)" = "64b6be37712e0980c6d16ab1dbea3df868857883f4464f7ec1e37db8999ee9f3"
+"checksum slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)" = "a3a87ab71068040f48693f3ddb45c3745314eff9a7dfac45b3783a04d2f86399"
 "checksum slog-async 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8ad0c2eeab552a206f95303868338aa67041146da8f8978dba8343c2b29b8ec2"
 "checksum slog-perf 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2d5969476e90e39bd09d486720d688edf3132b07f2869a8d7098e7437126f16e"
 "checksum slog-term 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b4dc32ad4eb5c7406c9aa333731803977fc962906af7e6f30ee9ccccc02076f"
