@@ -96,7 +96,7 @@ pub(crate) struct Chunker<I> {
     iter: I,
     /// Pieces of chunk to return next, but yet
     /// not complete
-    incomplete_chunk: Vec<ArcRef<Vec<u8>, [u8]>>,
+    incomplete_chunk: SGData,
     /// Data that wasn't chunked yet
     pending: Option<ArcRef<Vec<u8>, [u8]>>,
 
@@ -108,7 +108,7 @@ impl<I> Chunker<I> {
     pub fn new(iter: I, chunking: Box<chunking::Chunking>) -> Self {
         Chunker {
             iter: iter,
-            incomplete_chunk: Vec::new(),
+            incomplete_chunk: SGData::empty(),
             pending: None,
             chunks_returned: 0,
             chunking: chunking,
@@ -129,22 +129,35 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                 if let Some((last, rest)) = self.chunking.find_chunk(&*buf) {
                     debug_assert_eq!(last.len() + rest.len(), buf.len());
                     self.incomplete_chunk
-                        .push(buf.clone().map(|cur| &cur[..last.len()]));
+                        .push_arcref(buf.clone().map(|cur| &cur[..last.len()]));
                     if !rest.is_empty() {
                         self.pending =
                             Some(buf.clone().map(|cur| &cur[last.len()..]))
                     };
-                    self.chunks_returned += 1;
-                    return Some(SGData::from_vec(
-                        mem::replace(&mut self.incomplete_chunk, vec![]),
-                    ));
+
+                    // While cryptographic hashes should not have collisions,
+                    // in practice it's possible to have identical data and
+                    // index chunks  (and thus same hash), which leads to
+                    // index/data overwriting themselves (with vs without
+                    // encryption). To prevent that we
+                    // impose a 64-byte minimum limit on chunks, no matter what
+                    // do chunker returns.
+                    if self.incomplete_chunk.len() >= 64 {
+                        self.chunks_returned += 1;
+                        return Some(
+                                mem::replace(&mut self.incomplete_chunk,
+                                             SGData::empty()),
+                                );
+                    } else {
+                        continue
+                    }
                 }
-                self.incomplete_chunk.push(buf);
+                self.incomplete_chunk.push_arcref(buf);
             } else if !self.incomplete_chunk.is_empty() {
                 self.chunks_returned += 1;
-                return Some(SGData::from_vec(
-                    mem::replace(&mut self.incomplete_chunk, vec![]),
-                ));
+                return Some(
+                    mem::replace(&mut self.incomplete_chunk, SGData::empty()),
+                );
             } else {
                 if self.chunks_returned == 0 {
                     // at least one, zero sized chunk

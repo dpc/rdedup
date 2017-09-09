@@ -59,11 +59,11 @@ impl SGData {
 
     /// Total len of all parts
     pub fn len(&self) -> usize {
-        let mut size = 0;
-        for sg_part in &self.0 {
-            size += sg_part.len();
-        }
-        size
+        self.0.iter().fold(0, |sum, part | sum + part.len())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn as_parts(&self) -> &[ArcRef<Vec<u8>, [u8]>] {
@@ -76,6 +76,14 @@ impl SGData {
 
     pub fn as_vec_mut(&mut self) -> &mut Vec<ArcRef<Vec<u8>, [u8]>> {
         &mut self.0
+    }
+
+    pub fn push_vec(&mut self, v : Vec<u8>) {
+        self.0.push(ArcRef::new(Arc::new(v)).map(|v| &v[..]))
+    }
+
+    pub fn push_arcref(&mut self, arcref : ArcRef<Vec<u8>, [u8]>) {
+        self.0.push(arcref)
     }
 
     /// Convert to linear (single vector) form
