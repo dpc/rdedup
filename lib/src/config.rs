@@ -6,6 +6,7 @@ use {serde_yaml, PassphraseFn, SGData};
 use asyncio;
 use chunking;
 use compression;
+use sodiumoxide::crypto::pwhash;
 
 use encryption;
 use encryption::{ArcDecrypter, ArcEncrypter};
@@ -73,6 +74,48 @@ impl Default for Chunking {
     fn default() -> Chunking {
         Chunking::Bup {
             chunk_bits: DEFAULT_BUP_CHUNK_BITS,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+/// `Chunking` are the algorithms supported by rdedup
+pub enum PWHash {
+    /// `Bup` is the default algorithm, the chunk_bits value provided with
+    /// bup
+    /// is the bit shift to be used by rollsum. The valid range is between
+    /// 10
+    /// and 30 (1KB to 1GB)
+    #[serde(rename = "scryptsalsa208sha256")]
+    SodiumOxide  { mem_limit: u64, ops_limit: u64 },
+}
+
+/// Default implementation for the `Chunking`
+impl Default for PWHash {
+    fn default() -> PWHash {
+        PWHash::SodiumOxide {
+            ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
+            mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
+        }
+    }
+}
+
+impl PWHash {
+    fn from_settings(pwhash : settings::PWHash) -> Self {
+        match pwhash {
+            settings::PWHash::Weak => PWHash::SodiumOxide {
+                ops_limit: 0,
+                mem_limit: 0,
+            },
+            settings::PWHash::Interactive => PWHash::SodiumOxide {
+                ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
+                mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
+            },
+            settings::PWHash::Strong => PWHash::SodiumOxide {
+                ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
+                mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
+            },
         }
     }
 }
@@ -283,6 +326,8 @@ impl Nesting {
 pub struct Repo {
     pub version: u32,
     #[serde(default)]
+    pub pwhash: PWHash,
+    #[serde(default)]
     pub chunking: Chunking,
     pub encryption: Encryption,
     #[serde(default)]
@@ -308,6 +353,7 @@ impl Repo {
 
         Ok(Repo {
             version: REPO_VERSION_CURRENT,
+            pwhash: PWHash::from_settings(settings.pwhash),
             chunking: settings.chunking.0,
             encryption: encryption,
             compression: settings

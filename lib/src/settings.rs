@@ -55,6 +55,19 @@ impl Default for Encryption {
 pub struct Chunking(pub(crate) config::Chunking);
 
 #[derive(Clone)]
+pub enum PWHash {
+    Weak,
+    Interactive,
+    Strong,
+}
+
+impl Default for PWHash {
+    fn default() -> Self {
+        PWHash::Strong
+    }
+}
+
+#[derive(Clone)]
 pub struct Nesting(u8);
 impl Default for Nesting {
     fn default() -> Self {
@@ -91,6 +104,7 @@ impl Default for Hashing {
 
 #[derive(Clone, Default)]
 pub struct Repo {
+    pub(crate) pwhash: PWHash,
     pub(crate) encryption: Encryption,
     pub(crate) compression: Compression,
     pub(crate) compression_level: i32,
@@ -115,6 +129,10 @@ impl Repo {
     ) -> io::Result<()> {
         self.compression = compression;
         Ok(())
+    }
+
+    pub fn set_phwash(&mut self, pwhash : PWHash) {
+        self.pwhash = pwhash;
     }
 
     pub fn set_compression_level(&mut self, level: i32) {

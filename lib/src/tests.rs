@@ -52,7 +52,8 @@ fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
 }
 
 fn test_repo(pass: &str) -> lib::Repo {
-    let settings = settings::Repo::new();
+    let mut settings = settings::Repo::new();
+    settings.set_phwash(settings::PWHash::Weak);
     lib::Repo::init(&rand_tmp_dir(), &|| Ok(pass.into()), settings, None)
         .unwrap()
 }
@@ -242,7 +243,8 @@ fn change_passphrase() {
     let data_before = rand_data(1024);
 
     {
-        let settings = settings::Repo::new();
+        let mut settings = settings::Repo::new();
+        settings.set_phwash(settings::PWHash::Weak);
         let repo = lib::Repo::init(
             &dir_path,
             &|| Ok(prev_passphrase.into()),
@@ -386,6 +388,7 @@ fn test_custom_chunking_size() {
         let dir_path = rand_tmp_dir();
         {
             let mut settings = settings::Repo::new();
+
             let result = settings.use_bup_chunking(Some(bits));
 
 
@@ -398,6 +401,7 @@ fn test_custom_chunking_size() {
             } else if result.is_err() {
                 panic!("expected Ok, but got {:}", result.err().unwrap());
             }
+            settings.set_phwash(settings::PWHash::Weak);
             lib::Repo::init(
                 &dir_path,
                 &|| Ok(PASS.into()),
@@ -433,6 +437,7 @@ fn test_custom_nesting() {
             } else if result.is_err() {
                 panic!("expected Ok, but got {:}", result.err().unwrap());
             }
+            settings.set_phwash(settings::PWHash::Weak);
             lib::Repo::init(
                 &dir_path,
                 &|| Ok(PASS.into()),
