@@ -1,8 +1,14 @@
 # v2.0.0 (in progress)
 ## Added
 - End to End testing to make sure stored data is loaded correctly
+- Configurable settings for most algorithms used
+- CDC: fastcdc, gear
+- Compression: zstd, xz2, bzip2
+- Encryption: none
 
 ## Changed
+- Default settings
+- Huge `store` performance improvements in `rdedup store` path
 - rdedup can now initialize an existing but empty directory
 
 # v1.0.2
