@@ -11,7 +11,7 @@ extern crate lzma;
 extern crate num_cpus;
 extern crate owning_ref;
 extern crate rand;
-extern crate rollsum;
+extern crate rdedup_cdc as rollsum;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

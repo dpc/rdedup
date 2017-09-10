@@ -1,6 +1,6 @@
 [package]
 name = "rdedup"
-version = "2.0.0-0.2"
+version = "2.0.0-0.3"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Data deduplication with compression and public key encryption. - binary"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]

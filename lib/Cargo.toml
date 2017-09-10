@@ -15,7 +15,7 @@ name = "rdedup_lib"
 path = "src/lib.rs"
 
 [dependencies]
-rollsum = { git = "https://github.com/dpc/rsroll.git", rev="609723ec7927ef9c593251e54842092ea3d3639f" }
+rdedup-cdc = "0.1.0"
 sodiumoxide = { version = "0.0.14", features = ["serde"] }
 flate2 = "0.2"
 rust-lzma = "0.2"
@@ -32,11 +32,11 @@ crossbeam = "0.2.10"
 slog = "2.0.10"
 slog-perf = "0.1"
 hex = "0.2"
-sgdata = { version = "*", path = "../sgdata" }
+sgdata = { version = "0.1.0", path = "../sgdata" }
 rand = "0.3.14"
 dangerous_option = { git = "https://github.com/dpc/dangerous_option.git" }
-walkdir = "*"
-zstd = "*"
+walkdir = "1.0.7"
+zstd = "0.4.14"
 sha2 = "0.6"
 blake2 = "0.6"
 digest = "0.6"
