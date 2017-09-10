@@ -4,7 +4,7 @@ use compression::ArcCompression;
 use encryption::ArcEncrypter;
 use hashing::ArcHasher;
 use sgdata::SGData;
-use slog::Logger;
+use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std::sync::mpsc;
 use two_lock_queue;
@@ -46,7 +46,11 @@ impl ChunkProcessor {
     }
 
     pub fn run(&self) {
-        let mut timer = TimeReporter::new("chunk-processing", self.log.clone());
+        let mut timer = TimeReporter::new_with_level(
+            "chunk-processing",
+            self.log.clone(),
+            Level::Debug,
+        );
 
         loop {
             timer.start("rx");

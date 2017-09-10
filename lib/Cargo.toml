@@ -30,7 +30,7 @@ two-lock-queue = "0.1.0"
 num_cpus = "1.2.1"
 crossbeam = "0.2.10"
 slog = "2.0.10"
-slog-perf = "0.1"
+slog-perf = "0.2"
 hex = "0.2"
 sgdata = { version = "0.1.0", path = "../sgdata" }
 rand = "0.3.14"

@@ -273,26 +273,46 @@ fn validate_nesting(s: String) -> Result<(), String> {
     Ok(())
 }
 
-fn create_logger(verbosity: u32) -> slog::Logger {
-    match verbosity {
-        0 => slog::Logger::root(slog::Discard, o!()),
-        dl => {
-            let level = match dl {
-                0 => unreachable!(),
+fn create_logger(verbosity: u32, timing_verbosity : u32) -> slog::Logger {
+    match (verbosity, timing_verbosity) {
+        (0, 0) => slog::Logger::root(slog::Discard, o!()),
+        (v, tv) => {
+            let v = match v {
+                0 => slog::Level::Warning,
+                1 => slog::Level::Info,
+                2 => slog::Level::Debug,
+                _ => slog::Level::Trace,
+            };
+            let tv = match tv {
+                0 => slog::Level::Warning,
                 1 => slog::Level::Info,
                 2 => slog::Level::Debug,
                 _ => slog::Level::Trace,
             };
             let drain = slog_term::term_full();
-            if dl > 4 {
+            if verbosity > 4 {
                 // at level 4, use synchronous logger so not to loose any
                 // logging messages
                 let drain = std::sync::Mutex::new(drain);
-                let drain = slog::LevelFilter::new(drain, level);
-                slog::Logger::root(drain.fuse(), o!())
+                let drain = slog::Filter::new(drain, move |record : &slog::Record| {
+                    if record.tag() == "slog_perf" {
+                        record.level() >= tv
+                    } else {
+                        record.level() >= v
+                    }
+                });
+                let log = slog::Logger::root(drain.fuse(), o!());
+                info!(log, "Using synchronized logging, that we'll be slightly slower.");
+                log
             } else {
                 let drain = slog_async::Async::default(drain.fuse());
-                let drain = slog::LevelFilter::new(drain, level);
+                let drain = slog::Filter::new(drain, move |record : &slog::Record| {
+                    if record.tag() == "slog_perf" {
+                        record.level().is_at_least(tv)
+                    } else {
+                        record.level().is_at_least(v)
+                    }
+                });
                 slog::Logger::root(drain.fuse(), o!())
             }
         }
@@ -307,7 +327,8 @@ fn run() -> io::Result<()> {
         (about: "Data deduplication toolkit")
         (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. \
          Override `RDEDUP_DIR` environment variable.")
-        (@arg verbose: -v ... "Increase debugging level")
+        (@arg VERBOSE: -v ... "Increase debugging level for general messages")
+        (@arg VERBOSE_TIMINGS: -t ... "Increase debugging level for timings")
         (@subcommand init =>
          (about: "Create a new repository")
          (@arg PWHASH: --pwhash possible_values(&["strong", "interactive", "weak"])
@@ -378,7 +399,10 @@ fn run() -> io::Result<()> {
 
     let mut options = Options::new(dir);
 
-    let log = create_logger(matches.occurrences_of("verbose") as u32);
+    let log = create_logger(
+        matches.occurrences_of("VERBOSE") as u32,
+        matches.occurrences_of("VERBOSE_TIMINGS") as u32
+    );
 
     match matches.subcommand() {
         ("init", Some(matches)) => {

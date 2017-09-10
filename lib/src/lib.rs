@@ -28,7 +28,7 @@ extern crate zstd;
 
 use hex::ToHex;
 use sgdata::SGData;
-use slog::Logger;
+use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use slog::FnValue;
 
@@ -797,18 +797,20 @@ impl Repo {
 
 
         crossbeam::scope(move |scope| {
-            let mut timer = slog_perf::TimeReporter::new(
+            let mut timer = slog_perf::TimeReporter::new_with_level(
                 "index-processor",
                 self.log.clone(),
+                Level::Debug,
             );
             timer.start("spawn-chunker");
 
             scope.spawn({
                 let process_tx = process_tx.clone();
                 move || {
-                    let mut timer = slog_perf::TimeReporter::new(
+                    let mut timer = slog_perf::TimeReporter::new_with_level(
                         "chunker",
                         self.log.clone(),
+                        Level::Debug,
                     );
 
                     let chunker = Chunker::new(
@@ -883,7 +885,11 @@ impl Repo {
     ) where
         R: Read + Send,
     {
-        let mut time = TimeReporter::new("input-reader", self.log.clone());
+        let mut time = TimeReporter::new_with_level(
+            "input-reader",
+            self.log.clone(),
+            Level::Debug,
+        );
 
         let r2vi = ReaderVecIter::new(reader, INGRESS_BUFFER_SIZE);
         let mut while_ok = WhileOk::new(r2vi);
@@ -1198,6 +1204,12 @@ impl Repo {
         info!(self.log, "Writing data"; "name" => name);
         let _lock = self.aio.lock_shared();
 
+        let mut timer = slog_perf::TimeReporter::new_with_level(
+            "write",
+            self.log.clone(),
+            Level::Info,
+        );
+        timer.start("write");
         let num_threads = num_cpus::get();
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());

@@ -144,12 +144,12 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                     // do chunker returns.
                     if self.incomplete_chunk.len() >= 64 {
                         self.chunks_returned += 1;
-                        return Some(
-                                mem::replace(&mut self.incomplete_chunk,
-                                             SGData::empty()),
-                                );
+                        return Some(mem::replace(
+                            &mut self.incomplete_chunk,
+                            SGData::empty(),
+                        ));
                     } else {
-                        continue
+                        continue;
                     }
                 }
                 self.incomplete_chunk.push_arcref(buf);

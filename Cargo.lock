@@ -364,7 +364,7 @@ version = "2.0.0-0.3"
 dependencies = [
  "clap 2.26.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "rdedup-lib 2.0.0-0.2",
+ "rdedup-lib 2.0.0-0.3",
  "rpassword 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -379,7 +379,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rdedup-lib"
-version = "2.0.0-0.2"
+version = "2.0.0-0.3"
 dependencies = [
  "base64 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -401,7 +401,7 @@ dependencies = [
  "sgdata 0.1.0",
  "sha2 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog-perf 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog-perf 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sodiumoxide 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "two-lock-queue 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "slog-perf"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -787,7 +787,7 @@ dependencies = [
 "checksum sha2 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d963c78ce367df26d7ea8b8cc655c651b42e8a1e584e869c1e17dae3ccb116a"
 "checksum slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)" = "a3a87ab71068040f48693f3ddb45c3745314eff9a7dfac45b3783a04d2f86399"
 "checksum slog-async 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8ad0c2eeab552a206f95303868338aa67041146da8f8978dba8343c2b29b8ec2"
-"checksum slog-perf 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2d5969476e90e39bd09d486720d688edf3132b07f2869a8d7098e7437126f16e"
+"checksum slog-perf 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "cca2f6919a4fa9b1746df25aa5a046fbc520629b9ff068a3b980c9e19884a812"
 "checksum slog-term 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b4dc32ad4eb5c7406c9aa333731803977fc962906af7e6f30ee9ccccc02076f"
 "checksum sodiumoxide 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "bc02c0bc77ffed8e8eaef004399b825cf4fd8aa02d0af6e473225affd583ff4d"
 "checksum stable_deref_trait 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "15132e0e364248108c5e2c02e3ab539be8d6f5d52a01ca9bbf27ed657316f02b"

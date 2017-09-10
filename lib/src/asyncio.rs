@@ -10,7 +10,7 @@ use rand;
 use rand::Rng;
 use sgdata::SGData;
 use slog;
-use slog::Logger;
+use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std;
 use std::{fs, io, mem, thread};
@@ -303,7 +303,11 @@ impl AsyncIOThread {
         rx: two_lock_queue::Receiver<Message>,
         log: Logger,
     ) -> Self {
-        let t = TimeReporter::new("chunk-writer", log.clone());
+        let t = TimeReporter::new_with_level(
+            "chunk-writer",
+            log.clone(),
+            Level::Debug,
+        );
         AsyncIOThread {
             root_path: root_path,
             log: log.new(o!("module" => "asyncio")),

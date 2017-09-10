@@ -88,7 +88,7 @@ pub enum PWHash {
     /// 10
     /// and 30 (1KB to 1GB)
     #[serde(rename = "scryptsalsa208sha256")]
-    SodiumOxide  { mem_limit: u64, ops_limit: u64 },
+    SodiumOxide { mem_limit: u64, ops_limit: u64 },
 }
 
 /// Default implementation for the `Chunking`
@@ -102,7 +102,7 @@ impl Default for PWHash {
 }
 
 impl PWHash {
-    fn from_settings(pwhash : settings::PWHash) -> Self {
+    fn from_settings(pwhash: settings::PWHash) -> Self {
         match pwhash {
             settings::PWHash::Weak => PWHash::SodiumOxide {
                 ops_limit: 0,

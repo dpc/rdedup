@@ -68,7 +68,7 @@ impl Default for PWHash {
 }
 
 impl<'a> From<&'a str> for PWHash {
-    fn from(s : &str) -> Self {
+    fn from(s: &str) -> Self {
         match s {
             "weak" => PWHash::Weak,
             "interactive" => PWHash::Interactive,
@@ -142,7 +142,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn set_pwhash(&mut self, pwhash : PWHash) {
+    pub fn set_pwhash(&mut self, pwhash: PWHash) {
         self.pwhash = pwhash;
     }
 
