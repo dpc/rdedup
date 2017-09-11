@@ -20,7 +20,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use {DataAddress, DIGEST_SIZE};
+use {DataAddress, OwnedDataAddress, DIGEST_SIZE};
 use util::{as_base64, from_base64};
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
@@ -135,8 +135,17 @@ impl Name {
     }
 }
 
-impl From<DataAddress> for Name {
+impl<'a> From<DataAddress<'a>> for Name {
     fn from(da: DataAddress) -> Self {
+        Name {
+            digest: da.digest.0.clone(),
+            index_level: da.index_level,
+        }
+    }
+}
+
+impl From<OwnedDataAddress> for Name {
+    fn from(da: OwnedDataAddress) -> Self {
         Name {
             digest: da.digest.0,
             index_level: da.index_level,
