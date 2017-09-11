@@ -1,6 +1,6 @@
 [package]
 name = "rdedup-lib"
-version = "2.0.0-0.3"
+version = "3.0.0-0.0.1"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Data deduplication with compression and public key encryption. - library"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
