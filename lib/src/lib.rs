@@ -113,9 +113,9 @@ impl DataType {
 /// write it into `writer` that it wraps.
 struct IndexTranslator<'a, 'b> {
     accessor: &'a ChunkAccessor,
-    digest: Vec<u8>,
     parent_digest: &'b [u8],
     writer: Option<&'a mut Write>,
+    data_address: DataAddress,
     data_type: DataType,
     decrypter: Option<ArcDecrypter>,
     compression: ArcCompression,
@@ -134,8 +134,11 @@ impl<'a, 'b> IndexTranslator<'a, 'b> {
     ) -> Self {
         IndexTranslator {
             accessor: accessor,
-            digest: Vec::with_capacity(DIGEST_SIZE),
             data_type: data_type,
+            data_address: DataAddress {
+                index_level: 0,
+                digest: Digest(Vec::with_capacity(DIGEST_SIZE)),
+            },
             parent_digest: parent_digest,
             decrypter: decrypter,
             compression: compression,
@@ -153,24 +156,27 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
         let total_len = bytes.len();
         loop {
-            let has_already = self.digest.len();
+            let has_already = self.data_address.digest.0.len();
             if (has_already + bytes.len()) < DIGEST_SIZE {
-                self.digest.extend_from_slice(bytes);
+                self.data_address.digest.0.extend_from_slice(bytes);
 
                 trace!(self.log, "left with a buffer";
-                       "digest" => FnValue(|_| self.digest.to_hex()),
+                       "digest" => FnValue(|_| self.data_address.digest.0.to_hex()),
                        );
                 return Ok(total_len);
             }
 
             let needs = DIGEST_SIZE - has_already;
-            self.digest.extend_from_slice(&bytes[..needs]);
-            debug_assert_eq!(self.digest.len(), DIGEST_SIZE);
+            self.data_address
+                .digest
+                .0
+                .extend_from_slice(&bytes[..needs]);
+            debug_assert_eq!(self.data_address.digest.0.len(), DIGEST_SIZE);
 
             bytes = &bytes[needs..];
             let &mut IndexTranslator {
                 accessor,
-                ref mut digest,
+                ref mut data_address,
                 ref parent_digest,
                 data_type,
                 ref decrypter,
@@ -187,11 +193,12 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                     compression.clone(),
                     self.log.clone(),
                 );
-                traverser.read_recursively(accessor, digest)
+
+                traverser.read_recursively(accessor, &data_address)
             } else {
-                accessor.touch(digest)
+                accessor.touch(&data_address.digest)
             };
-            digest.clear();
+            data_address.digest.0.clear();
             res?;
         }
     }
@@ -204,7 +211,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
     fn drop(&mut self) {
         if !std::thread::panicking() {
-            debug_assert_eq!(self.digest.len(), 0);
+            debug_assert_eq!(self.data_address.digest.0.len(), 0);
         }
     }
 }
@@ -247,25 +254,16 @@ impl<'a> ReadContext<'a> {
     fn on_index(
         &mut self,
         accessor: &'a ChunkAccessor,
-        digest: &[u8],
+        data_address: &DataAddress,
     ) -> Result<()> {
         trace!(self.log, "Traversing index";
                "parent" => FnValue(|_| self.parent_digest.to_hex()),
-               "digest" => FnValue(|_| digest.to_hex()),
+               "digest" => FnValue(|_| data_address.digest.0.to_hex()),
                );
-        let mut index_data = Vec::with_capacity(DIGEST_SIZE);
-        accessor.read_chunk_into(
-            digest,
-            DataType::Index,
-            self.data_type,
-            &mut index_data,
-        )?;
-
-        assert_eq!(index_data.len(), DIGEST_SIZE);
 
         let mut translator = IndexTranslator::new(
             accessor,
-            digest,
+            &data_address.digest.0,
             self.writer.take(),
             self.data_type,
             self.decrypter.clone(),
@@ -275,23 +273,29 @@ impl<'a> ReadContext<'a> {
 
         let mut sub_traverser = ReadContext::new(
             Some(&mut translator),
-            digest,
+            &data_address.digest.0,
             DataType::Index,
             None,
             self.compression.clone(),
             self.log.clone(),
         );
-        sub_traverser.read_recursively(accessor, &index_data)
+
+        // TODO: Copying :(
+        let da = DataAddress {
+            digest: data_address.digest.clone(),
+            index_level: data_address.index_level - 1,
+        };
+        sub_traverser.read_recursively(accessor, &da)
     }
 
     fn on_data(
         &mut self,
         accessor: &'a ChunkAccessor,
-        digest: &[u8],
+        digest: &Digest,
     ) -> Result<()> {
         trace!(self.log, "Traversing data";
                "parent" => FnValue(|_| self.parent_digest.to_hex()),
-               "digest" => FnValue(|_| digest.to_hex()),
+               "digest" => FnValue(|_| digest.0.to_hex()),
                );
         if let Some(writer) = self.writer.take() {
             accessor.read_chunk_into(
@@ -308,18 +312,18 @@ impl<'a> ReadContext<'a> {
     fn read_recursively(
         &mut self,
         accessor: &'a ChunkAccessor,
-        digest: &[u8],
+        da: &DataAddress,
     ) -> Result<()> {
         trace!(self.log, "Reading recursively";
                "parent" => FnValue(|_| self.parent_digest.to_hex()),
-               "digest" => FnValue(|_| digest.to_hex()),
+               "digest" => FnValue(|_| da.digest.0.to_hex()),
                );
-        let chunk_type = accessor.repo().chunk_type(digest)?;
 
         let s = &*accessor as &ChunkAccessor;
-        match chunk_type {
-            DataType::Index => self.on_index(s, digest),
-            DataType::Data => self.on_data(s, digest),
+        if da.index_level == 0 {
+            self.on_data(s, &da.digest)
+        } else {
+            self.on_index(s, da)
         }
     }
 }
@@ -332,14 +336,14 @@ trait ChunkAccessor {
     /// Read a chunk identified by `digest` into `writer`
     fn read_chunk_into(
         &self,
-        digest: &[u8],
+        digest: &Digest,
         chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()>;
 
 
-    fn touch(&self, _digest: &[u8]) -> Result<()> {
+    fn touch(&self, _digest: &Digest) -> Result<()> {
         Ok(())
     }
 }
@@ -373,12 +377,12 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: &[u8],
+        digest: &Digest,
         chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
-        let path = self.repo.chunk_rel_path_by_digest(digest, chunk_type);
+        let path = self.repo.chunk_rel_path_by_digest(digest);
         let data = self.repo.aio.read(path).wait()?;
 
         let data = if data_type.should_encrypt() && chunk_type.should_encrypt()
@@ -386,7 +390,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
-                .decrypt(data, digest)?
+                .decrypt(data, &digest.0)?
         } else {
             data
         };
@@ -400,12 +404,12 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
         let vec_result = self.repo.hasher.calculate_digest(&data);
 
-        if vec_result != digest {
+        if vec_result != digest.0 {
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
                     "{} corrupted, data read: {}",
-                    digest.to_hex(),
+                    digest.0.to_hex(),
                     vec_result.to_hex()
                 ),
             ))
@@ -446,14 +450,14 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         self.raw.repo()
     }
 
-    fn touch(&self, digest: &[u8]) -> Result<()> {
-        self.accessed.borrow_mut().insert(digest.to_owned());
+    fn touch(&self, digest: &Digest) -> Result<()> {
+        self.accessed.borrow_mut().insert(digest.0.clone());
         Ok(())
     }
 
     fn read_chunk_into(
         &self,
-        digest: &[u8],
+        digest: &Digest,
         chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
@@ -502,17 +506,17 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: &[u8],
+        digest: &Digest,
         chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
         {
             let mut accessed = self.accessed.borrow_mut();
-            if accessed.contains(digest) {
+            if accessed.contains(&digest.0) {
                 return Ok(());
             }
-            accessed.insert(digest.to_owned());
+            accessed.insert(digest.0.clone());
         }
         let res =
             self.raw
@@ -521,7 +525,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         if res.is_err() {
             self.errors
                 .borrow_mut()
-                .push((digest.to_owned(), res.err().unwrap()));
+                .push((digest.0.clone(), res.err().unwrap()));
         }
         Ok(())
     }
@@ -570,6 +574,28 @@ pub struct EncryptHandle {
     encrypter: ArcEncrypter,
 }
 
+
+#[derive(Clone)]
+struct Digest(Vec<u8>);
+
+#[derive(Clone)]
+struct DataAddress {
+    // number of times the data index
+    // was written (and then index of an index and so forth)
+    // until it was recuded to final digest
+    index_level: u32,
+    // final digest
+    digest: Digest,
+}
+
+impl From<config::Name> for DataAddress {
+    fn from(name: config::Name) -> Self {
+        DataAddress {
+            index_level: name.index_level,
+            digest: Digest(name.digest),
+        }
+    }
+}
 
 
 /// Opaque wrapper over secret key
@@ -702,7 +728,7 @@ impl Repo {
     pub fn list_names(&self) -> Result<Vec<String>> {
         let _lock = self.aio.lock_shared();
 
-        self.list_names_nolock()
+        config::Name::list(&self.aio)
     }
 
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
@@ -731,16 +757,7 @@ impl Repo {
             ));
         }
 
-        let config_data = aio.read(config::CONFIG_YML_FILE.into()).wait()?;
-        let config_data = config_data.to_linear_vec();
-
-        let config: config::Repo =
-            serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("couldn't parse yaml: {}", e.to_string()),
-                )
-            })?;
+        let config = config::Repo::read(&aio)?;
 
         let compression = config.compression.to_engine();
         let hasher = config.hashing.to_hasher();
@@ -782,7 +799,7 @@ impl Repo {
         process_tx: two_lock_queue::Sender<chunk_processor::Message>,
         aio: asyncio::AsyncIO,
         data_type: DataType,
-    ) -> io::Result<Vec<u8>> {
+    ) -> io::Result<DataAddress> {
         // Note: This channel is intentionally unbounded
         // The processing loop runs in sort of a loop (actually more of a
         // recursive spiral). Unless this channel is unbounded it's possible
@@ -849,25 +866,25 @@ impl Repo {
                 timer.start_with("digest-rx", || digests_rx.next())
             {
                 let mut two_first = vec![first_digest, second_digest];
-                let digest = self.chunk_and_write_data_thread(
-                    Box::new(two_first.drain(..).chain(digests_rx)),
+                let mut address = self.chunk_and_write_data_thread(
+                    Box::new(
+                        two_first
+                            .drain(..)
+                            .chain(digests_rx)
+                            .map(|digest| digest.0),
+                    ),
                     process_tx,
                     aio.clone(),
                     DataType::Index,
                 )?;
 
-                let index_digest = self.hasher.calculate_digest_simple(&digest);
-
-                timer.start("writer-tx");
-                let path =
-                    self.chunk_rel_path_by_digest(
-                        &index_digest,
-                        DataType::Index,
-                    );
-                aio.write_checked_idempotent(path, SGData::from_single(digest));
-                Ok(index_digest)
+                address.index_level += 1;
+                Ok(address)
             } else {
-                Ok(first_digest)
+                Ok(DataAddress {
+                    index_level: 0,
+                    digest: first_digest,
+                })
             }
         })
     }
@@ -917,50 +934,16 @@ impl Repo {
         RecordingChunkAccessor::new(self, accessed, decrypter, compression)
     }
 
-    fn name_to_digest(&self, name: &str) -> Result<Vec<u8>> {
-        let name_path = self.name_path(name);
-        if !name_path.exists() {
-            return Err(
-                Error::new(io::ErrorKind::NotFound, "name file not found"),
-            );
-        }
-
-        let path = PathBuf::from(config::NAME_SUBDIR).join(name);
-
-        let data = self.aio.read(path).wait()?.to_linear_vec();
-
-        debug!(self.log, "Resolved"; "name" => name, "digest" => data.to_hex());
-        Ok(data)
-    }
-
-    fn store_digest_as_name(&self, digest: &[u8], name: &str) -> Result<()> {
-        let path: PathBuf = config::NAME_SUBDIR.into();
-        let path = path.join(name);
-
-        if self.aio.read(path.clone()).wait().is_ok() {
-            return Err(Error::new(
-                io::ErrorKind::AlreadyExists,
-                "name already exists",
-            ));
-        }
-
-        let mut data = Vec::with_capacity(256);
-        data.write_all(digest)?;
-
-        self.aio.write(path, SGData::from_single(data)).wait()?;
-        Ok(())
-    }
-
     fn reachable_recursively_insert(
         &self,
-        digest: &[u8],
+        da: &DataAddress,
         reachable_digests: &mut HashSet<Vec<u8>>,
     ) -> Result<()> {
-        reachable_digests.insert(digest.to_owned());
+        reachable_digests.insert(da.digest.0.clone());
 
         let mut traverser = ReadContext::new(
             None,
-            digest,
+            &da.digest.0,
             DataType::Data,
             None,
             self.compression.clone(),
@@ -972,46 +955,28 @@ impl Repo {
                 None,
                 self.compression.clone(),
             ),
-            digest,
+            da,
         )
     }
 
-    /// List all names
-    fn list_names_nolock(&self) -> Result<Vec<String>> {
-        let list = self.aio.list(PathBuf::from(config::NAME_SUBDIR)).wait()?;
-        Ok(
-            list.iter()
-                .map(|e| {
-                    e.file_name()
-                        .expect("malformed name: e")
-                        .to_string_lossy()
-                        .to_string()
-                })
-                .collect(),
-        )
-    }
 
 
     /// Return all reachable chunks
     fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         let mut reachable_digests = HashSet::new();
-        let all_names = self.list_names_nolock()?;
-        for name in &all_names {
-            match self.name_to_digest(name) {
-                Ok(digest) => {
-                    // Make sure digest is the standard size
-                    if digest.len() == DIGEST_SIZE {
-                        info!(self.log, "processing"; "name" => name);
-                        self.reachable_recursively_insert(
-                            &digest,
-                            &mut reachable_digests,
-                        )?;
-                    } else {
-                        info!(self.log, "skipped";  "name" => name);
-                    }
+        let all_names = config::Name::list(&self.aio)?;
+        for name_str in &all_names {
+            match config::Name::load_from(name_str, &self.aio) {
+                Ok(name) => {
+                    let data_address: DataAddress = name.into();
+                    info!(self.log, "processing"; "name" => name_str);
+                    self.reachable_recursively_insert(
+                        &data_address,
+                        &mut reachable_digests,
+                    )?;
                 }
                 Err(e) => {
-                    info!(self.log, "skipped"; "name" => name, "error" =>
+                    info!(self.log, "skipped"; "name" => name_str, "error" =>
                           e.description());
                 }
             };
@@ -1019,74 +984,48 @@ impl Repo {
         Ok(reachable_digests)
     }
 
-    fn chunk_type(&self, digest: &[u8]) -> Result<DataType> {
-        for i in &[DataType::Index, DataType::Data] {
-            let file_path = self.chunk_path_by_digest(digest, *i);
-            if file_path.exists() {
-                return Ok(*i);
-            }
-        }
-        Err(Error::new(
-            io::ErrorKind::NotFound,
-            format!("chunk file missing: {}", digest.to_hex()),
-        ))
+    // fn chunk_type(&self, digest: &[u8]) -> Result<DataType> {
+    // for i in &[DataType::Index, DataType::Data] {
+    // let file_path = self.chunk_path_by_digest(digest, *i);
+    // if file_path.exists() {
+    // return Ok(*i);
+    // }
+    // }
+    // Err(Error::new(
+    // io::ErrorKind::NotFound,
+    // format!("chunk file missing: {}", digest.to_hex()),
+    // ))
+    // }
+
+    fn chunk_rel_path_by_digest(&self, digest: &Digest) -> PathBuf {
+        self.config
+            .nesting
+            .get_path(Path::new(config::DATA_SUBDIR), &digest.0)
     }
 
-    fn chunk_rel_path_by_digest(
-        &self,
-        digest: &[u8],
-        chunk_type: DataType,
-    ) -> PathBuf {
-        let i_or_c = match chunk_type {
-            DataType::Data => Path::new(config::DATA_SUBDIR),
-            DataType::Index => Path::new(config::INDEX_SUBDIR),
-        };
-
-        self.config.nesting.get_path(i_or_c, digest)
+    fn chunk_path_by_digest(&self, digest: &Digest) -> PathBuf {
+        self.path.join(self.chunk_rel_path_by_digest(digest))
     }
 
-    fn chunk_path_by_digest(
-        &self,
-        digest: &[u8],
-        chunk_type: DataType,
-    ) -> PathBuf {
-        self.path
-            .join(self.chunk_rel_path_by_digest(digest, chunk_type))
-    }
-
-    fn rm_chunk_by_digest(&self, digest: &[u8]) -> Result<u64> {
-        let chunk_type = self.chunk_type(digest)?;
-        let path = self.chunk_path_by_digest(digest, chunk_type);
+    fn rm_chunk_by_digest(&self, digest: &Digest) -> Result<u64> {
+        let path = self.chunk_path_by_digest(digest);
         let md = fs::metadata(&path)?;
         fs::remove_file(path)?;
         Ok(md.len())
     }
 
 
-    fn name_dir_path(&self) -> PathBuf {
-        self.path.join(config::NAME_SUBDIR)
-    }
-
-    fn name_path(&self, name: &str) -> PathBuf {
-        self.name_dir_path().join(name)
-    }
-
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
-        fs::remove_file(self.name_path(name))
+        config::Name::remove(name, self)
     }
 
     pub fn gc(&self) -> Result<GcResults> {
         let _lock = self.aio.lock_exclusive();
 
         let reachable = self.list_reachable_chunks().unwrap();
-        let index_chunks = StoredChunks::new(
-            &self.aio,
-            PathBuf::from(config::INDEX_SUBDIR),
-            DIGEST_SIZE,
-            self.log.clone(),
-        )?;
+
         let data_chunks = StoredChunks::new(
             &self.aio,
             PathBuf::from(config::DATA_SUBDIR),
@@ -1099,11 +1038,11 @@ impl Repo {
             bytes: 0,
         };
 
-        for digest in index_chunks.chain(data_chunks) {
+        for digest in data_chunks {
             let digest = digest?;
             if !reachable.contains(&digest) {
                 trace!(self.log, "removing chunk"; "digest" => digest.to_hex());
-                let bytes = self.rm_chunk_by_digest(&digest)?;
+                let bytes = self.rm_chunk_by_digest(&Digest(digest))?;
                 result.chunks += 1;
                 result.bytes += bytes;
             }
@@ -1114,13 +1053,14 @@ impl Repo {
 
     pub fn read<W: Write>(
         &self,
-        name: &str,
+        name_str: &str,
         writer: &mut W,
         dec: &DecryptHandle,
     ) -> Result<()> {
         let _lock = self.aio.lock_shared();
 
-        let digest = self.name_to_digest(name)?;
+        let name = config::Name::load_from(name_str, &self.aio)?;
+        let data_address: DataAddress = name.into();
 
         let accessor = self.get_chunk_accessor(
             Some(dec.decrypter.clone()),
@@ -1134,12 +1074,14 @@ impl Repo {
             self.compression.clone(),
             self.log.clone(),
         );
-        traverser.read_recursively(&accessor, &digest)
+        traverser.read_recursively(&accessor, &data_address)
     }
 
-    pub fn du(&self, name: &str, dec: &DecryptHandle) -> Result<DuResults> {
+    pub fn du(&self, name_str: &str, dec: &DecryptHandle) -> Result<DuResults> {
         let _lock = self.aio.lock_shared();
-        let digest = self.name_to_digest(name)?;
+
+        let name = config::Name::load_from(name_str, &self.aio)?;
+        let data_address: DataAddress = name.into();
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
@@ -1156,7 +1098,7 @@ impl Repo {
                 self.compression.clone(),
                 self.log.clone(),
             );
-            traverser.read_recursively(&accessor, &digest)?;
+            traverser.read_recursively(&accessor, &data_address)?;
         }
         Ok(DuResults {
             chunks: accessor.get_results().scanned,
@@ -1166,11 +1108,12 @@ impl Repo {
 
     pub fn verify(
         &self,
-        name: &str,
+        name_str: &str,
         dec: &DecryptHandle,
     ) -> Result<VerifyResults> {
         let _lock = self.aio.lock_shared();
-        let digest = self.name_to_digest(name)?;
+        let name = config::Name::load_from(name_str, &self.aio)?;
+        let data_address: DataAddress = name.into();
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
@@ -1187,21 +1130,21 @@ impl Repo {
                 self.compression.clone(),
                 self.log.clone(),
             );
-            traverser.read_recursively(&accessor, &digest)?;
+            traverser.read_recursively(&accessor, &data_address)?;
         }
         Ok(accessor.get_results())
     }
 
     pub fn write<R>(
         &self,
-        name: &str,
+        name_str: &str,
         reader: R,
         enc: &EncryptHandle,
     ) -> Result<WriteStats>
     where
         R: Read + Send,
     {
-        info!(self.log, "Writing data"; "name" => name);
+        info!(self.log, "Writing data"; "name" => name_str);
         let _lock = self.aio.lock_shared();
 
         let mut timer = slog_perf::TimeReporter::new_with_level(
@@ -1221,7 +1164,7 @@ impl Repo {
         // mpmc queue used  as spmc fan-out
         let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
 
-        let final_digest = crossbeam::scope(|scope| {
+        let data_address = crossbeam::scope(|scope| {
             scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
 
             for _ in 0..num_threads {
@@ -1257,7 +1200,8 @@ impl Repo {
         });
 
 
-        self.store_digest_as_name(&final_digest?, name)?;
+        let name: config::Name = data_address?.into();
+        name.write_as(name_str, &self.aio)?;
         Ok(stats.get_stats())
     }
 }

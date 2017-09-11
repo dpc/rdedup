@@ -8,14 +8,15 @@ use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std::sync::mpsc;
 use two_lock_queue;
+use Digest;
 
-pub struct Message {
+pub(crate) struct Message {
     pub data: (u64, SGData),
     pub data_type: DataType,
-    pub response_tx: mpsc::Sender<(u64, Vec<u8>)>,
+    pub response_tx: mpsc::Sender<(u64, Digest)>,
 }
 
-pub struct ChunkProcessor {
+pub(crate) struct ChunkProcessor {
     repo: Repo,
     rx: two_lock_queue::Receiver<Message>,
     aio: asyncio::AsyncIO,
@@ -65,9 +66,8 @@ impl ChunkProcessor {
                 } = input;
                 let (sg_id, sg) = data;
 
-                let digest = self.hasher.calculate_digest(&sg);
-                let chunk_path =
-                    self.repo.chunk_path_by_digest(&digest, DataType::Data);
+                let digest = Digest(self.hasher.calculate_digest(&sg));
+                let chunk_path = self.repo.chunk_path_by_digest(&digest);
                 if !chunk_path.exists() {
                     let sg = if data_type.should_compress() {
                         trace!(self.log, "compress"; "path" => %chunk_path.display());
@@ -80,15 +80,14 @@ impl ChunkProcessor {
                     let sg = if data_type.should_encrypt() {
                         trace!(self.log, "encrypt"; "path" => %chunk_path.display());
                         timer.start("encrypt");
-                        self.encrypter.encrypt(sg, &digest).unwrap()
+                        self.encrypter.encrypt(sg, &digest.0).unwrap()
                     } else {
                         sg
                     };
 
                     timer.start("tx-writer");
                     self.aio.write_checked_idempotent(
-                        self.repo
-                            .chunk_rel_path_by_digest(&digest, DataType::Data),
+                        self.repo.chunk_rel_path_by_digest(&digest),
                         sg,
                     );
                 } else {

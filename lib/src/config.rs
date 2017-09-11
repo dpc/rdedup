@@ -15,17 +15,19 @@ use hashing;
 use hex::ToHex;
 use settings;
 
-use std::io;
+use std::{fs, io};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use {DataAddress, DIGEST_SIZE};
+use util::{as_base64, from_base64};
 
 pub const REPO_VERSION_LOWEST: u32 = 0;
 pub const REPO_VERSION_CURRENT: u32 = 1;
 
 pub const DATA_SUBDIR: &'static str = "chunk";
 pub const NAME_SUBDIR: &'static str = "name";
-pub const INDEX_SUBDIR: &'static str = "index";
 
 pub const LOCK_FILE: &'static str = ".lock";
 pub const VERSION_FILE: &'static str = "version";
@@ -50,6 +52,96 @@ pub fn write_version_file(
     aio.write(VERSION_FILE.into(), SGData::from_single(v))
         .wait()?;
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Name {
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    pub(crate) digest: Vec<u8>,
+    pub(crate) index_level: u32,
+}
+
+impl Name {
+    // TODO: Make asyncio
+    pub(crate) fn remove(name: &str, repo: &super::Repo) -> io::Result<()> {
+        fs::remove_file(
+            repo.path.join(NAME_SUBDIR).join(name).with_extension("yml"),
+        )
+    }
+
+    /// List all names
+    pub(crate) fn list(aio: &asyncio::AsyncIO) -> io::Result<Vec<String>> {
+        let list = aio.list(PathBuf::from(NAME_SUBDIR)).wait()?;
+        Ok(
+            list.iter()
+                .map(|e| {
+                    e.file_stem()
+                        .expect("malformed name: e")
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect(),
+        )
+    }
+
+    pub fn write_as(
+        &self,
+        name: &str,
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<()> {
+        let serialized_str =
+            serde_yaml::to_string(self).expect("yaml serialization failed");
+
+        let path: PathBuf = NAME_SUBDIR.into();
+        let mut path = path.join(name);
+        path.set_extension("yml");
+
+        if aio.read(path.clone()).wait().is_ok() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "name already exists",
+            ));
+        }
+
+        aio.write(path, SGData::from_single(serialized_str.into_bytes()))
+            .wait()?;
+        Ok(())
+    }
+
+    pub fn load_from(name: &str, aio: &asyncio::AsyncIO) -> io::Result<Self> {
+        let path: PathBuf = NAME_SUBDIR.into();
+        let mut path = path.join(name);
+        path.set_extension("yml");
+
+        let config_data = aio.read(path).wait()?;
+        let config_data = config_data.to_linear_vec();
+
+        let name: Name = serde_yaml::from_reader(config_data.as_slice())
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("couldn't parse yaml: {}", e.to_string()),
+                )
+            })?;
+
+        if name.digest.len() != DIGEST_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("parsed digest has wrong size: {}", name.digest.len()),
+            ));
+        }
+
+        Ok(name)
+    }
+}
+
+impl From<DataAddress> for Name {
+    fn from(da: DataAddress) -> Self {
+        Name {
+            digest: da.digest.0,
+            index_level: da.index_level,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -377,5 +469,17 @@ impl Repo {
         write_version_file(aio, REPO_VERSION_CURRENT)?;
 
         Ok(())
+    }
+
+    pub fn read(aio: &asyncio::AsyncIO) -> super::Result<Self> {
+        let config_data = aio.read(CONFIG_YML_FILE.into()).wait()?;
+        let config_data = config_data.to_linear_vec();
+
+        serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("couldn't parse yaml: {}", e.to_string()),
+            )
+        })
     }
 }

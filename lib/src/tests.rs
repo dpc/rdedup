@@ -32,19 +32,13 @@ fn rand_tmp_dir() -> path::PathBuf {
 
 fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
     let mut digests = HashSet::new();
-    let index_chunks = StoredChunks::new(
-        &repo.aio,
-        PathBuf::from(super::config::INDEX_SUBDIR),
-        DIGEST_SIZE,
-        repo.log.clone(),
-    )?;
     let data_chunks = StoredChunks::new(
         &repo.aio,
         PathBuf::from(super::config::DATA_SUBDIR),
         DIGEST_SIZE,
         repo.log.clone(),
     )?;
-    for digest in index_chunks.chain(data_chunks) {
+    for digest in data_chunks {
         let digest = digest.unwrap();
         digests.insert(digest);
     }
