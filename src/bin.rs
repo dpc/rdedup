@@ -116,7 +116,7 @@
 extern crate clap;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
-extern crate rustc_serialize as serialize;
+extern crate hex;
 #[macro_use]
 extern crate slog;
 extern crate slog_async;
@@ -125,7 +125,7 @@ extern crate slog_term;
 
 use lib::Repo;
 use lib::settings;
-use serialize::hex::ToHex;
+use hex::ToHex;
 use slog::Drain;
 use std::{env, io, process};
 
