@@ -145,8 +145,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "dangerous_option"
-version = "0.1.0"
-source = "git+https://github.com/dpc/dangerous_option.git#37f5026037fd6026f4a10ab0b2ae9ec00517549b"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "digest"
@@ -360,11 +360,11 @@ dependencies = [
 
 [[package]]
 name = "rdedup"
-version = "2.0.0-0.3"
+version = "2.0.0"
 dependencies = [
  "clap 2.26.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "rdedup-lib 2.0.0-0.3",
+ "rdedup-lib 2.0.0",
  "rpassword 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -379,13 +379,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rdedup-lib"
-version = "2.0.0-0.3"
+version = "2.0.0"
 dependencies = [
  "base64 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bzip2 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "dangerous_option 0.1.0 (git+https://github.com/dpc/dangerous_option.git)",
+ "dangerous_option 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "digest 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs2 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -744,7 +744,7 @@ dependencies = [
 "checksum crossbeam 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)" = "0c5ea215664ca264da8a9d9c3be80d2eaf30923c259d03e870388eb927508f97"
 "checksum crypto-mac 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "779015233ac67d65098614aec748ac1c756ab6677fa2e14cf8b37c08dfed1198"
 "checksum custom_derive 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
-"checksum dangerous_option 0.1.0 (git+https://github.com/dpc/dangerous_option.git)" = "<none>"
+"checksum dangerous_option 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "96208cffcdde07243e5a49ad792ced04505f576d249827ac410fe09f7d913962"
 "checksum digest 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e5b29bf156f3f4b3c4f610a25ff69370616ae6e0657d416de22645483e72af0a"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 "checksum flate2 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)" = "36df0166e856739905cd3d7e0b210fe818592211a008862599845e012d8d304c"
