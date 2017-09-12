@@ -360,11 +360,11 @@ dependencies = [
 
 [[package]]
 name = "rdedup"
-version = "2.0.0-0.3"
+version = "3.0.0-0.0.1"
 dependencies = [
  "clap 2.26.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "rdedup-lib 2.0.0-0.3",
+ "rdedup-lib 3.0.0-0.0.1",
  "rpassword 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -379,7 +379,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rdedup-lib"
-version = "2.0.0-0.3"
+version = "3.0.0-0.0.1"
 dependencies = [
  "base64 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",

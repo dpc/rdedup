@@ -1,6 +1,6 @@
 [package]
 name = "rdedup"
-version = "3.0.0-0.1"
+version = "3.0.0-0.0.1"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Data deduplication with compression and public key encryption. - binary"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
@@ -36,7 +36,7 @@ debug-assertions = false
 [workspace]
 
 [dependencies]
-rdedup-lib = { version = "3.0.0-0.1", path = "lib" }
+rdedup-lib = { version = "3.0.0-0.0.1", path = "lib" }
 log = "0.3.6"
 rustc-serialize = "0.3.19"
 clap = "2"
