@@ -62,27 +62,27 @@ fn test_parse_size() {
 pub fn read_passphrase() -> io::Result<String> {
     // The environment variable should only be used for testing
     if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
-        printerr!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
         return Ok(pass);
     }
-    printerr!("Enter passphrase to unlock: ");
+    eprint!("Enter passphrase to unlock: ");
     rpassword::read_password()
 }
 
 pub fn read_new_passphrase() -> io::Result<String> {
     // The environment variable should only be used for testing
     if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
-        printerr!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
         return Ok(pass);
     }
     loop {
-        printerr!("Enter new passphrase: ");
+        eprint!("Enter new passphrase: ");
         let p1 = rpassword::read_password()?;
-        printerr!("Enter new passphrase again: ");
+        eprint!("Enter new passphrase again: ");
         let p2 = rpassword::read_password()?;
         if p1 == p2 {
             return Ok(p1);
         }
-        printerrln!("\nPassphrases don't match, try again.");
+        eprintln!("\nPassphrases don't match, try again.");
     }
 }
