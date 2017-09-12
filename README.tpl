@@ -15,6 +15,8 @@
 
 # {{crate}}
 
+See [wiki](https://github.com/dpc/rdedup/wiki) for current project status.
+
 {{readme}}
 
 # License
