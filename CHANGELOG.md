@@ -1,10 +1,14 @@
-# v2.0.0 (in progress)
+# v2.0.0 - 2017-09-11
 ## Added
 - End to End testing to make sure stored data is loaded correctly
 - Configurable settings for most algorithms used
 - CDC: fastcdc, gear
 - Compression: zstd, xz2, bzip2
-- Encryption: none
+- Hashing: blake2
+- No-Encryption mode
+- Asynchonous IO architecture
+- Timings (`-t`, `-tt` ... flags)
+- Debugging and tracing (`-v`, `-vv`... flags)
 
 ## Changed
 - Default settings
