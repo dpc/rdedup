@@ -16,42 +16,26 @@ use hex::ToHex;
 use settings;
 
 use std::{fs, io};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use {DataAddress, OwnedDataAddress, DIGEST_SIZE};
 use util::{as_base64, from_base64};
 
-pub const REPO_VERSION_LOWEST: u32 = 0;
-pub const REPO_VERSION_CURRENT: u32 = 1;
+mod version;
+
+pub(crate) use self::version::*;
 
 pub const DATA_SUBDIR: &'static str = "chunk";
 pub const NAME_SUBDIR: &'static str = "name";
 
 pub const LOCK_FILE: &'static str = ".lock";
-pub const VERSION_FILE: &'static str = "version";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
 pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
 
 pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
-}
-
-
-pub fn write_version_file(
-    aio: &asyncio::AsyncIO,
-    version: u32,
-) -> super::Result<()> {
-    let mut v = Vec::with_capacity(4 * 1024);
-    {
-        write!(&mut v, "{}", version)?;
-    }
-
-    aio.write(VERSION_FILE.into(), SGData::from_single(v))
-        .wait()?;
-    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -475,7 +459,7 @@ impl Repo {
             SGData::from_single(config_str.into_bytes()),
         ).wait()?;
 
-        write_version_file(aio, REPO_VERSION_CURRENT)?;
+        VersionFile::current().write(aio)?;
 
         Ok(())
     }

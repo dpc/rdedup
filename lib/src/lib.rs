@@ -693,55 +693,6 @@ impl Repo {
         })
     }
 
-    #[allow(unknown_lints)]
-    #[allow(absurd_extreme_comparisons)]
-    fn read_and_validate_version(aio: &AsyncIO) -> Result<u32> {
-        let version = aio.read(PathBuf::from(config::VERSION_FILE))
-            .wait()?
-            .to_linear_vec();
-        let version = String::from_utf8_lossy(&version);
-
-        let version_int = version.parse::<u32>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "can't parse version file; \
-                     unsupported repo format version: {}",
-                    version
-                ),
-            )
-        })?;
-
-
-        if version_int > config::REPO_VERSION_CURRENT {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "repo version {} higher than \
-                     supported {}; update?",
-                    version,
-                    config::REPO_VERSION_CURRENT
-                ),
-            ));
-        }
-        // This if statement triggers the absurd_extreme_comparisons because the
-        // minimum repo version is also the smallest value of a u32
-        if version_int < config::REPO_VERSION_LOWEST {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "repo version {} lower than \
-                     lowest supported {}; \
-                     restore using older version?",
-                    version,
-                    config::REPO_VERSION_LOWEST
-                ),
-            ));
-        }
-
-        Ok(version_int)
-    }
-
     /// List all names
     pub fn list_names(&self) -> Result<Vec<String>> {
         let _lock = self.aio.lock_shared();
@@ -766,14 +717,7 @@ impl Repo {
             ));
         }
 
-        let version = Repo::read_and_validate_version(&aio)?;
-
-        if version == 0 {
-            return Err(Error::new(
-                io::ErrorKind::NotFound,
-                "rdedup v0 config format not supported",
-            ));
-        }
+        let _version = config::VersionFile::read(&aio)?;
 
         let config = config::Repo::read(&aio)?;
 
