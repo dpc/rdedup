@@ -6,8 +6,6 @@ use {serde_yaml, PassphraseFn, SGData};
 use asyncio;
 use sodiumoxide::crypto::pwhash;
 
-use encryption;
-use encryption::{ArcDecrypter, ArcEncrypter};
 use hashing;
 
 use hex::ToHex;
@@ -21,11 +19,13 @@ mod version;
 mod name;
 mod chunking;
 mod compression;
+mod encryption;
 
 pub(crate) use self::version::*;
 pub(crate) use self::name::*;
 pub(crate) use self::chunking::*;
 pub(crate) use self::compression::*;
+pub(crate) use self::encryption::*;
 
 
 pub const DATA_SUBDIR: &'static str = "chunk";
@@ -103,47 +103,6 @@ impl Hashing {
         }
     }
 }
-
-/// Types of supported encryption
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(tag = "type")]
-pub enum Encryption {
-    /// No encryption
-    #[serde(rename = "none")]
-    None,
-    /// `Curve25519Blake2BSalsa20Poly1305`
-    #[serde(rename = "curve25519_blake2b_salsa20_poly1305")]
-    Curve25519(encryption::Curve25519),
-}
-
-impl encryption::EncryptionEngine for Encryption {
-    fn change_passphrase(
-        &mut self,
-        old_p: PassphraseFn,
-        new_p: PassphraseFn,
-    ) -> io::Result<()> {
-        match *self {
-            Encryption::None => Ok(()),
-            Encryption::Curve25519(ref mut c) => {
-                c.change_passphrase(old_p, new_p)
-            }
-        }
-    }
-
-    fn encrypter(&self, pass: PassphraseFn) -> io::Result<ArcEncrypter> {
-        match *self {
-            Encryption::None => Ok(Arc::new(encryption::NopEncrypter)),
-            Encryption::Curve25519(ref c) => c.encrypter(pass),
-        }
-    }
-    fn decrypter(&self, pass: PassphraseFn) -> io::Result<ArcDecrypter> {
-        match *self {
-            Encryption::None => Ok(Arc::new(encryption::NopDecrypter)),
-            Encryption::Curve25519(ref c) => c.decrypter(pass),
-        }
-    }
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct Nesting(pub u8);
 impl Default for Nesting {
@@ -196,7 +155,7 @@ impl Repo {
     ) -> io::Result<Self> {
         let encryption = match settings.encryption {
             settings::Encryption::Curve25519 => {
-                Encryption::Curve25519(encryption::Curve25519::new(pass)?)
+                Encryption::Curve25519(::encryption::Curve25519::new(pass)?)
             }
             settings::Encryption::None => Encryption::None,
         };
