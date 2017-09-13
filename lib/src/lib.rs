@@ -49,9 +49,6 @@ use iterators::StoredChunks;
 
 mod config;
 
-mod sg;
-use sg::*;
-
 mod asyncio;
 use asyncio::*;
 
@@ -531,8 +528,6 @@ pub struct DuResults {
     pub bytes: u64,
 }
 
-
-
 /// Rdedup repository
 #[derive(Clone)]
 pub struct Repo {
@@ -777,7 +772,7 @@ impl Repo {
                         Level::Debug,
                     );
 
-                    let chunker = Chunker::new(
+                    let chunker = chunking::Chunker::new(
                         input_data_iter.into_iter(),
                         self.config.chunking.to_engine(),
                     );
@@ -861,6 +856,10 @@ impl Repo {
         while let Some(buf) = time.start_with("input", || while_ok.next()) {
             time.start("tx");
             chunker_tx.send(buf).unwrap()
+        }
+
+        if let Some(e) = while_ok.finish() {
+            panic!("Input thread error: {}", e)
         }
     }
 
