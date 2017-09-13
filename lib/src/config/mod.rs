@@ -4,8 +4,6 @@
 use {serde_yaml, PassphraseFn, SGData};
 
 use asyncio;
-use chunking;
-use compression;
 use sodiumoxide::crypto::pwhash;
 
 use encryption;
@@ -21,9 +19,13 @@ use std::sync::Arc;
 
 mod version;
 mod name;
+mod chunking;
+mod compression;
 
 pub(crate) use self::version::*;
 pub(crate) use self::name::*;
+pub(crate) use self::chunking::*;
+pub(crate) use self::compression::*;
 
 
 pub const DATA_SUBDIR: &'static str = "chunk";
@@ -31,36 +33,8 @@ pub const DATA_SUBDIR: &'static str = "chunk";
 pub const LOCK_FILE: &'static str = ".lock";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
-pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
-
 pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
-}
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
-/// `Chunking` are the algorithms supported by rdedup
-pub enum Chunking {
-    /// `Bup` is the default algorithm, the chunk_bits value provided with
-    /// bup
-    /// is the bit shift to be used by rollsum. The valid range is between
-    /// 10
-    /// and 30 (1KB to 1GB)
-    #[serde(rename = "bup")]
-    Bup { chunk_bits: u32 },
-    #[serde(rename = "gear")]
-    Gear { chunk_bits: u32 },
-    #[serde(rename = "fastcdc")]
-    FastCDC { chunk_bits: u32 },
-}
-
-/// Default implementation for the `Chunking`
-impl Default for Chunking {
-    fn default() -> Chunking {
-        Chunking::Bup {
-            chunk_bits: DEFAULT_BUP_CHUNK_BITS,
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -105,115 +79,6 @@ impl PWHash {
     }
 }
 
-impl Chunking {
-    pub fn valid(self) -> bool {
-        match self {
-            Chunking::Bup { chunk_bits: bits } |
-            Chunking::Gear { chunk_bits: bits } |
-            Chunking::FastCDC { chunk_bits: bits } => 30 >= bits && bits >= 10,
-        }
-    }
-
-    pub(crate) fn to_engine(&self) -> Box<chunking::Chunking> {
-        match *self {
-            Chunking::Bup { chunk_bits } => {
-                Box::new(chunking::Bup::new(chunk_bits))
-            }
-            Chunking::Gear { chunk_bits } => {
-                Box::new(chunking::Gear::new(chunk_bits))
-            }
-            Chunking::FastCDC { chunk_bits } => {
-                Box::new(chunking::FastCDC::new(chunk_bits))
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Deflate {
-    #[serde(rename = "level")]
-    level:                        i32,
-}
-
-impl Deflate {
-    pub fn new(level: i32) -> Self {
-        Deflate { level: level }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Bzip2 {
-    #[serde(rename = "level")]
-    level:                        i32,
-}
-
-impl Bzip2 {
-    pub fn new(level: i32) -> Self {
-        Bzip2 { level: level }
-    }
-}
-
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Zstd {
-    #[serde(rename = "level")]
-    level:                        i32,
-}
-
-impl Zstd {
-    pub fn new(level: i32) -> Self {
-        Zstd { level: level }
-    }
-}
-
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Xz2 {
-    #[serde(rename = "level")]
-    level:                        i32,
-}
-
-impl Xz2 {
-    pub fn new(level: i32) -> Self {
-        Xz2 { level: level }
-    }
-}
-
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum Compression {
-    #[serde(rename = "deflate")]
-    Deflate(Deflate),
-    #[serde(rename = "xz2")]
-    Xz2(Xz2),
-    #[serde(rename = "bzip2")]
-    Bzip2(Bzip2),
-    #[serde(rename = "zstd")]
-    Zstd(Zstd),
-    #[serde(rename = "none")]
-    None,
-}
-
-impl Default for Compression {
-    fn default() -> Compression {
-        Compression::Deflate(Deflate { level: 0 })
-    }
-}
-
-impl Compression {
-    pub(crate) fn to_engine(&self) -> compression::ArcCompression {
-        match *self {
-            Compression::None => Arc::new(compression::NoCompression),
-            Compression::Deflate(d) => {
-                Arc::new(compression::Deflate::new(d.level))
-            }
-            Compression::Xz2(d) => Arc::new(compression::Xz2::new(d.level)),
-            Compression::Bzip2(d) => Arc::new(compression::Bzip2::new(d.level)),
-            Compression::Zstd(d) => Arc::new(compression::Zstd::new(d.level)),
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
