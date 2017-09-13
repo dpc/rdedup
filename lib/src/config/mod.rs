@@ -15,19 +15,18 @@ use hashing;
 use hex::ToHex;
 use settings;
 
-use std::{fs, io};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use {DataAddress, OwnedDataAddress, DIGEST_SIZE};
-use util::{as_base64, from_base64};
-
 mod version;
+mod name;
 
 pub(crate) use self::version::*;
+pub(crate) use self::name::*;
+
 
 pub const DATA_SUBDIR: &'static str = "chunk";
-pub const NAME_SUBDIR: &'static str = "name";
 
 pub const LOCK_FILE: &'static str = ".lock";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";

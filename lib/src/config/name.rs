@@ -1,8 +1,13 @@
 use std::io;
 use asyncio;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use serde_yaml;
 use SGData;
+use util::*;
+use DIGEST_SIZE;
+use {DataAddress, OwnedDataAddress};
+
+pub(crate) const NAME_SUBDIR: &'static str = "name";
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Name {
@@ -12,13 +17,9 @@ pub(crate) struct Name {
 }
 
 impl Name {
-    pub(crate) fn remove(
-        name: &str,
-        repo: &super::Repo,
-        aio: &asyncio::AsyncIO,
-    ) -> io::Result<()> {
-        aio.remove(repo.path.join(NAME_SUBDIR).join(name).with_extension("yml"))
-            .wait()?
+    pub(crate) fn remove(name: &str, aio: &asyncio::AsyncIO) -> io::Result<()> {
+        aio.remove(Path::new(NAME_SUBDIR).join(name).with_extension("yml"))
+            .wait()
     }
 
     /// List all names

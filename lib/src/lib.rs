@@ -968,10 +968,11 @@ impl Repo {
         self.path.join(self.chunk_rel_path_by_digest(digest))
     }
 
+    // TODO: Use asyncio
     fn rm_chunk_by_digest(&self, digest: &Digest) -> Result<u64> {
         let path = self.chunk_path_by_digest(digest);
         let md = fs::metadata(&path)?;
-        fs::remove_file(path)?;
+        self.aio.remove(path).wait()?;
         Ok(md.len())
     }
 
@@ -979,7 +980,7 @@ impl Repo {
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
-        config::Name::remove(name, self)
+        config::Name::remove(name, &self.aio)
     }
 
     pub fn gc(&self) -> Result<GcResults> {

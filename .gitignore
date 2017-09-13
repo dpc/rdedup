@@ -2,7 +2,6 @@ target
 testdata
 tags
 backup/
-*.bk
 .cargo/
 Cargo.lock
 !./Cargo.lock

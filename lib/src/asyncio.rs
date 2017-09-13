@@ -35,6 +35,7 @@ enum Message {
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
+    Remove(PathBuf, mpsc::Sender<io::Result<()>>),
 }
 
 /// A handle to a async-io worker pool
@@ -198,6 +199,15 @@ impl AsyncIO {
             .expect("channel send failed");
         AsyncIOResult { rx: rx }
     }
+
+
+    pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::Remove(path, tx))
+            .expect("channel send failed");
+        AsyncIOResult { rx: rx }
+    }
 }
 
 impl Drop for AsyncIO {
@@ -338,6 +348,7 @@ impl AsyncIOThread {
                     Message::ListRecursively(path, tx) => {
                         self.list_recursively(path, tx)
                     }
+                    Message::Remove(path, tx) => self.remove(path, tx),
                 }
             } else {
                 break;
@@ -510,8 +521,6 @@ impl AsyncIOThread {
         }
     }
 
-
-
     fn list_recursively(
         &mut self,
         path: PathBuf,
@@ -546,5 +555,20 @@ impl AsyncIOThread {
         if !v.is_empty() {
             tx.send(Ok(v)).expect("send failed")
         }
+    }
+
+    fn remove(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<()>>) {
+        trace!(self.log, "remove"; "path" => %path.display());
+
+        let path = self.root_path.join(path);
+
+        let res = self.remove_inner(path);
+        self.time_reporter.start("remove send response");
+        tx.send(res).expect("send failed")
+    }
+
+    fn remove_inner(&mut self, path: PathBuf) -> io::Result<()> {
+        self.time_reporter.start("remove");
+        fs::remove_file(path)
     }
 }
