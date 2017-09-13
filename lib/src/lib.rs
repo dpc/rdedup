@@ -297,12 +297,7 @@ impl<'a> ReadContext<'a> {
                "digest" => FnValue(|_| digest.0.to_hex()),
                );
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(
-                digest,
-                DataType::Data,
-                self.data_type,
-                writer,
-            )
+            accessor.read_chunk_into(digest, self.data_type, writer)
         } else {
             accessor.touch(digest)
         }
@@ -336,7 +331,6 @@ trait ChunkAccessor {
     fn read_chunk_into(
         &self,
         digest: &Digest,
-        chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()>;
@@ -377,15 +371,13 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
     fn read_chunk_into(
         &self,
         digest: &Digest,
-        chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
         let path = self.repo.chunk_rel_path_by_digest(digest);
         let data = self.repo.aio.read(path).wait()?;
 
-        let data = if data_type.should_encrypt() && chunk_type.should_encrypt()
-        {
+        let data = if data_type.should_encrypt() {
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
@@ -394,12 +386,11 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             data
         };
 
-        let data =
-            if data_type.should_compress() && chunk_type.should_compress() {
-                self.compression.decompress(data)?
-            } else {
-                data
-            };
+        let data = if data_type.should_compress() {
+            self.compression.decompress(data)?
+        } else {
+            data
+        };
 
         let vec_result = self.repo.hasher.calculate_digest(&data);
 
@@ -457,13 +448,11 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
     fn read_chunk_into(
         &self,
         digest: &Digest,
-        chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
         self.touch(digest)?;
-        self.raw
-            .read_chunk_into(digest, chunk_type, data_type, writer)
+        self.raw.read_chunk_into(digest, data_type, writer)
     }
 }
 
@@ -506,7 +495,6 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
     fn read_chunk_into(
         &self,
         digest: &Digest,
-        chunk_type: DataType,
         data_type: DataType,
         writer: &mut Write,
     ) -> Result<()> {
@@ -517,9 +505,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.0.clone());
         }
-        let res =
-            self.raw
-                .read_chunk_into(digest, chunk_type, data_type, writer);
+        let res = self.raw.read_chunk_into(digest, data_type, writer);
 
         if res.is_err() {
             self.errors
@@ -944,19 +930,6 @@ impl Repo {
         }
         Ok(reachable_digests)
     }
-
-    // fn chunk_type(&self, digest: &[u8]) -> Result<DataType> {
-    // for i in &[DataType::Index, DataType::Data] {
-    // let file_path = self.chunk_path_by_digest(digest, *i);
-    // if file_path.exists() {
-    // return Ok(*i);
-    // }
-    // }
-    // Err(Error::new(
-    // io::ErrorKind::NotFound,
-    // format!("chunk file missing: {}", digest.to_hex()),
-    // ))
-    // }
 
     fn chunk_rel_path_by_digest(&self, digest: &Digest) -> PathBuf {
         self.config
