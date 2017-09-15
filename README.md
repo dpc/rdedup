@@ -133,4 +133,4 @@ instead of interactively asking user for password.
 
 # License
 
-`rdedup` is licensed under: MPL-2.0
+rdedup is licensed under: MPL-2.0

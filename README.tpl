@@ -1,13 +1,13 @@
 <!-- README.md is auto-generated from README.tpl with `cargo readme` -->
 
 <p align="center">
-  <a href="https://travis-ci.org/dpc/rdedup">
-      <img src="https://img.shields.io/travis/dpc/rdedup/master.svg?style=flat-square" alt="Travis CI Build Status">
+  <a href="https://travis-ci.org/dpc/{{crate}}">
+      <img src="https://img.shields.io/travis/dpc/{{crate}}/master.svg?style=flat-square" alt="Travis CI Build Status">
   </a>
-  <a href="https://crates.io/crates/rdedup">
-      <img src="http://meritbadge.herokuapp.com/rdedup?style=flat-square" alt="crates.io">
+  <a href="https://crates.io/crates/{{crate}}">
+      <img src="http://meritbadge.herokuapp.com/{{crate}}?style=flat-square" alt="crates.io">
   </a>
-  <a href="https://gitter.im/dpc/rdedup">
+  <a href="https://gitter.im/dpc/{{crate}}">
       <img src="https://img.shields.io/badge/GITTER-join%20chat-green.svg?style=flat-square" alt="Gitter Chat">
   </a>
   <br>
@@ -15,10 +15,10 @@
 
 # {{crate}}
 
-See [wiki](https://github.com/dpc/rdedup/wiki) for current project status.
+See [wiki](https://github.com/dpc/{{crate}}/wiki) for current project status.
 
 {{readme}}
 
 # License
 
-`rdedup` is licensed under: {{license}}
+{{crate}} is licensed under: {{license}}
