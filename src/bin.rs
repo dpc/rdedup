@@ -132,35 +132,6 @@ use std::{env, io, process};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-macro_rules! printerrln {
-    ($($arg:tt)*) => ({
-        use std::io::prelude::*;
-        if let Err(e) = writeln!(&mut ::std::io::stderr(), "{}",
-            format_args!($($arg)*)) {
-            panic!(concat!(
-                    "Failed to write to stderr.\n",
-                    "Original error output: {}\n",
-                    "Secondary error writing to stderr: {}"),
-                    format_args!($($arg)*), e);
-        }
-    })
-}
-
-macro_rules! printerr {
-    ($($arg:tt)*) => ({
-        use std::io::prelude::*;
-        if let Err(e) = write!(&mut ::std::io::stderr(), "{}",
-            format_args!($($arg)*)) {
-            panic!(concat!(
-                    "Failed to write to stderr.\n",
-                    "Original error output: {}\n",
-                    "Secondary error writing to stderr: {}"),
-                    format_args!($($arg)*), e);
-        }
-    })
-}
-
-
 #[derive(Clone)]
 struct Options {
     dir: PathBuf,
@@ -183,7 +154,7 @@ impl Options {
             "curve25519" => lib::settings::Encryption::Curve25519,
             "none" => lib::settings::Encryption::None,
             _ => {
-                printerrln!("unsupported encryption: {}", s);
+                eprintln!("unsupported encryption: {}", s);
                 process::exit(-1);
             }
         };
@@ -201,7 +172,7 @@ impl Options {
             "bzip2" => lib::settings::Compression::Bzip2,
             "none" => lib::settings::Compression::None,
             _ => {
-                printerrln!("unsupported compression: {}", s);
+                eprintln!("unsupported compression: {}", s);
                 process::exit(-1);
             }
         };
@@ -223,7 +194,7 @@ impl Options {
                 .use_fastcdc_chunking(chunk_size)
                 .expect("wrong chunking settings"),
             _ => {
-                printerrln!("unsupported encryption: {}", s);
+                eprintln!("unsupported encryption: {}", s);
                 process::exit(-1);
             }
         };
@@ -238,7 +209,7 @@ impl Options {
                 .set_hashing(lib::settings::Hashing::Blake2b)
                 .expect("wrong hashing settings"),
             _ => {
-                printerrln!("unsupported hashing: {}", s);
+                eprintln!("unsupported hashing: {}", s);
                 process::exit(-1);
             }
         };
@@ -393,7 +364,7 @@ fn run() -> io::Result<()> {
     } else if let Some(dir) = env::var_os("RDEDUP_DIR") {
         PathBuf::from(dir)
     } else {
-        printerrln!("Repository dir path not specified");
+        eprintln!("Repository dir path not specified");
         process::exit(-1);
     };
 
@@ -515,7 +486,7 @@ fn run() -> io::Result<()> {
 
 fn main() {
     if let Err(e) = run() {
-        printerrln!("Error: {}", e);
+        eprintln!("Error: {}", e);
         process::exit(-1);
     }
 }
