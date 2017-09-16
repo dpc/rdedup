@@ -478,13 +478,12 @@ impl Repo {
 
         let mut traverser = ReadContext::new(
             None,
-            &da.digest.0,
-            DataType::Data,
             None,
             self.compression.clone(),
             self.log.clone(),
         );
         traverser.read_recursively(
+            DataType::Data,
             &self.get_recording_chunk_accessor(
                 reachable_digests,
                 None,
@@ -591,13 +590,15 @@ impl Repo {
         );
         let mut traverser = ReadContext::new(
             Some(writer),
-            &[],
-            DataType::Data,
             Some(dec.decrypter.clone()),
             self.compression.clone(),
             self.log.clone(),
         );
-        traverser.read_recursively(&accessor, &data_address.as_ref())
+        traverser.read_recursively(
+            DataType::Data,
+            &accessor,
+            &data_address.as_ref(),
+        )
     }
 
     pub fn du(&self, name_str: &str, dec: &DecryptHandle) -> Result<DuResults> {
@@ -615,13 +616,15 @@ impl Repo {
         {
             let mut traverser = ReadContext::new(
                 Some(&mut counter),
-                &[],
-                DataType::Data,
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
                 self.log.clone(),
             );
-            traverser.read_recursively(&accessor, &data_address.as_ref())?;
+            traverser.read_recursively(
+                DataType::Data,
+                &accessor,
+                &data_address.as_ref(),
+            )?;
         }
         Ok(DuResults {
             chunks: accessor.get_results().scanned,
@@ -647,13 +650,15 @@ impl Repo {
         {
             let mut traverser = ReadContext::new(
                 Some(&mut counter),
-                &[],
-                DataType::Data,
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
                 self.log.clone(),
             );
-            traverser.read_recursively(&accessor, &data_address.as_ref())?;
+            traverser.read_recursively(
+                DataType::Data,
+                &accessor,
+                &data_address.as_ref(),
+            )?;
         }
         Ok(accessor.get_results())
     }

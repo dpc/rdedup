@@ -16,9 +16,8 @@ use hex::ToHex;
 ///
 /// For every digest written to it, it will access the corresponding chunk and
 /// write it into `writer` that it wraps.
-struct IndexTranslator<'a, 'b> {
+struct IndexTranslator<'a> {
     accessor: &'a ChunkAccessor,
-    parent_digest: &'b [u8],
     writer: Option<&'a mut Write>,
     digest_buf: Digest,
     data_type: DataType,
@@ -27,10 +26,9 @@ struct IndexTranslator<'a, 'b> {
     log: Logger,
 }
 
-impl<'a, 'b> IndexTranslator<'a, 'b> {
+impl<'a> IndexTranslator<'a> {
     pub(crate) fn new(
         accessor: &'a ChunkAccessor,
-        parent_digest: &'b [u8],
         writer: Option<&'a mut Write>,
         data_type: DataType,
         decrypter: Option<ArcDecrypter>,
@@ -41,7 +39,6 @@ impl<'a, 'b> IndexTranslator<'a, 'b> {
             accessor: accessor,
             data_type: data_type,
             digest_buf: Digest(Vec::with_capacity(DIGEST_SIZE)),
-            parent_digest: parent_digest,
             decrypter: decrypter,
             compression: compression,
             writer: writer,
@@ -50,7 +47,7 @@ impl<'a, 'b> IndexTranslator<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
+impl<'a> Write for IndexTranslator<'a> {
     // TODO: This is copying too much. Could be not copying anything, unless
     // bytes < DIGEST_SIZE
     fn write(&mut self, mut bytes: &[u8]) -> io::Result<usize> {
@@ -76,7 +73,6 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
             let &mut IndexTranslator {
                 accessor,
                 ref mut digest_buf,
-                ref parent_digest,
                 data_type,
                 ref decrypter,
                 ref compression,
@@ -86,14 +82,13 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
             let res = if let Some(ref mut writer) = *writer {
                 let mut traverser = ReadContext::new(
                     Some(writer),
-                    &parent_digest,
-                    data_type,
                     decrypter.clone(),
                     compression.clone(),
                     self.log.clone(),
                 );
 
                 traverser.read_recursively(
+                    data_type,
                     accessor,
                     &DataAddress {
                         digest: digest_buf,
@@ -113,7 +108,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
+impl<'a> Drop for IndexTranslator<'a> {
     fn drop(&mut self) {
         if !std::thread::panicking() {
             debug_assert_eq!(self.digest_buf.0.len(), 0);
@@ -130,9 +125,6 @@ pub(crate) struct ReadContext<'a> {
     writer: Option<&'a mut Write>,
     decrypter: Option<ArcDecrypter>,
     compression: ArcCompression,
-    /// The type of the data to be read
-    data_type: DataType,
-    parent_digest: &'a [u8],
 
     log: Logger,
 }
@@ -140,16 +132,12 @@ pub(crate) struct ReadContext<'a> {
 impl<'a> ReadContext<'a> {
     pub(crate) fn new(
         writer: Option<&'a mut Write>,
-        parent_digest: &'a [u8],
-        data_type: DataType,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
         log: Logger,
     ) -> Self {
         ReadContext {
             writer: writer,
-            parent_digest: parent_digest,
-            data_type: data_type,
             decrypter: decrypter,
             compression: compression,
             log: log,
@@ -160,17 +148,16 @@ impl<'a> ReadContext<'a> {
         &mut self,
         accessor: &'a ChunkAccessor,
         data_address: &DataAddress,
+        data_type: DataType,
     ) -> io::Result<()> {
         trace!(self.log, "Traversing index";
-               "parent" => FnValue(|_| self.parent_digest.to_hex()),
                "digest" => FnValue(|_| data_address.digest.0.to_hex()),
                );
 
         let mut translator = IndexTranslator::new(
             accessor,
-            &data_address.digest.0,
             self.writer.take(),
-            self.data_type,
+            data_type,
             self.decrypter.clone(),
             self.compression.clone(),
             self.log.clone(),
@@ -178,8 +165,6 @@ impl<'a> ReadContext<'a> {
 
         let mut sub_traverser = ReadContext::new(
             Some(&mut translator),
-            &data_address.digest.0,
-            DataType::Index,
             None,
             self.compression.clone(),
             self.log.clone(),
@@ -189,20 +174,20 @@ impl<'a> ReadContext<'a> {
             digest: data_address.digest,
             index_level: data_address.index_level - 1,
         };
-        sub_traverser.read_recursively(accessor, &da)
+        sub_traverser.read_recursively(DataType::Index, accessor, &da)
     }
 
     fn on_data(
         &mut self,
         accessor: &'a ChunkAccessor,
         digest: &Digest,
+        data_type: DataType,
     ) -> io::Result<()> {
         trace!(self.log, "Traversing data";
-               "parent" => FnValue(|_| self.parent_digest.to_hex()),
                "digest" => FnValue(|_| digest.0.to_hex()),
                );
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(digest, self.data_type, writer)
+            accessor.read_chunk_into(digest, data_type, writer)
         } else {
             accessor.touch(digest)
         }
@@ -210,19 +195,19 @@ impl<'a> ReadContext<'a> {
 
     pub(crate) fn read_recursively(
         &mut self,
+        data_type: DataType,
         accessor: &'a ChunkAccessor,
         da: &DataAddress,
     ) -> io::Result<()> {
         trace!(self.log, "Reading recursively";
-               "parent" => FnValue(|_| self.parent_digest.to_hex()),
                "digest" => FnValue(|_| da.digest.0.to_hex()),
                );
 
         let s = &*accessor as &ChunkAccessor;
         if da.index_level == 0 {
-            self.on_data(s, &da.digest)
+            self.on_data(s, &da.digest, data_type)
         } else {
-            self.on_index(s, da)
+            self.on_index(s, da, data_type)
         }
     }
 }
