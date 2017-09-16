@@ -80,7 +80,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                 ..
             } = self;
             let res = if let Some(ref mut writer) = *writer {
-                let mut traverser = ReadContext::new(
+                let traverser = ReadContext::new(
                     decrypter.clone(),
                     compression.clone(),
                     accessor,
@@ -163,7 +163,7 @@ impl<'a> ReadContext<'a> {
         }
     }
 
-    fn on_index(&mut self, mut req: ReadRequest) -> io::Result<()> {
+    fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Traversing index";
                "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
@@ -177,8 +177,10 @@ impl<'a> ReadContext<'a> {
             req.log.clone(),
         );
 
-        let mut sub_traverser =
-            ReadContext::new(None, self.compression.clone(), self.accessor);
+        //
+        // let sub_traverser =
+        // ReadContext::new(None, self.compression.clone(), self.accessor);
+        //
 
         let da = DataAddress {
             digest: req.data_address.digest,
@@ -190,10 +192,10 @@ impl<'a> ReadContext<'a> {
             Some(&mut translator),
             req.log,
         );
-        sub_traverser.read_recursively(req)
+        self.read_recursively(req)
     }
 
-    fn on_data(&mut self, mut req: ReadRequest) -> io::Result<()> {
+    fn on_data(&self, mut req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Traversing data";
                "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
@@ -208,10 +210,7 @@ impl<'a> ReadContext<'a> {
         }
     }
 
-    pub(crate) fn read_recursively(
-        &mut self,
-        req: ReadRequest,
-    ) -> io::Result<()> {
+    pub(crate) fn read_recursively(&self, req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Reading recursively";
                "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
