@@ -482,9 +482,9 @@ impl Repo {
             self.compression.clone(),
         );
         let mut traverser =
-            ReadContext::new(None, None, self.compression.clone(), &accessor);
+            ReadContext::new(None, self.compression.clone(), &accessor);
         traverser.read_recursively(
-            ReadRequest::new(DataType::Data, da, self.log.clone()),
+            ReadRequest::new(DataType::Data, da, None, self.log.clone()),
         )
     }
 
@@ -584,7 +584,6 @@ impl Repo {
             self.compression.clone(),
         );
         let mut traverser = ReadContext::new(
-            Some(writer),
             Some(dec.decrypter.clone()),
             self.compression.clone(),
             &accessor,
@@ -592,6 +591,7 @@ impl Repo {
         traverser.read_recursively(ReadRequest::new(
             DataType::Data,
             &data_address.as_ref(),
+            Some(writer),
             self.log.clone(),
         ))
     }
@@ -610,7 +610,6 @@ impl Repo {
         );
         {
             let mut traverser = ReadContext::new(
-                Some(&mut counter),
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
                 &accessor,
@@ -618,6 +617,7 @@ impl Repo {
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
                 &data_address.as_ref(),
+                Some(&mut counter),
                 self.log.clone(),
             ))?;
         }
@@ -644,7 +644,6 @@ impl Repo {
         );
         {
             let mut traverser = ReadContext::new(
-                Some(&mut counter),
                 Some(dec.decrypter.clone()),
                 self.compression.clone(),
                 &accessor,
@@ -652,6 +651,7 @@ impl Repo {
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
                 &data_address.as_ref(),
+                Some(&mut counter),
                 self.log.clone(),
             ))?;
         }
