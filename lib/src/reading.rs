@@ -17,30 +17,24 @@ use hex::ToHex;
 /// For every digest written to it, it will access the corresponding chunk and
 /// write it into `writer` that it wraps.
 struct IndexTranslator<'a, 'b> {
-    accessor: &'a ChunkAccessor,
     writer: Option<&'b mut Write>,
     digest_buf: Digest,
     data_type: DataType,
-    decrypter: Option<ArcDecrypter>,
-    compression: ArcCompression,
+    read_context: &'a ReadContext<'a>,
     log: Logger,
 }
 
 impl<'a, 'b> IndexTranslator<'a, 'b> {
     pub(crate) fn new(
-        accessor: &'a ChunkAccessor,
         writer: Option<&'b mut Write>,
         data_type: DataType,
-        decrypter: Option<ArcDecrypter>,
-        compression: ArcCompression,
+        read_context: &'a ReadContext<'a>,
         log: Logger,
     ) -> Self {
         IndexTranslator {
-            accessor: accessor,
             data_type: data_type,
             digest_buf: Digest(Vec::with_capacity(DIGEST_SIZE)),
-            decrypter: decrypter,
-            compression: compression,
+            read_context: read_context,
             writer: writer,
             log: log,
         }
@@ -71,22 +65,14 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
             bytes = &bytes[needs..];
             let &mut IndexTranslator {
-                accessor,
                 ref mut digest_buf,
                 data_type,
-                ref decrypter,
-                ref compression,
                 ref mut writer,
+                read_context,
                 ..
             } = self;
             let res = if let Some(ref mut writer) = *writer {
-                let traverser = ReadContext::new(
-                    decrypter.clone(),
-                    compression.clone(),
-                    accessor,
-                );
-
-                traverser.read_recursively(ReadRequest::new(
+                read_context.read_recursively(ReadRequest::new(
                     data_type,
                     &DataAddress {
                         digest: digest_buf,
@@ -96,7 +82,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                     self.log.clone(),
                 ))
             } else {
-                accessor.touch(&digest_buf)
+                read_context.accessor.touch(&digest_buf)
             };
             digest_buf.0.clear();
             res?;
@@ -116,6 +102,8 @@ impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
     }
 }
 
+/// Information specific to a given read operation
+/// of a data in the Repo
 pub(crate) struct ReadRequest<'a> {
     data_address: &'a DataAddress<'a>,
     data_type: DataType,
@@ -141,26 +129,15 @@ impl<'a> ReadRequest<'a> {
 
 /// Read Context
 ///
-/// Information necessary to complete given operation of reading given data in
-/// the repository.
+/// Information about the `Repo` that is open for reaading
 pub(crate) struct ReadContext<'a> {
     /// Writer to write the data to; `None` will discard the data
-    decrypter: Option<ArcDecrypter>,
-    compression: ArcCompression,
     accessor: &'a ChunkAccessor,
 }
 
 impl<'a> ReadContext<'a> {
-    pub(crate) fn new(
-        decrypter: Option<ArcDecrypter>,
-        compression: ArcCompression,
-        accessor: &'a ChunkAccessor,
-    ) -> Self {
-        ReadContext {
-            decrypter: decrypter,
-            compression: compression,
-            accessor: accessor,
-        }
+    pub(crate) fn new(accessor: &'a ChunkAccessor) -> Self {
+        ReadContext { accessor: accessor }
     }
 
     fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
@@ -169,18 +146,11 @@ impl<'a> ReadContext<'a> {
                );
 
         let mut translator = IndexTranslator::new(
-            self.accessor,
             req.writer.take(),
             req.data_type,
-            self.decrypter.clone(),
-            self.compression.clone(),
+            self,
             req.log.clone(),
         );
-
-        //
-        // let sub_traverser =
-        // ReadContext::new(None, self.compression.clone(), self.accessor);
-        //
 
         let da = DataAddress {
             digest: req.data_address.digest,
