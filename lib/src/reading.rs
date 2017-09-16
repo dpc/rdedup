@@ -82,7 +82,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                     self.log.clone(),
                 ))
             } else {
-                read_context.accessor.touch(&digest_buf)
+                read_context.accessor.touch(digest_buf)
             };
             digest_buf.0.clear();
             res?;

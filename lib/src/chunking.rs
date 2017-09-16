@@ -146,14 +146,12 @@ impl<I: Iterator<Item = Vec<u8>>> Iterator for Chunker<I> {
                 return Some(
                     mem::replace(&mut self.incomplete_chunk, SGData::empty()),
                 );
+            } else if self.chunks_returned == 0 {
+                // at least one, zero sized chunk
+                self.chunks_returned += 1;
+                return Some(SGData::empty());
             } else {
-                if self.chunks_returned == 0 {
-                    // at least one, zero sized chunk
-                    self.chunks_returned += 1;
-                    return Some(SGData::empty());
-                } else {
-                    return None;
-                }
+                return None;
             }
         }
     }

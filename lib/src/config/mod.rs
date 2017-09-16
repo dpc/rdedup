@@ -68,8 +68,8 @@ impl PWHash {
                 mem_limit: 0,
             },
             settings::PWHash::Interactive => PWHash::SodiumOxide {
-                ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
-                mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
+                ops_limit: pwhash::OPSLIMIT_INTERACTIVE.0 as u64,
+                mem_limit: pwhash::MEMLIMIT_INTERACTIVE.0 as u64,
             },
             settings::PWHash::Strong => PWHash::SodiumOxide {
                 ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,

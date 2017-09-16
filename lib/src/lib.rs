@@ -479,7 +479,7 @@ impl Repo {
         let accessor = self.get_recording_chunk_accessor(
             reachable_digests,
             None,
-            self.compression.clone(),
+            Arc::clone(&self.compression),
         );
         let traverser =
             ReadContext::new(&accessor);
@@ -580,8 +580,8 @@ impl Repo {
         let data_address: OwnedDataAddress = name.into();
 
         let accessor = self.get_chunk_accessor(
-            Some(dec.decrypter.clone()),
-            self.compression.clone(),
+            Some(Arc::clone(&dec.decrypter)),
+            Arc::clone(&self.compression),
         );
         let traverser = ReadContext::new(
             &accessor,
@@ -603,8 +603,8 @@ impl Repo {
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
-            Some(dec.decrypter.clone()),
-            self.compression.clone(),
+            Some(Arc::clone(&dec.decrypter)),
+            Arc::clone(&self.compression),
         );
         {
             let traverser = ReadContext::new(
@@ -635,8 +635,8 @@ impl Repo {
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
-            Some(dec.decrypter.clone()),
-            self.compression.clone(),
+            Some(Arc::clone(&dec.decrypter)),
+            Arc::clone(&self.compression),
         );
         {
             let traverser = ReadContext::new(
@@ -687,9 +687,9 @@ impl Repo {
             for _ in 0..num_threads {
                 let process_rx = process_rx.clone();
                 let aio = aio.clone();
-                let encrypter = enc.encrypter.clone();
-                let compression = self.compression.clone();
-                let hasher = self.hasher.clone();
+                let encrypter = Arc::clone(&enc.encrypter);
+                let compression = Arc::clone(&self.compression);
+                let hasher = Arc::clone(&self.hasher);
                 scope.spawn(move || {
                     let processor = ChunkProcessor::new(
                         self.clone(),
