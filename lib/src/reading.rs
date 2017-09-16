@@ -84,17 +84,17 @@ impl<'a> Write for IndexTranslator<'a> {
                     Some(writer),
                     decrypter.clone(),
                     compression.clone(),
-                    self.log.clone(),
+                    accessor,
                 );
 
-                traverser.read_recursively(
+                traverser.read_recursively(ReadRequest::new(
                     data_type,
-                    accessor,
                     &DataAddress {
                         digest: digest_buf,
                         index_level: 0,
                     },
-                )
+                    self.log.clone(),
+                ))
             } else {
                 accessor.touch(&digest_buf)
             };
@@ -116,6 +116,26 @@ impl<'a> Drop for IndexTranslator<'a> {
     }
 }
 
+pub(crate) struct ReadRequest<'a> {
+    data_address: &'a DataAddress<'a>,
+    data_type: DataType,
+    log: Logger,
+}
+
+impl<'a> ReadRequest<'a> {
+    pub(crate) fn new(
+        data_type: DataType,
+        data_address: &'a DataAddress,
+        log: Logger,
+    ) -> Self {
+        ReadRequest {
+            data_type: data_type,
+            data_address: data_address,
+            log: log,
+        }
+    }
+}
+
 /// Read Context
 ///
 /// Information necessary to complete given operation of reading given data in
@@ -125,8 +145,7 @@ pub(crate) struct ReadContext<'a> {
     writer: Option<&'a mut Write>,
     decrypter: Option<ArcDecrypter>,
     compression: ArcCompression,
-
-    log: Logger,
+    accessor: &'a ChunkAccessor,
 }
 
 impl<'a> ReadContext<'a> {
@@ -134,80 +153,72 @@ impl<'a> ReadContext<'a> {
         writer: Option<&'a mut Write>,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
-        log: Logger,
+        accessor: &'a ChunkAccessor,
     ) -> Self {
         ReadContext {
             writer: writer,
             decrypter: decrypter,
             compression: compression,
-            log: log,
+            accessor: accessor,
         }
     }
 
-    fn on_index(
-        &mut self,
-        accessor: &'a ChunkAccessor,
-        data_address: &DataAddress,
-        data_type: DataType,
-    ) -> io::Result<()> {
-        trace!(self.log, "Traversing index";
-               "digest" => FnValue(|_| data_address.digest.0.to_hex()),
+    fn on_index(&mut self, req: ReadRequest) -> io::Result<()> {
+        trace!(req.log, "Traversing index";
+               "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
 
         let mut translator = IndexTranslator::new(
-            accessor,
+            self.accessor,
             self.writer.take(),
-            data_type,
+            req.data_type,
             self.decrypter.clone(),
             self.compression.clone(),
-            self.log.clone(),
+            req.log.clone(),
         );
 
         let mut sub_traverser = ReadContext::new(
             Some(&mut translator),
             None,
             self.compression.clone(),
-            self.log.clone(),
+            self.accessor,
         );
 
         let da = DataAddress {
-            digest: data_address.digest,
-            index_level: data_address.index_level - 1,
+            digest: req.data_address.digest,
+            index_level: req.data_address.index_level - 1,
         };
-        sub_traverser.read_recursively(DataType::Index, accessor, &da)
+        let req = ReadRequest::new(DataType::Index, &da, req.log);
+        sub_traverser.read_recursively(req)
     }
 
-    fn on_data(
-        &mut self,
-        accessor: &'a ChunkAccessor,
-        digest: &Digest,
-        data_type: DataType,
-    ) -> io::Result<()> {
-        trace!(self.log, "Traversing data";
-               "digest" => FnValue(|_| digest.0.to_hex()),
+    fn on_data(&mut self, req: ReadRequest) -> io::Result<()> {
+        trace!(req.log, "Traversing data";
+               "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
         if let Some(writer) = self.writer.take() {
-            accessor.read_chunk_into(digest, data_type, writer)
+            self.accessor.read_chunk_into(
+                req.data_address.digest,
+                req.data_type,
+                writer,
+            )
         } else {
-            accessor.touch(digest)
+            self.accessor.touch(req.data_address.digest)
         }
     }
 
     pub(crate) fn read_recursively(
         &mut self,
-        data_type: DataType,
-        accessor: &'a ChunkAccessor,
-        da: &DataAddress,
+        req: ReadRequest,
     ) -> io::Result<()> {
-        trace!(self.log, "Reading recursively";
-               "digest" => FnValue(|_| da.digest.0.to_hex()),
+        trace!(req.log, "Reading recursively";
+               "digest" => FnValue(|_| req.data_address.digest.0.to_hex()),
                );
 
-        let s = &*accessor as &ChunkAccessor;
-        if da.index_level == 0 {
-            self.on_data(s, &da.digest, data_type)
+        if req.data_address.index_level == 0 {
+            self.on_data(req)
         } else {
-            self.on_index(s, da, data_type)
+            self.on_index(req)
         }
     }
 }
