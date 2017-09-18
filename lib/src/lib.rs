@@ -1,6 +1,8 @@
 extern crate base64;
 extern crate blake2;
+extern crate bytevec;
 extern crate bzip2;
+extern crate chrono;
 extern crate crossbeam;
 extern crate dangerous_option;
 extern crate digest;
@@ -30,16 +32,13 @@ use hex::ToHex;
 use sgdata::SGData;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
-
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
-
 use std::{fs, io};
 use std::collections::HashSet;
 use std::error::Error as StdErrorError;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-
 use std::sync::{mpsc, Arc};
 
 mod iterators;
@@ -75,6 +74,9 @@ use self::misc::*;
 
 mod reading;
 use self::reading::*;
+
+mod generation;
+use self::generation::*;
 
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
@@ -184,8 +186,6 @@ impl From<config::Name> for OwnedDataAddress {
         }
     }
 }
-
-
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
@@ -481,8 +481,7 @@ impl Repo {
             None,
             Arc::clone(&self.compression),
         );
-        let traverser =
-            ReadContext::new(&accessor);
+        let traverser = ReadContext::new(&accessor);
         traverser.read_recursively(
             ReadRequest::new(DataType::Data, da, None, self.log.clone()),
         )
@@ -583,9 +582,7 @@ impl Repo {
             Some(Arc::clone(&dec.decrypter)),
             Arc::clone(&self.compression),
         );
-        let traverser = ReadContext::new(
-            &accessor,
-        );
+        let traverser = ReadContext::new(&accessor);
         traverser.read_recursively(ReadRequest::new(
             DataType::Data,
             &data_address.as_ref(),
@@ -607,9 +604,7 @@ impl Repo {
             Arc::clone(&self.compression),
         );
         {
-            let traverser = ReadContext::new(
-                &accessor,
-            );
+            let traverser = ReadContext::new(&accessor);
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
                 &data_address.as_ref(),
@@ -639,9 +634,7 @@ impl Repo {
             Arc::clone(&self.compression),
         );
         {
-            let traverser = ReadContext::new(
-                &accessor,
-            );
+            let traverser = ReadContext::new(&accessor);
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
                 &data_address.as_ref(),
@@ -650,6 +643,36 @@ impl Repo {
             ))?;
         }
         Ok(accessor.get_results())
+    }
+
+    fn read_generations(&self) -> io::Result<Vec<Generation>> {
+        Ok(
+            self.aio
+                .list(PathBuf::new())
+                .wait()?
+                .iter()
+                .filter_map(
+                    |path| path.file_name().and_then(|file| file.to_str()),
+                )
+                .filter(|&item| {
+                    item != config::CONFIG_YML_FILE &&
+                        item != config::VERSION_FILE
+                })
+                .filter_map(|item| match Generation::try_from(&item) {
+                    Ok(gen) => Some(gen),
+                    Err(e) => {
+                        warn!(
+                            self.log,
+                            "skipping unknown generation: `{}` due
+                                 to: `{}`",
+                            item,
+                            e
+                        );
+                        None
+                    }
+                })
+                .collect(),
+        )
     }
 
     pub fn write<R>(
@@ -663,6 +686,14 @@ impl Repo {
     {
         info!(self.log, "Writing data"; "name" => name_str);
         let _lock = self.aio.lock_shared();
+
+        let mut generations = self.read_generations()?;
+
+        if generations.is_empty() {
+            let gen_first = Generation::gen_first();
+            gen_first.write(&self.aio)?;
+            generations.push(gen_first);
+        }
 
         let mut timer = slog_perf::TimeReporter::new_with_level(
             "write",

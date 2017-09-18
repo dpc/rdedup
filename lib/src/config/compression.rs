@@ -39,7 +39,7 @@ impl Compression {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Deflate {
     #[serde(rename = "level")]
-    level:                        i32,
+    level: i32,
 }
 
 impl Deflate {
@@ -51,7 +51,7 @@ impl Deflate {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Bzip2 {
     #[serde(rename = "level")]
-    level:                        i32,
+    level: i32,
 }
 
 impl Bzip2 {
@@ -64,7 +64,7 @@ impl Bzip2 {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Zstd {
     #[serde(rename = "level")]
-    level:                        i32,
+    level: i32,
 }
 
 impl Zstd {
@@ -77,7 +77,7 @@ impl Zstd {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Xz2 {
     #[serde(rename = "level")]
-    level:                        i32,
+    level: i32,
 }
 
 impl Xz2 {

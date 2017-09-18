@@ -1,6 +1,8 @@
 use {box_, pwhash, secretbox, serde, base64};
 use serde::Deserialize;
 use std::io;
+use chrono::prelude::*;
+use chrono;
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;
@@ -75,4 +77,29 @@ where
     S: serde::Serializer,
 {
     serializer.serialize_str(&base64::encode(key.as_ref()))
+}
+
+pub fn from_rfc3339<D>(
+    deserializer: D,
+) -> Result<chrono::DateTime<Utc>, D::Error>
+where
+    D: serde::Deserializer,
+{
+    use serde::de::Error;
+    String::deserialize(deserializer)
+        .and_then(|string| {
+            DateTime::<FixedOffset>::parse_from_rfc3339(&string)
+                .map_err(|err| Error::custom(err.to_string()))
+        })
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+pub fn as_rfc3339<S>(
+    key: &chrono::DateTime<Utc>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&key.to_rfc3339())
 }
