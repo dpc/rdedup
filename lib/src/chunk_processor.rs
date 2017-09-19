@@ -8,7 +8,7 @@ use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std::sync::mpsc;
 use two_lock_queue;
-use Digest;
+use {Digest, Generation};
 
 pub(crate) struct Message {
     pub data: (u64, SGData),
@@ -24,6 +24,7 @@ pub(crate) struct ChunkProcessor {
     encrypter: ArcEncrypter,
     compressor: ArcCompression,
     hasher: ArcHasher,
+    generations: Vec<Generation>,
 }
 
 impl ChunkProcessor {
@@ -34,7 +35,9 @@ impl ChunkProcessor {
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
         hasher: ArcHasher,
+        generations: Vec<Generation>,
     ) -> Self {
+        assert!(generations.len() >= 1);
         ChunkProcessor {
             log: repo.log.clone(),
             repo: repo,
@@ -43,6 +46,7 @@ impl ChunkProcessor {
             encrypter: encrypter,
             compressor: compressor,
             hasher: hasher,
+            generations: generations,
         }
     }
 
@@ -52,6 +56,9 @@ impl ChunkProcessor {
             self.log.clone(),
             Level::Debug,
         );
+
+        let gen_strings: Vec<_> =
+            self.generations.iter().map(|gen| gen.to_string()).collect();
 
         loop {
             timer.start("rx");
@@ -66,9 +73,32 @@ impl ChunkProcessor {
                 } = input;
                 let (sg_id, sg) = data;
 
+                let mut sg = sg;
+
                 let digest = Digest(self.hasher.calculate_digest(&sg));
-                let chunk_path = self.repo.chunk_path_by_digest(&digest);
-                if !chunk_path.exists() {
+
+                let mut found = false;
+                for (i, gen_str) in gen_strings.iter().rev().enumerate() {
+                    let chunk_path =
+                        self.repo.chunk_path_by_digest(&digest, gen_str);
+                    if chunk_path.exists() {
+                        found = true;
+                        if i == 0 {
+                            trace!(self.log, "already exists"; "path" => %chunk_path.display());
+                        } else {
+                            trace!(self.log, "already exists in previous generation";
+                                   "path" => %chunk_path.display());
+                            // TODO: Move to the current generation
+                        }
+                        break;
+                    }
+                }
+
+                if !found {
+                    let chunk_path = self.repo.chunk_path_by_digest(
+                        &digest,
+                        gen_strings.last().unwrap(),
+                    );
                     let sg = if data_type.should_compress() {
                         trace!(self.log, "compress"; "path" => %chunk_path.display());
                         timer.start("compress");
@@ -90,8 +120,6 @@ impl ChunkProcessor {
                         self.repo.chunk_rel_path_by_digest(&digest),
                         sg,
                     );
-                } else {
-                    trace!(self.log, "already exists"; "path" => %chunk_path.display());
                 }
                 timer.start("tx-digest");
                 response_tx

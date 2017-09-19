@@ -8,6 +8,7 @@ use std::io::Write;
 use {ArcCompression, ArcDecrypter};
 use slog::{FnValue, Logger};
 use hex::ToHex;
+use Generation;
 
 /// Translates index stream into data stream
 ///
@@ -218,6 +219,7 @@ pub(crate) struct DefaultChunkAccessor<'a> {
     repo: &'a Repo,
     decrypter: Option<ArcDecrypter>,
     compression: ArcCompression,
+    gen_strings: Vec<String>,
 }
 
 impl<'a> DefaultChunkAccessor<'a> {
@@ -225,11 +227,13 @@ impl<'a> DefaultChunkAccessor<'a> {
         repo: &'a Repo,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
+        generations: Vec<Generation>,
     ) -> Self {
         DefaultChunkAccessor {
             repo: repo,
             decrypter: decrypter,
             compression: compression,
+            gen_strings: generations.iter().map(|g| g.to_string()).collect(),
         }
     }
 }
@@ -245,9 +249,26 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         data_type: DataType,
         writer: &mut Write,
     ) -> io::Result<()> {
-        let path = self.repo.chunk_rel_path_by_digest(digest);
-        let data = self.repo.aio.read(path).wait()?;
+        let mut data = None;
+        for gen_str in self.gen_strings.iter().rev() {
+            let path = self.repo.chunk_rel_path_by_digest(digest);
+            match self.repo.aio.read(path).wait() {
+                Ok(d) => {
+                    data = Some(d);
+                    break;
+                }
+                Err(e) => {}
+            }
+        }
 
+        if data.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Couldn't not find chunk: {}", digest.0.to_hex(),),
+            ));
+        }
+
+        let data = data.unwrap();
         let data = if data_type.should_encrypt() {
             self.decrypter
                 .as_ref()
@@ -298,9 +319,15 @@ impl<'a> RecordingChunkAccessor<'a> {
         accessed: &'a mut HashSet<Vec<u8>>,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
+        generations: Vec<Generation>,
     ) -> Self {
         RecordingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo, decrypter, compression),
+            raw: DefaultChunkAccessor::new(
+                repo,
+                decrypter,
+                compression,
+                generations,
+            ),
             accessed: RefCell::new(accessed),
         }
     }
@@ -342,9 +369,15 @@ impl<'a> VerifyingChunkAccessor<'a> {
         repo: &'a Repo,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
+        generations: Vec<Generation>,
     ) -> Self {
         VerifyingChunkAccessor {
-            raw: DefaultChunkAccessor::new(repo, decrypter, compression),
+            raw: DefaultChunkAccessor::new(
+                repo,
+                decrypter,
+                compression,
+                generations,
+            ),
             accessed: RefCell::new(HashSet::new()),
             errors: RefCell::new(Vec::new()),
         }

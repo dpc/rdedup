@@ -28,7 +28,6 @@ extern crate two_lock_queue;
 extern crate walkdir;
 extern crate zstd;
 
-use hex::ToHex;
 use sgdata::SGData;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
@@ -456,8 +455,9 @@ impl Repo {
         &self,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
+        generations: Vec<Generation>,
     ) -> DefaultChunkAccessor {
-        DefaultChunkAccessor::new(self, decrypter, compression)
+        DefaultChunkAccessor::new(self, decrypter, compression, generations)
     }
 
     fn get_recording_chunk_accessor<'a>(
@@ -465,52 +465,61 @@ impl Repo {
         accessed: &'a mut HashSet<Vec<u8>>,
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
+        generations: Vec<Generation>,
     ) -> RecordingChunkAccessor<'a> {
-        RecordingChunkAccessor::new(self, accessed, decrypter, compression)
-    }
-
-    fn reachable_recursively_insert(
-        &self,
-        da: &DataAddress,
-        reachable_digests: &mut HashSet<Vec<u8>>,
-    ) -> Result<()> {
-        reachable_digests.insert(da.digest.0.clone());
-
-        let accessor = self.get_recording_chunk_accessor(
-            reachable_digests,
-            None,
-            Arc::clone(&self.compression),
-        );
-        let traverser = ReadContext::new(&accessor);
-        traverser.read_recursively(
-            ReadRequest::new(DataType::Data, da, None, self.log.clone()),
+        RecordingChunkAccessor::new(
+            self,
+            accessed,
+            decrypter,
+            compression,
+            generations,
         )
     }
 
+    // fn reachable_recursively_insert(
+    // &self,
+    // da: &DataAddress,
+    // reachable_digests: &mut HashSet<Vec<u8>>,
+    // ) -> Result<()> {
+    // reachable_digests.insert(da.digest.0.clone());
+    //
+    // let accessor = self.get_recording_chunk_accessor(
+    // reachable_digests,
+    // None,
+    // Arc::clone(&self.compression),
+    // );
+    // let traverser = ReadContext::new(&accessor);
+    // traverser.read_recursively(
+    // ReadRequest::new(DataType::Data, da, None, self.log.clone()),
+    // )
+    // }
+    //
 
 
-    /// Return all reachable chunks
-    fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
-        let mut reachable_digests = HashSet::new();
-        let all_names = config::Name::list(&self.aio)?;
-        for name_str in &all_names {
-            match config::Name::load_from(name_str, &self.aio) {
-                Ok(name) => {
-                    let data_address: OwnedDataAddress = name.into();
-                    info!(self.log, "processing"; "name" => name_str);
-                    self.reachable_recursively_insert(
-                        &data_address.as_ref(),
-                        &mut reachable_digests,
-                    )?;
-                }
-                Err(e) => {
-                    info!(self.log, "skipped"; "name" => name_str, "error" =>
-                          e.description());
-                }
-            };
-        }
-        Ok(reachable_digests)
-    }
+
+    // Return all reachable chunks
+    // fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+    // let mut reachable_digests = HashSet::new();
+    // let all_names = config::Name::list(&self.aio)?;
+    // for name_str in &all_names {
+    // match config::Name::load_from(name_str, &self.aio) {
+    // Ok(name) => {
+    // let data_address: OwnedDataAddress = name.into();
+    // info!(self.log, "processing"; "name" => name_str);
+    // self.reachable_recursively_insert(
+    // &data_address.as_ref(),
+    // &mut reachable_digests,
+    // )?;
+    // }
+    // Err(e) => {
+    // info!(self.log, "skipped"; "name" => name_str, "error" =>
+    // e.description());
+    // }
+    // };
+    // }
+    // Ok(reachable_digests)
+    // }
+    //
 
     fn chunk_rel_path_by_digest(&self, digest: &Digest) -> PathBuf {
         self.config
@@ -518,13 +527,23 @@ impl Repo {
             .get_path(Path::new(config::DATA_SUBDIR), &digest.0)
     }
 
-    fn chunk_path_by_digest(&self, digest: &Digest) -> PathBuf {
-        self.path.join(self.chunk_rel_path_by_digest(digest))
+    fn chunk_path_by_digest(
+        &self,
+        digest: &Digest,
+        generation_str: &str,
+    ) -> PathBuf {
+        self.path
+            .join(generation_str)
+            .join(self.chunk_rel_path_by_digest(digest))
     }
 
     // TODO: Use asyncio
-    fn rm_chunk_by_digest(&self, digest: &Digest) -> Result<u64> {
-        let path = self.chunk_path_by_digest(digest);
+    fn rm_chunk_by_digest(
+        &self,
+        digest: &Digest,
+        gen_str: &str,
+    ) -> Result<u64> {
+        let path = self.chunk_path_by_digest(digest, gen_str);
         let md = fs::metadata(&path)?;
         self.aio.remove(path).wait()?;
         Ok(md.len())
@@ -540,31 +559,33 @@ impl Repo {
     pub fn gc(&self) -> Result<GcResults> {
         let _lock = self.aio.lock_exclusive();
 
-        let reachable = self.list_reachable_chunks().unwrap();
-
-        let data_chunks = StoredChunks::new(
-            &self.aio,
-            PathBuf::from(config::DATA_SUBDIR),
-            DIGEST_SIZE,
-            self.log.clone(),
-        )?;
-
-        let mut result = GcResults {
-            chunks: 0,
-            bytes: 0,
-        };
-
-        for digest in data_chunks {
-            let digest = digest?;
-            if !reachable.contains(&digest) {
-                trace!(self.log, "removing chunk"; "digest" => digest.to_hex());
-                let bytes = self.rm_chunk_by_digest(&Digest(digest))?;
-                result.chunks += 1;
-                result.bytes += bytes;
-            }
-        }
-
-        Ok(result)
+        unimplemented!();
+        // let reachable = self.list_reachable_chunks().unwrap();
+        //
+        // let data_chunks = StoredChunks::new(
+        // &self.aio,
+        // PathBuf::from(config::DATA_SUBDIR),
+        // DIGEST_SIZE,
+        // self.log.clone(),
+        // )?;
+        //
+        // let mut result = GcResults {
+        // chunks: 0,
+        // bytes: 0,
+        // };
+        //
+        // for digest in data_chunks {
+        // let digest = digest?;
+        // if !reachable.contains(&digest) {
+        // trace!(self.log, "removing chunk"; "digest" => digest.to_hex());
+        // let bytes = self.rm_chunk_by_digest(&Digest(digest))?;
+        // result.chunks += 1;
+        // result.bytes += bytes;
+        // }
+        // }
+        //
+        // Ok(result)
+        //
     }
 
     pub fn read<W: Write>(
@@ -578,9 +599,12 @@ impl Repo {
         let name = config::Name::load_from(name_str, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
+        let generations = self.read_generations()?;
+
         let accessor = self.get_chunk_accessor(
             Some(Arc::clone(&dec.decrypter)),
             Arc::clone(&self.compression),
+            generations,
         );
         let traverser = ReadContext::new(&accessor);
         traverser.read_recursively(ReadRequest::new(
@@ -597,11 +621,13 @@ impl Repo {
         let name = config::Name::load_from(name_str, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
+        let generations = self.read_generations()?;
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
             Some(Arc::clone(&dec.decrypter)),
             Arc::clone(&self.compression),
+            generations,
         );
         {
             let traverser = ReadContext::new(&accessor);
@@ -627,11 +653,14 @@ impl Repo {
         let name = config::Name::load_from(name_str, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
+        let generations = self.read_generations()?;
+
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
             Some(Arc::clone(&dec.decrypter)),
             Arc::clone(&self.compression),
+            generations,
         );
         {
             let traverser = ReadContext::new(&accessor);
@@ -646,33 +675,31 @@ impl Repo {
     }
 
     fn read_generations(&self) -> io::Result<Vec<Generation>> {
-        Ok(
-            self.aio
-                .list(PathBuf::new())
-                .wait()?
-                .iter()
-                .filter_map(
-                    |path| path.file_name().and_then(|file| file.to_str()),
-                )
-                .filter(|&item| {
-                    item != config::CONFIG_YML_FILE &&
-                        item != config::VERSION_FILE
-                })
-                .filter_map(|item| match Generation::try_from(&item) {
-                    Ok(gen) => Some(gen),
-                    Err(e) => {
-                        warn!(
-                            self.log,
-                            "skipping unknown generation: `{}` due
+        let mut list: Vec<_> = self.aio
+            .list(PathBuf::new())
+            .wait()?
+            .iter()
+            .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
+            .filter(|&item| {
+                item != config::CONFIG_YML_FILE && item != config::VERSION_FILE
+            })
+            .filter_map(|item| match Generation::try_from(&item) {
+                Ok(gen) => Some(gen),
+                Err(e) => {
+                    warn!(
+                        self.log,
+                        "skipping unknown generation: `{}` due
                                  to: `{}`",
-                            item,
-                            e
-                        );
-                        None
-                    }
-                })
-                .collect(),
-        )
+                        item,
+                        e
+                    );
+                    None
+                }
+            })
+            .collect();
+
+        list.sort();
+        Ok(list)
     }
 
     pub fn write<R>(
@@ -721,6 +748,7 @@ impl Repo {
                 let encrypter = Arc::clone(&enc.encrypter);
                 let compression = Arc::clone(&self.compression);
                 let hasher = Arc::clone(&self.hasher);
+                let generations = generations.clone();
                 scope.spawn(move || {
                     let processor = ChunkProcessor::new(
                         self.clone(),
@@ -729,6 +757,7 @@ impl Repo {
                         encrypter,
                         compression,
                         hasher,
+                        generations,
                     );
                     processor.run();
                 });
