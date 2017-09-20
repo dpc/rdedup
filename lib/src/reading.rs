@@ -251,13 +251,13 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
     ) -> io::Result<()> {
         let mut data = None;
         for gen_str in self.gen_strings.iter().rev() {
-            let path = self.repo.chunk_rel_path_by_digest(digest);
+            let path = self.repo.chunk_rel_path_by_digest(digest, gen_str);
             match self.repo.aio.read(path).wait() {
                 Ok(d) => {
                     data = Some(d);
                     break;
                 }
-                Err(e) => {}
+                Err(_e) => {}
             }
         }
 

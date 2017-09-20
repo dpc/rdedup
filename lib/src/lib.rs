@@ -1,3 +1,6 @@
+
+#![allow(dead_code)]
+
 extern crate base64;
 extern crate blake2;
 extern crate bytevec;
@@ -29,19 +32,17 @@ extern crate walkdir;
 extern crate zstd;
 
 use sgdata::SGData;
-use slog::{Level, Logger};
+use slog::{FnValue, Level, Logger};
 use slog_perf::TimeReporter;
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
 use std::{fs, io};
 use std::collections::HashSet;
-use std::error::Error as StdErrorError;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 
-mod iterators;
-use iterators::StoredChunks;
+// mod iterators;
 
 mod config;
 
@@ -111,6 +112,15 @@ pub struct VerifyResults {
 pub struct GcResults {
     pub chunks: usize,
     pub bytes: u64,
+}
+
+impl GcResults {
+    fn new() -> Self {
+        GcResults {
+            chunks: 0,
+            bytes: 0,
+        }
+    }
 }
 
 pub struct DuResults {
@@ -260,13 +270,6 @@ impl Repo {
             log: log,
             aio: aio,
         })
-    }
-
-    /// List all names
-    pub fn list_names(&self) -> Result<Vec<String>> {
-        let _lock = self.aio.lock_shared();
-
-        config::Name::list(&self.aio)
     }
 
     pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
@@ -476,6 +479,24 @@ impl Repo {
         )
     }
 
+    fn wipe_generation_maybe(&self, gen: Generation) -> io::Result<()> {
+        // check creation date and bail-out if it didn't have enough time to
+        // sync
+        // recursively delete all the files
+        unimplemented!();
+    }
+
+    fn update_name_to(
+        &self,
+        name: &str,
+        cur_gen: Generation,
+    ) -> io::Result<()> {
+        // traverse all the chunks (both index and data)
+        // probably using special Accessor, and
+        // move all the chunks to current gen
+        unimplemented!();
+    }
+
     // fn reachable_recursively_insert(
     // &self,
     // da: &DataAddress,
@@ -521,20 +542,21 @@ impl Repo {
     // }
     //
 
-    fn chunk_rel_path_by_digest(&self, digest: &Digest) -> PathBuf {
-        self.config
-            .nesting
-            .get_path(Path::new(config::DATA_SUBDIR), &digest.0)
-    }
-
-    fn chunk_path_by_digest(
+    fn chunk_rel_path_by_digest(
         &self,
         digest: &Digest,
-        generation_str: &str,
+        gen_str: &str,
     ) -> PathBuf {
+        self.config.nesting.get_path(
+            Path::new(config::DATA_SUBDIR),
+            &digest.0,
+            gen_str,
+        )
+    }
+
+    fn chunk_path_by_digest(&self, digest: &Digest, gen_str: &str) -> PathBuf {
         self.path
-            .join(generation_str)
-            .join(self.chunk_rel_path_by_digest(digest))
+            .join(self.chunk_rel_path_by_digest(digest, gen_str))
     }
 
     // TODO: Use asyncio
@@ -549,43 +571,53 @@ impl Repo {
         Ok(md.len())
     }
 
+    pub fn list(&self) -> io::Result<Vec<String>> {
+        let _lock = self.aio.lock_shared();
+        config::Name::list_all(&self.read_generations()?, &self.aio)
+    }
 
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
-        config::Name::remove(name, &self.aio)
+        config::Name::remove_any(name, &self.read_generations()?, &self.aio)
     }
 
     pub fn gc(&self) -> Result<GcResults> {
         let _lock = self.aio.lock_exclusive();
 
-        unimplemented!();
-        // let reachable = self.list_reachable_chunks().unwrap();
-        //
-        // let data_chunks = StoredChunks::new(
-        // &self.aio,
-        // PathBuf::from(config::DATA_SUBDIR),
-        // DIGEST_SIZE,
-        // self.log.clone(),
-        // )?;
-        //
-        // let mut result = GcResults {
-        // chunks: 0,
-        // bytes: 0,
-        // };
-        //
-        // for digest in data_chunks {
-        // let digest = digest?;
-        // if !reachable.contains(&digest) {
-        // trace!(self.log, "removing chunk"; "digest" => digest.to_hex());
-        // let bytes = self.rm_chunk_by_digest(&Digest(digest))?;
-        // result.chunks += 1;
-        // result.bytes += bytes;
-        // }
-        // }
-        //
-        // Ok(result)
-        //
+        let generations = self.read_generations()?;
+
+        let res = GcResults::new();
+        if generations.is_empty() {
+            info!(self.log, "Nothing in the repository yet, nothing to gc");
+            return Ok(res);
+        }
+
+        if generations.len() == 1 {
+            let new_gen = generations.last().unwrap().gen_next();
+            info!(self.log, "Creating new generation"; "gen" => FnValue(|_| new_gen.to_string()));
+            new_gen.write(&self.aio)?;
+        }
+
+        loop {
+            let generations = self.read_generations()?;
+            assert!(!generations.is_empty());
+            if generations.len() == 1 {
+                info!(self.log, "One generation left - GC cycle complete";
+                      "gen" => FnValue(|_| generations[0].to_string()));
+                return Ok(res);
+            }
+            let gen_oldest = generations[0];
+            let gen_cur = generations.last().unwrap();
+
+            let names = config::Name::list(gen_oldest, &self.aio)?;
+            if names.is_empty() {
+                self.wipe_generation_maybe(generations[0]);
+                return Ok(res);
+            }
+
+            self.update_name_to(&names[0], *gen_cur)?;
+        }
     }
 
     pub fn read<W: Write>(
@@ -596,10 +628,12 @@ impl Repo {
     ) -> Result<()> {
         let _lock = self.aio.lock_shared();
 
-        let name = config::Name::load_from(name_str, &self.aio)?;
+        let generations = self.read_generations()?;
+
+        let name =
+            config::Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
-        let generations = self.read_generations()?;
 
         let accessor = self.get_chunk_accessor(
             Some(Arc::clone(&dec.decrypter)),
@@ -618,10 +652,11 @@ impl Repo {
     pub fn du(&self, name_str: &str, dec: &DecryptHandle) -> Result<DuResults> {
         let _lock = self.aio.lock_shared();
 
-        let name = config::Name::load_from(name_str, &self.aio)?;
+        let generations = self.read_generations()?;
+        let name =
+            config::Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
-        let generations = self.read_generations()?;
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
@@ -650,10 +685,13 @@ impl Repo {
         dec: &DecryptHandle,
     ) -> Result<VerifyResults> {
         let _lock = self.aio.lock_shared();
-        let name = config::Name::load_from(name_str, &self.aio)?;
-        let data_address: OwnedDataAddress = name.into();
 
         let generations = self.read_generations()?;
+
+        let name =
+            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let data_address: OwnedDataAddress = name.into();
+
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
@@ -778,7 +816,7 @@ impl Repo {
 
 
         let name: config::Name = data_address?.into();
-        name.write_as(name_str, &self.aio)?;
+        name.write_as(name_str, *generations.last().unwrap(), &self.aio)?;
         Ok(stats.get_stats())
     }
 }

@@ -60,6 +60,7 @@ impl ChunkProcessor {
         let gen_strings: Vec<_> =
             self.generations.iter().map(|gen| gen.to_string()).collect();
 
+        let last_gen_str = gen_strings.last().unwrap().to_owned();
         loop {
             timer.start("rx");
 
@@ -73,22 +74,37 @@ impl ChunkProcessor {
                 } = input;
                 let (sg_id, sg) = data;
 
-                let mut sg = sg;
-
                 let digest = Digest(self.hasher.calculate_digest(&sg));
 
                 let mut found = false;
-                for (i, gen_str) in gen_strings.iter().rev().enumerate() {
+                // lookup all generations in order, starting from current one
+                // and at the end try the current gen. again, in case some other
+                // thread/ instance just moved it from older generation to the
+                // current one
+                for gen_str in gen_strings
+                    .iter()
+                    .rev()
+                    .chain([&last_gen_str].iter().cloned())
+                {
                     let chunk_path =
                         self.repo.chunk_path_by_digest(&digest, gen_str);
                     if chunk_path.exists() {
                         found = true;
-                        if i == 0 {
+                        if gen_str == &last_gen_str {
                             trace!(self.log, "already exists"; "path" => %chunk_path.display());
                         } else {
                             trace!(self.log, "already exists in previous generation";
                                    "path" => %chunk_path.display());
-                            // TODO: Move to the current generation
+                            self.aio
+                                .rename(
+                                    chunk_path,
+                                    self.repo.chunk_path_by_digest(
+                                        &digest,
+                                        gen_strings.last().unwrap(),
+                                    ),
+                                )
+                                .wait()
+                                .expect("rename failed");
                         }
                         break;
                     }
@@ -117,7 +133,8 @@ impl ChunkProcessor {
 
                     timer.start("tx-writer");
                     self.aio.write_checked_idempotent(
-                        self.repo.chunk_rel_path_by_digest(&digest),
+                        self.repo
+                            .chunk_rel_path_by_digest(&digest, &last_gen_str),
                         sg,
                     );
                 }

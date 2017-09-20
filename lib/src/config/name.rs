@@ -1,11 +1,11 @@
 use std::io;
 use asyncio;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use serde_yaml;
 use SGData;
 use util::*;
 use DIGEST_SIZE;
-use {DataAddress, OwnedDataAddress};
+use {DataAddress, Generation, OwnedDataAddress};
 
 pub(crate) const NAME_SUBDIR: &'static str = "name";
 
@@ -17,14 +17,48 @@ pub(crate) struct Name {
 }
 
 impl Name {
-    pub(crate) fn remove(name: &str, aio: &asyncio::AsyncIO) -> io::Result<()> {
-        aio.remove(Path::new(NAME_SUBDIR).join(name).with_extension("yml"))
-            .wait()
+    pub(crate) fn remove(
+        name: &str,
+        gen: Generation,
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<()> {
+        let path = Name::path(name, gen);
+        aio.remove(path).wait()
+    }
+
+    pub(crate) fn remove_any(
+        name: &str,
+        gens: &[Generation],
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<()> {
+        for gen in gens.iter().rev() {
+            match Name::remove(name, *gen, aio) {
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
+                res => return res,
+            }
+        }
+
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("name not found: {}", name),
+        ));
+    }
+
+    pub(crate) fn path(name: &str, gen: Generation) -> PathBuf {
+        let mut path: PathBuf = gen.to_string().into();
+        path.push(NAME_SUBDIR);
+        path.push(name);
+        path.set_extension("yml");
+        path
     }
 
     /// List all names
-    pub(crate) fn list(aio: &asyncio::AsyncIO) -> io::Result<Vec<String>> {
-        let list = aio.list(PathBuf::from(NAME_SUBDIR)).wait()?;
+    pub(crate) fn list(
+        gen: Generation,
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<Vec<String>> {
+        let list = aio.list(PathBuf::from(gen.to_string()).join(NAME_SUBDIR))
+            .wait()?;
         Ok(
             list.iter()
                 .map(|e| {
@@ -37,17 +71,29 @@ impl Name {
         )
     }
 
+    pub fn list_all(
+        gens: &[Generation],
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<Vec<String>> {
+        let mut res = vec![];
+
+        for gen in gens.iter().rev() {
+            res.append(&mut Name::list(*gen, aio)?);
+        }
+
+        Ok(res)
+    }
+
     pub fn write_as(
         &self,
         name: &str,
+        gen: Generation,
         aio: &asyncio::AsyncIO,
     ) -> io::Result<()> {
         let serialized_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");
 
-        let path: PathBuf = NAME_SUBDIR.into();
-        let mut path = path.join(name);
-        path.set_extension("yml");
+        let path = Name::path(name, gen);
 
         if aio.read(path.clone()).wait().is_ok() {
             return Err(io::Error::new(
@@ -61,10 +107,12 @@ impl Name {
         Ok(())
     }
 
-    pub fn load_from(name: &str, aio: &asyncio::AsyncIO) -> io::Result<Self> {
-        let path: PathBuf = NAME_SUBDIR.into();
-        let mut path = path.join(name);
-        path.set_extension("yml");
+    pub fn load_from(
+        name: &str,
+        gen: Generation,
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<Self> {
+        let path = Name::path(name, gen);
 
         let config_data = aio.read(path).wait()?;
         let config_data = config_data.to_linear_vec();
@@ -85,6 +133,23 @@ impl Name {
         }
 
         Ok(name)
+    }
+    pub(crate) fn load_from_any(
+        name: &str,
+        gens: &[Generation],
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<Self> {
+        for gen in gens.iter().rev() {
+            match Name::load_from(name, *gen, aio) {
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
+                res => return res,
+            }
+        }
+
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("name not found: {}", name),
+        ));
     }
 }
 

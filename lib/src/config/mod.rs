@@ -112,9 +112,15 @@ impl Default for Nesting {
 }
 
 impl Nesting {
-    pub fn get_path(&self, base: &Path, digest: &[u8]) -> PathBuf {
+    pub fn get_path(
+        &self,
+        base: &Path,
+        digest: &[u8],
+        gen_str: &str,
+    ) -> PathBuf {
         let hex_digest = &digest.to_hex();
         let mut dir = base.to_path_buf();
+        dir.push(gen_str);
         let levels = self.clone().0;
         if levels > 0 {
             for i in 0..levels {

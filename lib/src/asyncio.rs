@@ -14,7 +14,7 @@ use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std;
 use std::{fs, io, mem, thread};
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -36,6 +36,7 @@ enum Message {
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     Remove(PathBuf, mpsc::Sender<io::Result<()>>),
+    Rename(PathBuf, PathBuf, mpsc::Sender<io::Result<()>>),
 }
 
 /// A handle to a async-io worker pool
@@ -208,6 +209,14 @@ impl AsyncIO {
             .expect("channel send failed");
         AsyncIOResult { rx: rx }
     }
+
+    pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::Rename(src, dst, tx))
+            .expect("channel send failed");
+        AsyncIOResult { rx: rx }
+    }
 }
 
 impl Drop for AsyncIO {
@@ -262,7 +271,7 @@ pub struct WriteStats {
 
 struct AsyncIOSharedInner {
     write_stats: WriteStats,
-    in_progress: HashMap<PathBuf, SGData>,
+    in_progress: HashSet<PathBuf>,
 }
 
 impl Drop for AsyncIOSharedInner {
@@ -304,6 +313,15 @@ struct AsyncIOThread {
     log: Logger,
     time_reporter: TimeReporter,
     rand_ext: String,
+}
+
+struct PendingGuard<'a, 'b>(&'a AsyncIOThread, &'b PathBuf);
+
+impl<'a, 'b> Drop for PendingGuard<'a, 'b> {
+    fn drop(&mut self) {
+        let mut sh = self.0.shared.inner.lock().unwrap();
+        sh.in_progress.remove(self.1);
+    }
 }
 
 impl AsyncIOThread {
@@ -349,6 +367,9 @@ impl AsyncIOThread {
                         self.list_recursively(path, tx)
                     }
                     Message::Remove(path, tx) => self.remove(path, tx),
+                    Message::Rename(src_path, dst_path, tx) => {
+                        self.rename(src_path, dst_path, tx)
+                    }
                 }
             } else {
                 break;
@@ -374,6 +395,26 @@ impl AsyncIOThread {
         }
     }
 
+    fn pending_wait_and_insert<'a, 'path>(
+        &'a self,
+        path: &'path PathBuf,
+    ) -> PendingGuard<'a, 'path> {
+        loop {
+            let mut sh = self.shared.inner.lock().unwrap();
+
+            if sh.in_progress.contains(path) {
+                // a bit lame, but will do, since this should not really
+                // happen in practice anyway
+                drop(sh);
+                thread::sleep(std::time::Duration::from_millis(1000));
+            } else {
+                sh.in_progress.insert(path.clone());
+                break;
+            }
+        }
+        PendingGuard(self, path)
+    }
+
     fn write_inner(
         &mut self,
         path: PathBuf,
@@ -387,7 +428,7 @@ impl AsyncIOThread {
         loop {
             let mut sh = self.shared.inner.lock().unwrap();
 
-            if sh.in_progress.contains_key(&path) {
+            if sh.in_progress.contains(&path) {
                 if idempotent {
                     return Ok(());
                 } else {
@@ -397,7 +438,7 @@ impl AsyncIOThread {
                     thread::sleep(std::time::Duration::from_millis(1000));
                 }
             } else {
-                sh.in_progress.insert(path.clone(), sg.clone());
+                sh.in_progress.insert(path.clone());
                 break;
             }
         }
@@ -462,17 +503,9 @@ impl AsyncIOThread {
     fn read_inner(&mut self, path: PathBuf) -> io::Result<SGData> {
         self.time_reporter.start("read");
 
-        // check `in_progress` and return the that if present
-        {
-            let sh = self.shared.inner.lock().unwrap();
+        let _guard = self.pending_wait_and_insert(&path);
 
-            if let Some(sg) = sh.in_progress.get(&path) {
-                return Ok(sg.clone());
-            }
-        }
-
-
-        let mut file = fs::File::open(path)?;
+        let mut file = fs::File::open(&path)?;
 
         let mut bufs = Vec::with_capacity(16 * 1024 / INGRESS_BUFFER_SIZE);
         loop {
@@ -569,6 +602,37 @@ impl AsyncIOThread {
 
     fn remove_inner(&mut self, path: PathBuf) -> io::Result<()> {
         self.time_reporter.start("remove");
-        fs::remove_file(path)
+
+        let _guard = self.pending_wait_and_insert(&path);
+        fs::remove_file(&path)
+    }
+
+
+    fn rename(
+        &mut self,
+        src_path: PathBuf,
+        dst_path: PathBuf,
+        tx: mpsc::Sender<io::Result<()>>,
+    ) {
+        trace!(self.log, "rename"; "src-path" => %src_path.display(), "dst-path"
+               => %dst_path.display());
+
+        let src_path = self.root_path.join(src_path);
+        let dst_path = self.root_path.join(dst_path);
+
+        let res = self.rename_inner(src_path, dst_path);
+        self.time_reporter.start("remove send response");
+        tx.send(res).expect("send failed")
+    }
+
+    fn rename_inner(
+        &mut self,
+        src_path: PathBuf,
+        dst_path: PathBuf,
+    ) -> io::Result<()> {
+        self.time_reporter.start("rename");
+        let _guard = self.pending_wait_and_insert(&src_path);
+        let _guard = self.pending_wait_and_insert(&dst_path);
+        fs::rename(&src_path, &dst_path)
     }
 }
