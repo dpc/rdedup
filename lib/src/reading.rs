@@ -208,9 +208,7 @@ pub(crate) trait ChunkAccessor {
     ) -> io::Result<()>;
 
 
-    fn touch(&self, _digest: &Digest) -> io::Result<()> {
-        Ok(())
-    }
+    fn touch(&self, _digest: &Digest) -> io::Result<()>;
 }
 
 /// `ChunkAccessor` that just reads the chunks as requested, without doing
@@ -250,11 +248,15 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         writer: &mut Write,
     ) -> io::Result<()> {
         let mut data = None;
+        let cur_gen_str = self.gen_strings.last().unwrap();
+        let mut data_gen_str = None;
+
         for gen_str in self.gen_strings.iter().rev() {
             let path = self.repo.chunk_rel_path_by_digest(digest, gen_str);
             match self.repo.aio.read(path).wait() {
                 Ok(d) => {
                     data = Some(d);
+                    data_gen_str = Some(gen_str);
                     break;
                 }
                 Err(_e) => {}
@@ -267,6 +269,34 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                 format!("Couldn't not find chunk: {}", digest.0.to_hex(),),
             ));
         }
+
+        let data_gen_str = data_gen_str.unwrap();
+
+        if cur_gen_str != data_gen_str {
+            let data_gen_path =
+                self.repo.chunk_rel_path_by_digest(digest, data_gen_str);
+            let cur_gen_path =
+                self.repo.chunk_rel_path_by_digest(digest, cur_gen_str);
+
+            // `rename` is best effort
+            //
+            // Should we fail if we're GCing, and we want to make sure
+            // everything reachable has been moved? Well, if it wa
+            let res = self.repo
+                .aio
+                .rename(data_gen_path.clone(), cur_gen_path.clone())
+                .wait();
+            if let Err(e) = res {
+                if e.kind() != io::ErrorKind::NotFound {
+                    warn!(self.repo.log, "Couldn't move chunk to the current generation";
+                          "src-path" => data_gen_path.display(),
+                          "dst-path" => cur_gen_path.display(),
+                          "err" => %e);
+                    return Err(e);
+                }
+            }
+        }
+
 
         let data = data.unwrap();
         let data = if data_type.should_encrypt() {
@@ -301,6 +331,11 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             }
             Ok(())
         }
+    }
+
+
+    fn touch(&self, _digest: &Digest) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -415,6 +450,112 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             self.errors
                 .borrow_mut()
                 .push((digest.0.clone(), res.err().unwrap()));
+        }
+        Ok(())
+    }
+
+    fn touch(&self, digest: &Digest) -> io::Result<()> {
+        self.raw.touch(digest)
+    }
+}
+
+
+/// `ChunkAccessor` that update accessed chunks
+/// to the latest generation
+pub(crate) struct GenerationUpdateChunkAccessor<'a> {
+    raw: DefaultChunkAccessor<'a>,
+    accessed: RefCell<HashSet<Vec<u8>>>,
+    errors: RefCell<Vec<(Vec<u8>, Error)>>,
+    cur_generation: Generation,
+}
+
+impl<'a> GenerationUpdateChunkAccessor<'a> {
+    pub(crate) fn new(
+        repo: &'a Repo,
+        compression: ArcCompression,
+        generations: Vec<Generation>,
+        cur_generation: Generation,
+    ) -> Self {
+        GenerationUpdateChunkAccessor {
+            raw: DefaultChunkAccessor::new(
+                repo,
+                None,
+                compression,
+                generations,
+            ),
+            accessed: RefCell::new(HashSet::new()),
+            errors: RefCell::new(Vec::new()),
+            cur_generation: cur_generation,
+        }
+    }
+
+    pub(crate) fn get_results(self) -> VerifyResults {
+        VerifyResults {
+            scanned: self.accessed.borrow().len(),
+            errors: self.errors.into_inner(),
+        }
+    }
+}
+
+impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
+    fn repo(&self) -> &Repo {
+        self.raw.repo()
+    }
+
+    fn read_chunk_into(
+        &self,
+        digest: &Digest,
+        data_type: DataType,
+        writer: &mut Write,
+    ) -> io::Result<()> {
+        self.raw.read_chunk_into(digest, data_type, writer)
+    }
+
+    fn touch(&self, digest: &Digest) -> io::Result<()> {
+        let cur_gen_str = self.raw.gen_strings.last().unwrap();
+        let mut data_gen_str = None;
+
+        for gen_str in self.raw.gen_strings.iter().rev() {
+            let path = self.raw.repo.chunk_rel_path_by_digest(digest, gen_str);
+            match self.raw.repo.aio.read_metadata(path).wait() {
+                Ok(_metadata) => {
+                    data_gen_str = Some(gen_str);
+                    break;
+                }
+                Err(_e) => {}
+            }
+        }
+
+        if data_gen_str.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Couldn't not find chunk: {}", digest.0.to_hex(),),
+            ));
+        }
+
+        let data_gen_str = data_gen_str.unwrap();
+
+        if cur_gen_str != data_gen_str {
+            let data_gen_path =
+                self.raw.repo.chunk_rel_path_by_digest(digest, data_gen_str);
+            let cur_gen_path =
+                self.raw.repo.chunk_rel_path_by_digest(digest, cur_gen_str);
+
+            // `rename` is best effort
+            let res = self.raw
+                .repo
+                .aio
+                .rename(data_gen_path.clone(), cur_gen_path.clone())
+                .wait();
+            if let Err(e) = res {
+                if e.kind() != io::ErrorKind::NotFound {
+                    warn!(self.raw.repo.log, "Couldn't move chunk to the current generation";
+                          "src-path" => data_gen_path.display(),
+                          "dst-path" => cur_gen_path.display(),
+                          "err" => %e);
+                    return Err(e);
+                }
+            }
         }
         Ok(())
     }

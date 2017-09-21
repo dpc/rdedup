@@ -29,10 +29,16 @@ struct WriteArgs {
     complete_tx: Option<mpsc::Sender<io::Result<()>>>,
 }
 
+pub(crate) struct Metadata {
+    len: u64,
+    is_file: bool,
+}
+
 /// Message sent to a worker pool
 enum Message {
     Write(WriteArgs),
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
+    ReadMetadata(PathBuf, mpsc::Sender<io::Result<Metadata>>),
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     Remove(PathBuf, mpsc::Sender<io::Result<()>>),
@@ -201,6 +207,16 @@ impl AsyncIO {
         AsyncIOResult { rx: rx }
     }
 
+    pub(crate) fn read_metadata(
+        &self,
+        path: PathBuf,
+    ) -> AsyncIOResult<Metadata> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::ReadMetadata(path, tx))
+            .expect("channel send failed");
+        AsyncIOResult { rx: rx }
+    }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
@@ -362,6 +378,9 @@ impl AsyncIOThread {
                         complete_tx,
                     }) => self.write(path, data, idempotent, complete_tx),
                     Message::Read(path, tx) => self.read(path, tx),
+                    Message::ReadMetadata(path, tx) => {
+                        self.read_metadata(path, tx)
+                    }
                     Message::List(path, tx) => self.list(path, tx),
                     Message::ListRecursively(path, tx) => {
                         self.list_recursively(path, tx)
@@ -518,6 +537,32 @@ impl AsyncIOThread {
             buf.truncate(len);
             bufs.push(buf);
         }
+    }
+
+    fn read_metadata(
+        &mut self,
+        path: PathBuf,
+        tx: mpsc::Sender<io::Result<Metadata>>,
+    ) {
+        trace!(self.log, "read-metadata"; "path" => %path.display());
+
+        let path = self.root_path.join(path);
+
+        let res = self.read_metadata_inner(path);
+        self.time_reporter.start("read send response");
+        tx.send(res).expect("send failed")
+    }
+
+    fn read_metadata_inner(&mut self, path: PathBuf) -> io::Result<Metadata> {
+        self.time_reporter.start("read-metadata");
+
+        let _guard = self.pending_wait_and_insert(&path);
+
+        let md = fs::metadata(&path)?;
+        Ok(Metadata {
+            len: md.len(),
+            is_file: md.is_file(),
+        })
     }
 
     fn list(

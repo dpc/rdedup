@@ -479,7 +479,7 @@ impl Repo {
         )
     }
 
-    fn wipe_generation_maybe(&self, gen: Generation) -> io::Result<()> {
+    fn wipe_generation_maybe(&self, _gen: Generation) -> io::Result<()> {
         // check creation date and bail-out if it didn't have enough time to
         // sync
         // recursively delete all the files
@@ -488,12 +488,33 @@ impl Repo {
 
     fn update_name_to(
         &self,
-        name: &str,
+        name_str: &str,
         cur_gen: Generation,
+        generations: &[Generation],
     ) -> io::Result<()> {
         // traverse all the chunks (both index and data)
         // probably using special Accessor, and
         // move all the chunks to current gen
+        let name =
+            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let data_address: OwnedDataAddress = name.into();
+
+        let mut counter = CounterWriter::new();
+        let accessor = GenerationUpdateChunkAccessor::new(
+            self,
+            Arc::clone(&self.compression),
+            generations.to_vec(),
+            cur_gen,
+        );
+        {
+            let traverser = ReadContext::new(&accessor);
+            traverser.read_recursively(ReadRequest::new(
+                DataType::Data,
+                &data_address.as_ref(),
+                Some(&mut counter),
+                self.log.clone(),
+            ))?;
+        }
         unimplemented!();
     }
 
@@ -571,7 +592,7 @@ impl Repo {
         Ok(md.len())
     }
 
-    pub fn list(&self) -> io::Result<Vec<String>> {
+    pub fn list_names(&self) -> io::Result<Vec<String>> {
         let _lock = self.aio.lock_shared();
         config::Name::list_all(&self.read_generations()?, &self.aio)
     }
@@ -612,11 +633,11 @@ impl Repo {
 
             let names = config::Name::list(gen_oldest, &self.aio)?;
             if names.is_empty() {
-                self.wipe_generation_maybe(generations[0]);
+                self.wipe_generation_maybe(generations[0])?;
                 return Ok(res);
             }
 
-            self.update_name_to(&names[0], *gen_cur)?;
+            self.update_name_to(&names[0], *gen_cur, &generations)?;
         }
     }
 
