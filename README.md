@@ -80,9 +80,7 @@ but for Rust)
 [rustup]: https://www.rustup.rs/
 
 In case of troubles, check
-[rdedup building
-issues](https://github.
-com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+[rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 or report a new one (sorry)!
 
 ### Usage
