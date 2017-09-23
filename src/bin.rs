@@ -61,7 +61,9 @@
 //! [rustup]: https://www.rustup.rs/
 //!
 //! In case of troubles, check
-//! [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+//! [rdedup building
+//! issues](https://github.
+//! com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 //! or report a new one (sorry)!
 //!
 //! ## Usage
@@ -115,9 +117,9 @@
 
 #[macro_use]
 extern crate clap;
+extern crate hex;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
-extern crate hex;
 #[macro_use]
 extern crate slog;
 extern crate slog_async;
@@ -245,7 +247,7 @@ fn validate_nesting(s: String) -> Result<(), String> {
     Ok(())
 }
 
-fn create_logger(verbosity: u32, timing_verbosity : u32) -> slog::Logger {
+fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
     match (verbosity, timing_verbosity) {
         (0, 0) => slog::Logger::root(slog::Discard, o!()),
         (v, tv) => {
@@ -266,25 +268,30 @@ fn create_logger(verbosity: u32, timing_verbosity : u32) -> slog::Logger {
                 // at level 4, use synchronous logger so not to loose any
                 // logging messages
                 let drain = std::sync::Mutex::new(drain);
-                let drain = slog::Filter::new(drain, move |record : &slog::Record| {
-                    if record.tag() == "slog_perf" {
-                        record.level() >= tv
-                    } else {
-                        record.level() >= v
-                    }
-                });
+                let drain =
+                    slog::Filter::new(drain, move |record: &slog::Record| {
+                        if record.tag() == "slog_perf" {
+                            record.level() >= tv
+                        } else {
+                            record.level() >= v
+                        }
+                    });
                 let log = slog::Logger::root(drain.fuse(), o!());
-                info!(log, "Using synchronized logging, that we'll be slightly slower.");
+                info!(
+                    log,
+                    "Using synchronized logging, that we'll be slightly slower."
+                );
                 log
             } else {
                 let drain = slog_async::Async::default(drain.fuse());
-                let drain = slog::Filter::new(drain, move |record : &slog::Record| {
-                    if record.tag() == "slog_perf" {
-                        record.level().is_at_least(tv)
-                    } else {
-                        record.level().is_at_least(v)
-                    }
-                });
+                let drain =
+                    slog::Filter::new(drain, move |record: &slog::Record| {
+                        if record.tag() == "slog_perf" {
+                            record.level().is_at_least(tv)
+                        } else {
+                            record.level().is_at_least(v)
+                        }
+                    });
                 slog::Logger::root(drain.fuse(), o!())
             }
         }
@@ -346,6 +353,8 @@ fn run() -> io::Result<()> {
         )
         (@subcommand gc =>
          (about: "Garbage collect unreferenced chunks")
+         (@arg GRACE_TIME: --grace
+          +takes_value "Set grace time. Default: 1 day")
         )
         (@subcommand verify =>
          (about: "Verify integrity of data stored in the repository")
@@ -373,7 +382,7 @@ fn run() -> io::Result<()> {
 
     let log = create_logger(
         matches.occurrences_of("VERBOSE") as u32,
-        matches.occurrences_of("VERBOSE_TIMINGS") as u32
+        matches.occurrences_of("VERBOSE_TIMINGS") as u32,
     );
 
     match matches.subcommand() {
@@ -453,10 +462,16 @@ fn run() -> io::Result<()> {
                 println!("{} bytes", result.bytes);
             }
         }
-        ("gc", Some(_matches)) => {
+        ("gc", Some(matches)) => {
+            let grace_secs = if let Some(grace) = matches.value_of("GRACE_TIME")
+            {
+                u64::from_str(grace).unwrap()
+            } else {
+                60 * 60 * 24
+            };
             let repo = Repo::open(&options.dir, log)?;
 
-            repo.gc()?;
+            repo.gc(grace_secs)?;
         }
         ("list", Some(_matches)) => {
             let repo = Repo::open(&options.dir, log)?;

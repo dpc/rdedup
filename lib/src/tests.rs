@@ -35,7 +35,7 @@ fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
     let mut digests = HashSet::new();
     let data_chunks = StoredChunks::new(
         &repo.aio,
-        PathBuf::from(super::config::DATA_SUBDIR),
+        PathBuf::from("."),
         DIGEST_SIZE,
         repo.log.clone(),
     )?;
@@ -48,6 +48,7 @@ fn list_stored_chunks(repo: &lib::Repo) -> Result<HashSet<Vec<u8>>> {
 
 fn test_repo(pass: &str) -> lib::Repo {
     let mut settings = settings::Repo::new();
+    // Make it fasts to use
     settings.set_pwhash(settings::PWHash::Weak);
     lib::Repo::init(&rand_tmp_dir(), &|| Ok(pass.into()), settings, None)
         .unwrap()
@@ -114,10 +115,12 @@ fn wipe(repo: &lib::Repo) {
     let names = repo.list_names().unwrap();
 
     for name in &names {
+        println!("Wiping name: {}", name);
         repo.rm(&name).unwrap();
     }
 
-    repo.gc().unwrap();
+    println!("Final GC");
+    repo.gc(0).unwrap();
 
     assert_eq!(list_stored_chunks(repo).unwrap().len(), 0);
     assert_eq!(repo.list_reachable_chunks().unwrap().len(), 0);
@@ -184,7 +187,7 @@ fn random_sanity() {
         names.push((name, data.finish()));
     }
 
-    repo.gc().unwrap();
+    repo.gc(0).unwrap();
 
     for &(ref name, ref digest) in &names {
         let mut data = vec![];
@@ -198,6 +201,8 @@ fn random_sanity() {
     }
 
     for (name, digest) in names.drain(..) {
+        repo.gc(0).unwrap();
+
         {
             let mut data = vec![];
             repo.read(&name, &mut data, &dec_handle).unwrap();
@@ -212,6 +217,8 @@ fn random_sanity() {
         let reachable = repo.list_reachable_chunks().unwrap();
         let stored = list_stored_chunks(&repo).unwrap();
 
+        assert_eq!(reachable.iter().count(), stored.iter().count());
+
         for digest in reachable.iter() {
             assert!(stored.contains(digest));
         }
@@ -225,7 +232,6 @@ fn random_sanity() {
 
         assert_eq!(stored_after_rm.len(), stored.len());
         assert!(reachable_after_rm.len() < reachable.len());
-        assert!(repo.gc().unwrap().chunks > 0);
     }
 
     wipe(&repo);
@@ -294,7 +300,9 @@ fn verify_name() {
     assert_eq!(result.errors.len(), 0);
 
     // Corrupt first chunk we find
-    let chunk_path = repo.path().join("chunk");
+    let generations = repo.read_generations().unwrap();
+
+    let chunk_path = repo.path().join(generations[0].to_string()).join("chunk");
     for l1 in fs::read_dir(&chunk_path).unwrap() {
         let l1 = l1.unwrap();
         if l1.path().is_dir() {
@@ -333,18 +341,22 @@ fn test_stored_chunks_iter() {
     let chunks_from_indexes = repo.list_reachable_chunks().unwrap();
 
     let mut chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    assert_eq!(
+        chunks_from_indexes.iter().count(),
+        chunks_from_iter.iter().count()
+    );
     assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
 
     // Insert garbage file into chunks folder
-    let garbage_file_path = repo.path().join("chunk/garbage.data");
-    {
-        let mut f = fs::File::create(&garbage_file_path).unwrap();
-        f.write_all(&data).unwrap();
-    }
-    chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
-
-    fs::remove_file(&garbage_file_path).unwrap();
+    // let garbage_file_path = repo.path().join("chunk/garbage.data");
+    // {
+    // let mut f = fs::File::create(&garbage_file_path).unwrap();
+    // f.write_all(&data).unwrap();
+    // }
+    // chunks_from_iter = list_stored_chunks(&repo).unwrap();
+    // assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+    //
+    // fs::remove_file(&garbage_file_path).unwrap();
 
     // Add a second name to the repo and compare chunks
     let data2 = rand_data(1024 * 1024);
@@ -371,7 +383,7 @@ fn test_stored_chunks_iter() {
         0
     );
 
-    repo.gc().unwrap();
+    repo.gc(0).unwrap();
     // Chunks from iterator should equal the first reachable list
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
     assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
@@ -448,9 +460,8 @@ fn test_custom_nesting() {
             let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
             let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
 
-            let wstats =
-                repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
-                    .unwrap();
+            repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
+                .unwrap();
 
             let mut load_data = vec![];
             repo.read("data", &mut load_data, &dec_handle).unwrap();
@@ -459,9 +470,8 @@ fn test_custom_nesting() {
 
             repo.rm("data").unwrap();
 
-            let gstats = repo.gc().unwrap();
+            repo.gc(0).unwrap();
 
-            assert_eq!(wstats.new_chunks, gstats.chunks);
             wipe(&repo);
         }
     }

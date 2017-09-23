@@ -78,6 +78,8 @@ use self::reading::*;
 mod generation;
 use self::generation::*;
 
+use std::error::Error as ErrorError;
+
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
 
@@ -465,13 +467,19 @@ impl Repo {
         )
     }
 
-    fn wipe_generation_maybe(&self, gen: Generation) -> io::Result<()> {
+    fn wipe_generation_maybe(
+        &self,
+        gen: Generation,
+        min_age_secs: u64,
+    ) -> io::Result<()> {
         let gen_config = gen.load_config(&self.aio)?;
 
-        if gen_config.created + chrono::Duration::days(1) > chrono::Utc::now() {
+        if gen_config.created + chrono::Duration::seconds(min_age_secs as i64) >
+            chrono::Utc::now()
+        {
             info!(
                 self.log,
-                "Generation is not at least a day old. Rerun GC later to finish";
+                "Generation is not old enough. Rerun GC later to finish";
                 "gen" => FnValue(|_| gen.to_string()),
                 "gen-created" => gen_config.created.to_rfc3339(),
                 "now" => chrono::Utc::now().to_rfc3339(),
@@ -541,6 +549,54 @@ impl Repo {
         Ok(())
     }
 
+    fn reachable_recursively_insert(
+        &self,
+        da: &DataAddress,
+        reachable_digests: &mut HashSet<Vec<u8>>,
+        generations: Vec<Generation>,
+    ) -> Result<()> {
+        reachable_digests.insert(da.digest.0.clone());
+
+        let accessor = self.get_recording_chunk_accessor(
+            reachable_digests,
+            None,
+            Arc::clone(&self.compression),
+            generations,
+        );
+        let traverser = ReadContext::new(&accessor);
+        traverser.read_recursively(
+            ReadRequest::new(DataType::Data, da, None, self.log.clone()),
+        )
+    }
+
+    /// Return all reachable chunks
+    fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
+        let generations = self.read_generations()?;
+        let mut reachable_digests = HashSet::new();
+        let all_names = config::Name::list_all(&generations, &self.aio)?;
+        for name_str in &all_names {
+            match config::Name::load_from_any(name_str, &generations, &self.aio)
+            {
+                Ok(name) => {
+                    let data_address: OwnedDataAddress = name.into();
+                    info!(self.log, "processing"; "name" => name_str);
+                    self.reachable_recursively_insert(
+                        &data_address.as_ref(),
+                        &mut reachable_digests,
+                        generations.clone(),
+                    )?;
+                }
+                Err(e) => {
+                    info!(self.log, "skipped"; "name" => name_str, "error" =>
+                          e.description());
+                }
+            }
+        }
+
+        Ok(reachable_digests)
+    }
+
+
     fn chunk_rel_path_by_digest(
         &self,
         digest: &Digest,
@@ -569,7 +625,7 @@ impl Repo {
         config::Name::remove_any(name, &self.read_generations()?, &self.aio)
     }
 
-    pub fn gc(&self) -> Result<()> {
+    pub fn gc(&self, min_age_secs: u64) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
 
         let generations = self.read_generations()?;
@@ -606,7 +662,7 @@ impl Repo {
                   "gen" => FnValue(|_| gen_oldest.to_string())
                   );
             if names.is_empty() {
-                self.wipe_generation_maybe(gen_oldest)?;
+                self.wipe_generation_maybe(gen_oldest, min_age_secs)?;
                 return Ok(());
             }
             self.update_name_to(&names[0], *gen_cur, &generations)?;
@@ -712,7 +768,9 @@ impl Repo {
             .iter()
             .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
             .filter(|&item| {
-                item != config::CONFIG_YML_FILE && item != config::VERSION_FILE
+                item != config::CONFIG_YML_FILE &&
+                    item != config::VERSION_FILE &&
+                    item != config::LOCK_FILE
             })
             .filter_map(|item| match Generation::try_from(&item) {
                 Ok(gen) => Some(gen),
