@@ -119,8 +119,8 @@ impl Nesting {
         gen_str: &str,
     ) -> PathBuf {
         let hex_digest = &digest.to_hex();
-        let mut dir = base.to_path_buf();
-        dir.push(gen_str);
+        let mut dir = PathBuf::from(gen_str);
+        dir.push(base);
         let levels = self.clone().0;
         if levels > 0 {
             for i in 0..levels {

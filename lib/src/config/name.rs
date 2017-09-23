@@ -44,6 +44,32 @@ impl Name {
         ));
     }
 
+    // TODO: &self ?
+    pub(crate) fn update_generation_to(
+        name: &str,
+        cur_generation: Generation,
+        gens: &[Generation],
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<()> {
+        let dst_path = Name::path(name, cur_generation);
+        for gen in gens.iter().rev() {
+            if *gen == cur_generation {
+                continue;
+            }
+
+            let src_path = Name::path(name, *gen);
+            match aio.rename(src_path, dst_path.clone()).wait() {
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
+                res => return res,
+            }
+        }
+
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("name not found: {}", name),
+        ));
+    }
+
     pub(crate) fn path(name: &str, gen: Generation) -> PathBuf {
         let mut path: PathBuf = gen.to_string().into();
         path.push(NAME_SUBDIR);

@@ -495,11 +495,13 @@ impl Repo {
         // traverse all the chunks (both index and data)
         // probably using special Accessor, and
         // move all the chunks to current gen
+        info!(self.log, "Updating name to current generation";
+              "name" => name_str,
+              "gen" => FnValue(|_| cur_gen.to_string()));
         let name =
             config::Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
-        let mut counter = CounterWriter::new();
         let accessor = GenerationUpdateChunkAccessor::new(
             self,
             Arc::clone(&self.compression),
@@ -511,11 +513,19 @@ impl Repo {
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
                 &data_address.as_ref(),
-                Some(&mut counter),
+                None,
                 self.log.clone(),
             ))?;
         }
-        unimplemented!();
+
+        config::Name::update_generation_to(
+            name_str,
+            cur_gen,
+            generations,
+            &self.aio,
+        )?;
+
+        Ok(())
     }
 
     // fn reachable_recursively_insert(
@@ -618,6 +628,9 @@ impl Repo {
             let new_gen = generations.last().unwrap().gen_next();
             info!(self.log, "Creating new generation"; "gen" => FnValue(|_| new_gen.to_string()));
             new_gen.write(&self.aio)?;
+        } else {
+            info!(self.log, "Restarting previous GC operation";
+                  "gen" => FnValue(|_| generations.last().unwrap().to_string()));
         }
 
         loop {
@@ -632,8 +645,11 @@ impl Repo {
             let gen_cur = generations.last().unwrap();
 
             let names = config::Name::list(gen_oldest, &self.aio)?;
+
+            info!(self.log, "Names left in current generation";
+                  "count" => names.len());
             if names.is_empty() {
-                self.wipe_generation_maybe(generations[0])?;
+                self.wipe_generation_maybe(gen_oldest)?;
                 return Ok(res);
             }
 
@@ -747,8 +763,7 @@ impl Repo {
                 Err(e) => {
                     warn!(
                         self.log,
-                        "skipping unknown generation: `{}` due
-                                 to: `{}`",
+                        "skipping unknown generation: `{}` due to: `{}`",
                         item,
                         e
                     );

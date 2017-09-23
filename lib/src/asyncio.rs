@@ -477,10 +477,6 @@ impl AsyncIOThread {
         let mut chunk_file = match fs::File::create(&tmp_path) {
             Ok(file) => Ok(file),
             Err(_) => {
-                // Workaround
-                // https://github.com/rust-lang/rust/issues/33707
-                let _ = fs::create_dir_all(path.parent().unwrap());
-
                 fs::create_dir_all(path.parent().unwrap())?;
                 fs::File::create(&tmp_path)
             }
@@ -678,6 +674,15 @@ impl AsyncIOThread {
         self.time_reporter.start("rename");
         let _guard = self.pending_wait_and_insert(&src_path);
         let _guard = self.pending_wait_and_insert(&dst_path);
+        eprintln!("Rename {} -> {}", &src_path.display(), &dst_path.display());
+        match fs::rename(&src_path, &dst_path) {
+            Ok(file) => Ok(file),
+            Err(_) => {
+                fs::create_dir_all(dst_path.parent().unwrap())?;
+                fs::rename(&src_path, &dst_path)
+            }
+        }?;
+
         fs::rename(&src_path, &dst_path)
     }
 }
