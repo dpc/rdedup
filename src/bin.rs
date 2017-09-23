@@ -455,9 +455,7 @@ fn run() -> io::Result<()> {
         ("gc", Some(_matches)) => {
             let repo = Repo::open(&options.dir, log)?;
 
-            let result = repo.gc()?;
-            println!("Removed {} chunks", result.chunks);
-            println!("Freed {} bytes", result.bytes);
+            repo.gc()?;
         }
         ("list", Some(_matches)) => {
             let repo = Repo::open(&options.dir, log)?;

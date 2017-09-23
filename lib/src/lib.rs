@@ -109,20 +109,6 @@ pub struct VerifyResults {
     pub errors: Vec<(Vec<u8>, Error)>,
 }
 
-pub struct GcResults {
-    pub chunks: usize,
-    pub bytes: u64,
-}
-
-impl GcResults {
-    fn new() -> Self {
-        GcResults {
-            chunks: 0,
-            bytes: 0,
-        }
-    }
-}
-
 pub struct DuResults {
     pub chunks: usize,
     pub bytes: u64,
@@ -583,15 +569,14 @@ impl Repo {
         config::Name::remove_any(name, &self.read_generations()?, &self.aio)
     }
 
-    pub fn gc(&self) -> Result<GcResults> {
+    pub fn gc(&self) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
 
         let generations = self.read_generations()?;
 
-        let res = GcResults::new();
         if generations.is_empty() {
             info!(self.log, "Nothing in the repository yet, nothing to gc");
-            return Ok(res);
+            return Ok(());
         }
 
         if generations.len() == 1 {
@@ -609,7 +594,7 @@ impl Repo {
             if generations.len() == 1 {
                 info!(self.log, "One generation left - GC cycle complete";
                       "gen" => FnValue(|_| generations[0].to_string()));
-                return Ok(res);
+                return Ok(());
             }
             let gen_oldest = generations[0];
             let gen_cur = generations.last().unwrap();
@@ -622,7 +607,7 @@ impl Repo {
                   );
             if names.is_empty() {
                 self.wipe_generation_maybe(gen_oldest)?;
-                return Ok(res);
+                return Ok(());
             }
             self.update_name_to(&names[0], *gen_cur, &generations)?;
         }
