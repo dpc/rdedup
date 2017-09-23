@@ -42,7 +42,7 @@ use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 
-// mod iterators;
+mod iterators;
 
 mod config;
 

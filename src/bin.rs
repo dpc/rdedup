@@ -68,6 +68,9 @@
 //!
 //! See `rdedup -h` for help.
 //!
+//! Rdedup always operates on a *repo*, that you provide as an argument
+//! (eg. `--dir <DIR>`), or via environment variable (eg. `RDEDUP_DIR`).
+//!
 //! Supported commands:
 //!
 //! * `rdedup init` - create a *repo* directory with keypair used for
