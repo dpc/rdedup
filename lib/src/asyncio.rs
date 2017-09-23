@@ -42,6 +42,7 @@ enum Message {
     List(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     ListRecursively(PathBuf, mpsc::Sender<io::Result<Vec<PathBuf>>>),
     Remove(PathBuf, mpsc::Sender<io::Result<()>>),
+    RemoveDirAll(PathBuf, mpsc::Sender<io::Result<()>>),
     Rename(PathBuf, PathBuf, mpsc::Sender<io::Result<()>>),
 }
 
@@ -226,6 +227,14 @@ impl AsyncIO {
         AsyncIOResult { rx: rx }
     }
 
+    pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
+        let (tx, rx) = mpsc::channel();
+        self.tx
+            .send(Message::RemoveDirAll(path, tx))
+            .expect("channel send failed");
+        AsyncIOResult { rx: rx }
+    }
+
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
@@ -386,6 +395,9 @@ impl AsyncIOThread {
                         self.list_recursively(path, tx)
                     }
                     Message::Remove(path, tx) => self.remove(path, tx),
+                    Message::RemoveDirAll(path, tx) => {
+                        self.remove_dir_all(path, tx)
+                    }
                     Message::Rename(src_path, dst_path, tx) => {
                         self.rename(src_path, dst_path, tx)
                     }
@@ -648,6 +660,26 @@ impl AsyncIOThread {
         fs::remove_file(&path)
     }
 
+    fn remove_dir_all(
+        &mut self,
+        path: PathBuf,
+        tx: mpsc::Sender<io::Result<()>>,
+    ) {
+        trace!(self.log, "remove-dir-all"; "path" => %path.display());
+
+        let path = self.root_path.join(path);
+
+        let res = self.remove_dir_all_inner(path);
+        self.time_reporter.start("remove send response");
+        tx.send(res).expect("send failed")
+    }
+
+    fn remove_dir_all_inner(&mut self, path: PathBuf) -> io::Result<()> {
+        self.time_reporter.start("remove-dir-all");
+
+        fs::remove_dir_all(&path)
+    }
+
 
     fn rename(
         &mut self,
@@ -674,15 +706,12 @@ impl AsyncIOThread {
         self.time_reporter.start("rename");
         let _guard = self.pending_wait_and_insert(&src_path);
         let _guard = self.pending_wait_and_insert(&dst_path);
-        eprintln!("Rename {} -> {}", &src_path.display(), &dst_path.display());
         match fs::rename(&src_path, &dst_path) {
             Ok(file) => Ok(file),
-            Err(_) => {
+            Err(_e) => {
                 fs::create_dir_all(dst_path.parent().unwrap())?;
                 fs::rename(&src_path, &dst_path)
             }
-        }?;
-
-        fs::rename(&src_path, &dst_path)
+        }
     }
 }

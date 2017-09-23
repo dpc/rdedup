@@ -60,7 +60,9 @@ impl Name {
             let src_path = Name::path(name, *gen);
             match aio.rename(src_path, dst_path.clone()).wait() {
                 Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
-                res => return res,
+                res => {
+                    return res;
+                }
             }
         }
 

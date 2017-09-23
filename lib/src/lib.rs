@@ -35,7 +35,7 @@ use sgdata::SGData;
 use slog::{FnValue, Level, Logger};
 use slog_perf::TimeReporter;
 use sodiumoxide::crypto::{box_, pwhash, secretbox};
-use std::{fs, io};
+use std::io;
 use std::collections::HashSet;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
@@ -479,11 +479,39 @@ impl Repo {
         )
     }
 
-    fn wipe_generation_maybe(&self, _gen: Generation) -> io::Result<()> {
-        // check creation date and bail-out if it didn't have enough time to
-        // sync
-        // recursively delete all the files
-        unimplemented!();
+    fn wipe_generation_maybe(&self, gen: Generation) -> io::Result<()> {
+        let gen_config = gen.load_config(&self.aio)?;
+
+        if gen_config.created + chrono::Duration::days(1) > chrono::Utc::now() {
+            info!(
+                self.log,
+                "Generation is not at least a day old. Rerun GC later to finish";
+                "gen" => FnValue(|_| gen.to_string()),
+                "gen-created" => gen_config.created.to_rfc3339(),
+                "now" => chrono::Utc::now().to_rfc3339(),
+            );
+            return Ok(());
+        }
+        info!(
+            self.log,
+            "Reclaiming old generation finished. Deleting...";
+            "gen" => FnValue(|_| gen.to_string()),
+            );
+
+        // Make sure chunks are successfully removed before
+        // attempting to delete the generation dir itself
+        // so that we don't leave garbage with no Generation
+        // config file.
+        self.aio
+            .remove_dir_all(
+                PathBuf::from(gen.to_string()).join(config::NAME_SUBDIR),
+            )
+            .wait()?;
+        self.aio
+            .remove_dir_all(PathBuf::from(gen.to_string()))
+            .wait()?;
+
+        Ok(())
     }
 
     fn update_name_to(
@@ -493,8 +521,7 @@ impl Repo {
         generations: &[Generation],
     ) -> io::Result<()> {
         // traverse all the chunks (both index and data)
-        // probably using special Accessor, and
-        // move all the chunks to current gen
+        // and move all the chunks to the newest gen
         info!(self.log, "Updating name to current generation";
               "name" => name_str,
               "gen" => FnValue(|_| cur_gen.to_string()));
@@ -528,51 +555,6 @@ impl Repo {
         Ok(())
     }
 
-    // fn reachable_recursively_insert(
-    // &self,
-    // da: &DataAddress,
-    // reachable_digests: &mut HashSet<Vec<u8>>,
-    // ) -> Result<()> {
-    // reachable_digests.insert(da.digest.0.clone());
-    //
-    // let accessor = self.get_recording_chunk_accessor(
-    // reachable_digests,
-    // None,
-    // Arc::clone(&self.compression),
-    // );
-    // let traverser = ReadContext::new(&accessor);
-    // traverser.read_recursively(
-    // ReadRequest::new(DataType::Data, da, None, self.log.clone()),
-    // )
-    // }
-    //
-
-
-
-    // Return all reachable chunks
-    // fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
-    // let mut reachable_digests = HashSet::new();
-    // let all_names = config::Name::list(&self.aio)?;
-    // for name_str in &all_names {
-    // match config::Name::load_from(name_str, &self.aio) {
-    // Ok(name) => {
-    // let data_address: OwnedDataAddress = name.into();
-    // info!(self.log, "processing"; "name" => name_str);
-    // self.reachable_recursively_insert(
-    // &data_address.as_ref(),
-    // &mut reachable_digests,
-    // )?;
-    // }
-    // Err(e) => {
-    // info!(self.log, "skipped"; "name" => name_str, "error" =>
-    // e.description());
-    // }
-    // };
-    // }
-    // Ok(reachable_digests)
-    // }
-    //
-
     fn chunk_rel_path_by_digest(
         &self,
         digest: &Digest,
@@ -588,18 +570,6 @@ impl Repo {
     fn chunk_path_by_digest(&self, digest: &Digest, gen_str: &str) -> PathBuf {
         self.path
             .join(self.chunk_rel_path_by_digest(digest, gen_str))
-    }
-
-    // TODO: Use asyncio
-    fn rm_chunk_by_digest(
-        &self,
-        digest: &Digest,
-        gen_str: &str,
-    ) -> Result<u64> {
-        let path = self.chunk_path_by_digest(digest, gen_str);
-        let md = fs::metadata(&path)?;
-        self.aio.remove(path).wait()?;
-        Ok(md.len())
     }
 
     pub fn list_names(&self) -> io::Result<Vec<String>> {
@@ -646,13 +616,14 @@ impl Repo {
 
             let names = config::Name::list(gen_oldest, &self.aio)?;
 
-            info!(self.log, "Names left in current generation";
-                  "count" => names.len());
+            info!(self.log, "Names left in the generation to be GCed";
+                  "count" => names.len(),
+                  "gen" => FnValue(|_| gen_oldest.to_string())
+                  );
             if names.is_empty() {
                 self.wipe_generation_maybe(gen_oldest)?;
                 return Ok(res);
             }
-
             self.update_name_to(&names[0], *gen_cur, &generations)?;
         }
     }

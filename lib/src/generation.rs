@@ -15,7 +15,7 @@ use SGData;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Config {
     #[serde(serialize_with = "as_rfc3339", deserialize_with = "from_rfc3339")]
-    created: chrono::DateTime<Utc>,
+    pub(crate) created: chrono::DateTime<Utc>,
 }
 
 impl Config {
@@ -141,6 +141,26 @@ impl Generation {
         ).wait()?;
 
         Ok(())
+    }
+
+    pub(crate) fn load_config(
+        &self,
+        aio: &asyncio::AsyncIO,
+    ) -> io::Result<Config> {
+        let path = Path::new(&self.to_string()).join("config.yaml");
+        let sg = aio.read(path).wait()?;
+
+        let config_data = sg.to_linear_vec();
+
+        let config: Config = serde_yaml::from_reader(config_data.as_slice())
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("couldn't parse yaml: {}", e.to_string()),
+                )
+            })?;
+
+        Ok(config)
     }
 }
 
