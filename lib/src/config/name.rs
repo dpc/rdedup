@@ -58,6 +58,7 @@ impl Name {
             }
 
             let src_path = Name::path(name, *gen);
+
             match aio.rename(src_path, dst_path.clone()).wait() {
                 Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
                 res => {
@@ -85,13 +86,17 @@ impl Name {
         gen: Generation,
         aio: &asyncio::AsyncIO,
     ) -> io::Result<Vec<String>> {
-        let list = aio.list(PathBuf::from(gen.to_string()).join(NAME_SUBDIR))
-            .wait()?;
+        let list = substitute_err_not_found(
+            aio.list(PathBuf::from(gen.to_string()).join(NAME_SUBDIR))
+                .wait(),
+            || vec![],
+        )?;
+
         Ok(
             list.iter()
                 .map(|e| {
                     e.file_stem()
-                        .expect("malformed name: e")
+                        .expect(&format!("malformed name: {:?}", e))
                         .to_string_lossy()
                         .to_string()
                 })
@@ -162,6 +167,7 @@ impl Name {
 
         Ok(name)
     }
+
     pub(crate) fn load_from_any(
         name: &str,
         gens: &[Generation],

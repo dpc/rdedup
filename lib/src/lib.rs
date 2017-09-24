@@ -496,11 +496,15 @@ impl Repo {
         // attempting to delete the generation dir itself
         // so that we don't leave garbage with no Generation
         // config file.
-        self.aio
-            .remove_dir_all(
-                PathBuf::from(gen.to_string()).join(config::NAME_SUBDIR),
-            )
-            .wait()?;
+        substitute_err_not_found(
+            self.aio
+                .remove_dir_all(
+                    PathBuf::from(gen.to_string()).join(config::NAME_SUBDIR),
+                )
+                .wait(),
+            || (),
+        )?;
+
         self.aio
             .remove_dir_all(PathBuf::from(gen.to_string()))
             .wait()?;
