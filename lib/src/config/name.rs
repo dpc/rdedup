@@ -11,7 +11,7 @@ pub(crate) const NAME_SUBDIR: &'static str = "name";
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Name {
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    #[serde(serialize_with = "as_hex", deserialize_with = "from_hex")]
     pub(crate) digest: Vec<u8>,
     pub(crate) index_level: u32,
 }

@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::io;
 use chrono::prelude::*;
 use chrono;
+use hex::{FromHex, FromHexError, ToHex};
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;
@@ -77,6 +78,32 @@ where
     S: serde::Serializer,
 {
     serializer.serialize_str(&base64::encode(key.as_ref()))
+}
+
+pub fn from_hex<T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer,
+    T: MyTryFromBytes,
+{
+    use serde::de::Error;
+    String::deserialize(deserializer)
+        .and_then(|string| {
+            FromHex::from_hex(string.as_str())
+                .map_err(|err: FromHexError| Error::custom(err.to_string()))
+        })
+        .and_then(|bytes: Vec<u8>| {
+            T::try_from(&bytes).map_err(|err| {
+                Error::custom(format!("{}", &err as &::std::error::Error))
+            })
+        })
+}
+
+pub fn as_hex<T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: AsRef<[u8]>,
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&key.to_hex())
 }
 
 pub fn from_rfc3339<D>(
