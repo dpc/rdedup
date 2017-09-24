@@ -5,7 +5,7 @@ use PassphraseFn;
 
 use hex::ToHex;
 
-use misc;
+use util;
 use sgdata::SGData;
 
 use std::io;
@@ -74,7 +74,7 @@ impl Curve25519 {
         let nonce = secretbox::gen_nonce();
 
         let sealed_sk = {
-            let derived_key = misc::derive_key(&passphrase, &salt)?;
+            let derived_key = util::derive_key(&passphrase, &salt)?;
 
             secretbox::seal(&sk.0, &nonce, &derived_key)
         };
@@ -93,7 +93,7 @@ impl Curve25519 {
     ) -> io::Result<box_::SecretKey> {
         let passphrase = passphrase_f()?;
 
-        let derived_key = misc::derive_key(&passphrase, &self.salt)?;
+        let derived_key = util::derive_key(&passphrase, &self.salt)?;
         let plain_seckey =
             secretbox::open(&self.sealed_sec_key, &self.nonce, &derived_key)
                 .map_err(|_| {
@@ -128,7 +128,7 @@ impl EncryptionEngine for Curve25519 {
         let new_passphrase = new_p()?;
 
         let sealed_sk = {
-            let derived_key = misc::derive_key(&new_passphrase, &self.salt)?;
+            let derived_key = util::derive_key(&new_passphrase, &self.salt)?;
 
             secretbox::seal(&sec_key.0, &self.nonce, &derived_key)
         };

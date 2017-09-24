@@ -69,9 +69,6 @@ pub mod settings;
 mod util;
 use self::util::*;
 
-mod misc;
-use self::misc::*;
-
 mod reading;
 use self::reading::*;
 
