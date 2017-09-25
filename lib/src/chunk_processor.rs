@@ -95,16 +95,28 @@ impl ChunkProcessor {
                         } else {
                             trace!(self.log, "already exists in previous generation";
                                    "path" => %chunk_path.display());
+                            let dst_path = self.repo.chunk_path_by_digest(
+                                &digest,
+                                gen_strings.last().unwrap(),
+                            );
                             self.aio
-                                .rename(
-                                    chunk_path,
-                                    self.repo.chunk_path_by_digest(
-                                        &digest,
-                                        gen_strings.last().unwrap(),
-                                    ),
-                                )
+                                .rename(chunk_path.clone(), dst_path.clone())
                                 .wait()
-                                .expect("rename failed");
+                                .unwrap_or_else(|_e| {
+                                    // chunk might have been upated concurrently; check
+                                    // if it's already in the destination
+                                    if self.aio
+                                        .read_metadata(dst_path.clone())
+                                        .wait()
+                                        .is_err()
+                                    {
+                                        panic!(
+                                            "rename failed {} -> {}",
+                                            chunk_path.display(),
+                                            dst_path.display()
+                                        )
+                                    }
+                                });
                         }
                         break;
                     }
