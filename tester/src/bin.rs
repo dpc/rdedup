@@ -11,30 +11,34 @@ use std::io;
 use rand::{thread_rng, Rng};
 use digest::{FixedOutput, Input};
 use hex::ToHex;
+use std::str::FromStr;
 
 /// Generate data that has plenty of redundancy
 struct ExampleDataGen {
     a: Vec<u8>,
     b: Vec<u8>,
     c: Vec<u8>,
+    d: Vec<u8>,
 }
 
 impl ExampleDataGen {
     fn new() -> Self {
         ExampleDataGen {
-            a: rand_data(1024),
-            b: rand_data(1024),
-            c: rand_data(1024),
+            a: rand_data(123),
+            b: rand_data(511),
+            c: rand_data(1020),
+            d: rand_data(2041),
         }
     }
 
     fn gen(&self, size_kb: usize) -> Vec<u8> {
         let mut res = vec![];
         for _ in 0..size_kb {
-            res.extend_from_slice(match thread_rng().gen_range(0, 3) {
+            res.extend_from_slice(match thread_rng().gen_range(0, 4) {
                 0 => &self.a,
                 1 => &self.b,
                 2 => &self.c,
+                3 => &self.d,
                 _ => panic!("WTF?"),
             })
         }
@@ -187,7 +191,7 @@ impl TestState {
 
     fn gc(&mut self) -> io::Result<()> {
         eprintln!("GC");
-        let grace = thread_rng().gen_range(0, 20);
+        let grace = thread_rng().gen_range(0, 2000);
         let _out = run_rdedup_with(&vec!["gc", "--grace", &grace.to_string()], vec![]);
         Ok(())
     }
@@ -195,19 +199,29 @@ impl TestState {
 
 fn main() {
     let mut test = TestState::new();
-    eprintln!("Ctrl+C to stop");
     test.init().unwrap();
-    loop {
+    let mut args = std::env::args();
+    let _self_path = args.next();
+    let bound = args.next().unwrap_or("999999999".into());
+    let bound = u64::from_str(&bound).unwrap();
+    eprintln!("Will loop {} times. Ctrl+C to stop", bound);
+    for i in 0..bound {
+        eprint!("{}: ", i);
         if test.names.len() > 100 {
-            test.rm_one().unwrap()
+            test.rm_one().unwrap();
+            test.rm_one().unwrap();
+            test.rm_one().unwrap();
+            test.rm_one().unwrap();
+            test.rm_one().unwrap();
+            test.rm_one().unwrap();
         }
 
-        match  thread_rng().gen_range(0, 5) {
-            0 => test.store_one().unwrap(),
-            1 => test.load_one().unwrap(),
-            2 => test.rm_one().unwrap(),
-            3 => test.verify_one().unwrap(),
-            4 => test.gc().unwrap(),
+        match  thread_rng().gen_range(0, 6) {
+            0|1 => test.store_one().unwrap(),
+            2 => test.load_one().unwrap(),
+            3 => test.rm_one().unwrap(),
+            4 => test.verify_one().unwrap(),
+            5 => test.gc().unwrap(),
             _ => panic!(),
         }
     }
