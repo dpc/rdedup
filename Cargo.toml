@@ -9,7 +9,7 @@ documentation = "https://docs.rs/rdedup"
 homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
-exclude = ["lib/**/*"]
+exclude = ["lib/**/*", "tester/**"]
 
 [[bin]]
 name = "rdedup"
@@ -34,6 +34,7 @@ lto = true
 debug-assertions = false
 
 [workspace]
+members = [ "tester" ]
 
 [dependencies]
 rdedup-lib = { version = "3.0.0-0.0.1", path = "lib" }

@@ -1,0 +1,22 @@
+[package]
+name = "tester"
+version = "0.0.1"
+authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+description = "Rdedup testing tool"
+keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
+license = "MPL-2.0"
+documentation = "https://dpc.github.io/rdedup-lib/"
+homepage = "https://github.com/dpc/rdedup"
+repository = "https://github.com/dpc/rdedup"
+readme = "README.md"
+
+[[bin]]
+name = "tester"
+path = "src/bin.rs"
+
+
+[dependencies]
+rand = "*"
+sha2 = "0.6"
+digest = "*"
+hex = "0.2"
