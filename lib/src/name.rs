@@ -16,6 +16,12 @@ pub(crate) struct Name {
     pub(crate) index_level: u32,
 }
 
+// TODO: I am very displeased with myself how this
+// API looks like. Everything is mashed together here:
+// serialization, domain entity, file system operations.
+// `Generation` is similar.
+// Smells badly, but oh well...
+// -- dpc
 impl Name {
     pub(crate) fn remove(
         name: &str,
@@ -44,7 +50,6 @@ impl Name {
         ))
     }
 
-    // TODO: &self ?
     pub(crate) fn update_generation_to(
         name: &str,
         cur_generation: Generation,

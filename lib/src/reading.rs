@@ -43,8 +43,6 @@ impl<'a, 'b> IndexTranslator<'a, 'b> {
 }
 
 impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
-    // TODO: This is copying too much. Could be not copying anything, unless
-    // bytes < DIGEST_SIZE
     fn write(&mut self, mut bytes: &[u8]) -> io::Result<usize> {
         assert!(!bytes.is_empty());
 
