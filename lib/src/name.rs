@@ -38,10 +38,10 @@ impl Name {
             }
         }
 
-        return Err(io::Error::new(
+        Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!("name not found: {}", name),
-        ));
+        ))
     }
 
     // TODO: &self ?
@@ -67,10 +67,10 @@ impl Name {
             }
         }
 
-        return Err(io::Error::new(
+        Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!("name not found: {}", name),
-        ));
+        ))
     }
 
     pub(crate) fn path(name: &str, gen: Generation) -> PathBuf {
@@ -180,10 +180,10 @@ impl Name {
             }
         }
 
-        return Err(io::Error::new(
+        Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!("name not found: {}", name),
-        ));
+        ))
     }
 }
 

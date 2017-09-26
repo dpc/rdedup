@@ -157,7 +157,7 @@ impl Options {
             "none" => lib::settings::Encryption::None,
             _ => {
                 eprintln!("unsupported encryption: {}", s);
-                process::exit(-1);
+                process::exit(-1)
             }
         };
 
@@ -175,7 +175,7 @@ impl Options {
             "none" => lib::settings::Compression::None,
             _ => {
                 eprintln!("unsupported compression: {}", s);
-                process::exit(-1);
+                process::exit(-1)
             }
         };
 

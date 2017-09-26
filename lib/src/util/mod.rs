@@ -36,7 +36,7 @@ impl io::Write for CounterWriter {
 
 /// Substitute Err(NotFound) with something else
 ///
-/// Many places in the code ignore NotFound, so this function makes it
+/// Many places in the code ignore `NotFound`, so this function makes it
 /// convenient.
 pub(crate) fn substitute_err_not_found<T, F>(
     res: io::Result<T>,
@@ -47,9 +47,7 @@ where
 {
     match res {
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => Ok(f()),
-        res => {
-            return res;
-        }
+        res => res,
     }
 }
 

@@ -35,7 +35,7 @@ pub(crate) struct Generation {
 
 impl Generation {
     pub(crate) fn try_from(s: &str) -> io::Result<Generation> {
-        let mut parts: Vec<_> = s.split("-").collect();
+        let mut parts: Vec<_> = s.split('-').collect();
         if parts.len() != 2 {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,

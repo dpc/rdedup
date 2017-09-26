@@ -529,7 +529,7 @@ impl Repo {
         info!(self.log, "Updating name to current generation";
               "name" => name_str,
               "gen" => FnValue(|_| cur_gen.to_string()));
-        let name = Name::load_from_any(name_str, &generations, &self.aio)?;
+        let name = Name::load_from_any(name_str, generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
         let accessor = GenerationUpdateChunkAccessor::new(
@@ -776,7 +776,7 @@ impl Repo {
                     item != config::VERSION_FILE &&
                     item != config::LOCK_FILE
             })
-            .filter_map(|item| match Generation::try_from(&item) {
+            .filter_map(|item| match Generation::try_from(item) {
                 Ok(gen) => Some(gen),
                 Err(e) => {
                     warn!(

@@ -316,7 +316,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             self.decrypter
                 .as_ref()
                 .expect("Decrypter expected")
-                .decrypt(data, &digest.0)?
+                .decrypt(data, digest.0)?
         } else {
             data
         };
