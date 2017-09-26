@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{cmp, io};
 
 use std::collections::HashSet;
-use std::fs;
+use std::{fs, self};
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
 use std::path;
@@ -22,8 +22,7 @@ const PASS: &'static str = "FOO";
 const DIGEST_SIZE: usize = 32;
 
 fn rand_tmp_dir() -> path::PathBuf {
-    // TODO: Use $TMP or something?
-    path::PathBuf::from("/tmp/rdedup-tests").join(
+    std::env::temp_dir().join("rdedup-tests").join(
         rand::thread_rng()
             .gen_ascii_chars()
             .take(20)
