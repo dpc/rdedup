@@ -25,6 +25,7 @@
 //!    (https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
 //!  * attention to reliability (eg. `rdedup` is using `fsync` + `rename`
 //!    to avoid data corruption even in case of hardware crash)
+//!  * incremental, scalable garbage collection
 //!
 //! ## Strong parts
 //!
@@ -41,8 +42,6 @@
 //! directory traversal), and because of that it's typically paired with `tar`
 //! or `rdup` tools. Built-in directory traversal could improve deduplication
 //! ratio for workloads with many small files.
-//!
-//! Garbage collection could be optimized and made more scalable.
 //!
 //! Cloud storage integrations are missing. The architecture to support it is
 //! mostly implemented, but the actual backends are not.
