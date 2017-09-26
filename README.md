@@ -45,6 +45,7 @@ and library API (`rdedup-lib`).
    [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
  * reliability focus (eg. `rdedup` is using `fsync` + `rename`
    to avoid data corruption even in case of a hardware crash)
+ * built-in time/performance profiler
 
 ### Strong parts
 
