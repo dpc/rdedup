@@ -10,7 +10,7 @@
 //!
 //!  * support for public-key encryption (the only tool like that I'm aware of,
 //!    and primary reason `rdedup` was created)
-//!  * flat-file synchronization friendly (Dropbox, syncthing) backend
+//!  * flat-file synchronization friendly (Dropbox/syncthing, rsync, rclone)
 //!    * cloud backends are WIP
 //!  * incremental, scalable garbage collection
 //!  * variety of supported algorithms:
@@ -64,11 +64,10 @@
 //!
 //! [rustup]: https://www.rustup.rs/
 //!
-//! In case of troubles, check
-//! [rdedup building
-//! issues](https://github.
-//! com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
-//! or report a new one (sorry)!
+//! In case of troubles, check [rdedup building issues][building-issues] or
+//! report a new one (sorry)!
+//!
+//! [building-issues]: http://bit.ly/2ypLPtJ
 //!
 //! ## Usage
 //!
