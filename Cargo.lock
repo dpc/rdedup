@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "rdedup"
-version = "3.0.0-0.0.1"
+version = "3.0.0-0.0.2"
 dependencies = [
  "clap 2.26.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

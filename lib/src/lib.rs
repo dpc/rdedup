@@ -75,6 +75,9 @@ use self::reading::*;
 mod generation;
 use self::generation::*;
 
+mod name;
+use self::name::*;
+
 use std::error::Error as ErrorError;
 
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
@@ -172,8 +175,8 @@ impl OwnedDataAddress {
     }
 }
 
-impl From<config::Name> for OwnedDataAddress {
-    fn from(name: config::Name) -> Self {
+impl From<Name> for OwnedDataAddress {
+    fn from(name: Name) -> Self {
         OwnedDataAddress {
             index_level: name.index_level,
             digest: Digest(name.digest),
@@ -496,7 +499,7 @@ impl Repo {
         substitute_err_not_found(
             self.aio
                 .remove_dir_all(
-                    PathBuf::from(gen.to_string()).join(config::NAME_SUBDIR),
+                    PathBuf::from(gen.to_string()).join(NAME_SUBDIR),
                 )
                 .wait(),
             || (),
@@ -520,8 +523,7 @@ impl Repo {
         info!(self.log, "Updating name to current generation";
               "name" => name_str,
               "gen" => FnValue(|_| cur_gen.to_string()));
-        let name =
-            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
         let accessor = GenerationUpdateChunkAccessor::new(
@@ -540,12 +542,7 @@ impl Repo {
             ))?;
         }
 
-        config::Name::update_generation_to(
-            name_str,
-            cur_gen,
-            generations,
-            &self.aio,
-        )?;
+        Name::update_generation_to(name_str, cur_gen, generations, &self.aio)?;
 
         Ok(())
     }
@@ -574,10 +571,9 @@ impl Repo {
     fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         let generations = self.read_generations()?;
         let mut reachable_digests = HashSet::new();
-        let all_names = config::Name::list_all(&generations, &self.aio)?;
+        let all_names = Name::list_all(&generations, &self.aio)?;
         for name_str in &all_names {
-            match config::Name::load_from_any(name_str, &generations, &self.aio)
-            {
+            match Name::load_from_any(name_str, &generations, &self.aio) {
                 Ok(name) => {
                     let data_address: OwnedDataAddress = name.into();
                     info!(self.log, "processing"; "name" => name_str);
@@ -617,13 +613,13 @@ impl Repo {
 
     pub fn list_names(&self) -> io::Result<Vec<String>> {
         let _lock = self.aio.lock_shared();
-        config::Name::list_all(&self.read_generations()?, &self.aio)
+        Name::list_all(&self.read_generations()?, &self.aio)
     }
 
     /// Remove a stored name from repo
     pub fn rm(&self, name: &str) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
-        config::Name::remove_any(name, &self.read_generations()?, &self.aio)
+        Name::remove_any(name, &self.read_generations()?, &self.aio)
     }
 
     pub fn gc(&self, min_age_secs: u64) -> Result<()> {
@@ -656,7 +652,7 @@ impl Repo {
             let gen_oldest = generations[0];
             let gen_cur = generations.last().unwrap();
 
-            let names = config::Name::list(gen_oldest, &self.aio)?;
+            let names = Name::list(gen_oldest, &self.aio)?;
 
             info!(self.log, "Names left in the generation to be GCed";
                   "count" => names.len(),
@@ -680,8 +676,7 @@ impl Repo {
 
         let generations = self.read_generations()?;
 
-        let name =
-            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
 
@@ -703,8 +698,7 @@ impl Repo {
         let _lock = self.aio.lock_shared();
 
         let generations = self.read_generations()?;
-        let name =
-            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
         let mut counter = CounterWriter::new();
@@ -738,8 +732,7 @@ impl Repo {
 
         let generations = self.read_generations()?;
 
-        let name =
-            config::Name::load_from_any(name_str, &generations, &self.aio)?;
+        let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: OwnedDataAddress = name.into();
 
 
@@ -866,7 +859,7 @@ impl Repo {
         });
 
 
-        let name: config::Name = data_address?.into();
+        let name: Name = data_address?.into();
         name.write_as(name_str, *generations.last().unwrap(), &self.aio)?;
         Ok(stats.get_stats())
     }

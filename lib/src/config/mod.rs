@@ -16,13 +16,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod version;
-mod name;
 mod chunking;
 mod compression;
 mod encryption;
 
 pub(crate) use self::version::*;
-pub(crate) use self::name::*;
 pub(crate) use self::chunking::*;
 pub(crate) use self::compression::*;
 pub(crate) use self::encryption::*;
