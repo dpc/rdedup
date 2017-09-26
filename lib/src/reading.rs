@@ -71,9 +71,10 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
             if digest_buf.0.is_empty() {
                 let digest = &bytes[..needs];
+                debug_assert_eq!(digest.len(), DIGEST_SIZE);
                 bytes = &bytes[needs..];
 
-                if let &mut Some(ref mut writer) = writer {
+                if let Some(ref mut writer) = *writer {
                     read_context.read_recursively(ReadRequest::new(
                         data_type,
                         DataAddress {
@@ -89,6 +90,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
             } else {
                 digest_buf.0.extend_from_slice(&bytes[..needs]);
                 debug_assert_eq!(digest_buf.0.len(), DIGEST_SIZE);
+                bytes = &bytes[needs..];
 
                 let res = if let Some(ref mut writer) = *writer {
                     read_context.read_recursively(ReadRequest::new(
