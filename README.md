@@ -17,32 +17,34 @@
 
 See [wiki](https://github.com/dpc/rdedup/wiki) for current project status.
 
-`rdedup` is the data deduplication engine and backup software
-
-`rdedup` is written in Rust and provides both command line tool
-and library API (`rdedup-lib`).
+`rdedup` is a data deduplication engine and a backup software.
 
 `rdedup` is generally similar to existing software like
  duplicacy, restic, attic, duplicity, zbackup, etc.
 
+`rdedup` is written in Rust and provides both command line tool
+and library API (`rdedup-lib`).
+
  ## Features
 
- * support for public-key encryption (the only tool like that I'm aware of,
-   and primary reason `rdedup` was created)
+ * simple but solid cryptography:
+   * libsodium based
+   * public-key encryption mode (the only tool like that I'm aware of,
+     and primary reason `rdedup` was created)
  * flat-file synchronization friendly (Dropbox/syncthing, rsync, rclone)
    * cloud backends are WIP
  * incremental, scalable garbage collection
  * variety of supported algorithms:
-   * chunking: bup, gear, fastcdc
+   * chunking: fastcdc, gear, bup
    * hashing: blake2b, sha256
-   * compression: deflate, xz2, bzip2, zstd, none
+   * compression: zstd, deflate, xz2, bzip2, none
    * encryption: curve25519, none
    * very easy to add new ones
    * check `rdedup init --help` output for up-to-date list
  * extreme performance and parallelism - see
    [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
- * attention to reliability (eg. `rdedup` is using `fsync` + `rename`
-   to avoid data corruption even in case of hardware crash)
+ * reliability focus (eg. `rdedup` is using `fsync` + `rename`
+   to avoid data corruption even in case of a hardware crash)
 
 ### Strong parts
 
@@ -97,18 +99,16 @@ Rdedup always operates on a *repo*, that you provide as an argument
 
 Supported commands:
 
-* `rdedup init` - create a *repo* directory with keypair used for
-encryption.
-* `rdedup ls` - list all stored names.
-* `rdedup store <name>` - store data read from standard input under given
-*name*.
+* `rdedup init` - create a new *repo*.
+  * `rdedup init --help` for repository configuration options.
+* `rdedup store <name>` - store data from standard input under a given
+  *name*.
 * `rdedup load <name>` - load data stored under given *name* and write it
-on standard output
-* `rdedup rm <name>` - remove the given *name*. This by itself does not
-remove the data.
-* `rdedup gc` - remove any no longer reachable data
+  to standard output.
+* `rdedup rm <name>` - remove the given *name*.
+* `rdedup ls` - list all stored names.
+* `rdedup gc` - remove any no longer reachable data.
 
-Check `rdedup init --help` for repository configuration options.
 
 In combination with [rdup][rdup] this can be used to store and restore your
 backup like this:
