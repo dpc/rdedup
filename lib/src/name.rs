@@ -190,7 +190,7 @@ impl Name {
 impl<'a> From<DataAddress<'a>> for Name {
     fn from(da: DataAddress) -> Self {
         Name {
-            digest: da.digest.0.clone(),
+            digest: da.digest.0.into(),
             index_level: da.index_level,
         }
     }

@@ -145,14 +145,22 @@ pub struct EncryptHandle {
 #[derive(Clone)]
 struct Digest(Vec<u8>);
 
-#[derive(Clone)]
+impl Digest {
+    fn as_digest_ref(&self) -> DigestRef {
+        DigestRef(self.0.as_slice())
+    }
+}
+
+#[derive(Copy, Clone)]
+struct DigestRef<'a>(&'a [u8]);
+
 struct DataAddress<'a> {
     // number of times the data index
     // was written (and then index of an index and so forth)
     // until it was reduced to a final digest
     index_level: u32,
     // final digest
-    digest: &'a Digest,
+    digest: DigestRef<'a>,
 }
 
 #[derive(Clone)]
@@ -169,7 +177,7 @@ impl OwnedDataAddress {
     fn as_ref(&self) -> DataAddress {
         DataAddress {
             index_level: self.index_level,
-            digest: &self.digest,
+            digest: self.digest.as_digest_ref(),
         }
     }
 }
@@ -534,7 +542,7 @@ impl Repo {
             let traverser = ReadContext::new(&accessor);
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
-                &data_address.as_ref(),
+                data_address.as_ref(),
                 None,
                 self.log.clone(),
             ))?;
@@ -547,11 +555,11 @@ impl Repo {
 
     fn reachable_recursively_insert(
         &self,
-        da: &DataAddress,
+        da: DataAddress,
         reachable_digests: &mut HashSet<Vec<u8>>,
         generations: Vec<Generation>,
     ) -> Result<()> {
-        reachable_digests.insert(da.digest.0.clone());
+        reachable_digests.insert(da.digest.0.into());
 
         let accessor = self.get_recording_chunk_accessor(
             reachable_digests,
@@ -576,7 +584,7 @@ impl Repo {
                     let data_address: OwnedDataAddress = name.into();
                     info!(self.log, "processing"; "name" => name_str);
                     self.reachable_recursively_insert(
-                        &data_address.as_ref(),
+                        data_address.as_ref(),
                         &mut reachable_digests,
                         generations.clone(),
                     )?;
@@ -594,17 +602,21 @@ impl Repo {
 
     fn chunk_rel_path_by_digest(
         &self,
-        digest: &Digest,
+        digest: DigestRef,
         gen_str: &str,
     ) -> PathBuf {
         self.config.nesting.get_path(
             Path::new(config::DATA_SUBDIR),
-            &digest.0,
+            digest.0,
             gen_str,
         )
     }
 
-    fn chunk_path_by_digest(&self, digest: &Digest, gen_str: &str) -> PathBuf {
+    fn chunk_path_by_digest(
+        &self,
+        digest: DigestRef,
+        gen_str: &str,
+    ) -> PathBuf {
         self.path
             .join(self.chunk_rel_path_by_digest(digest, gen_str))
     }
@@ -686,7 +698,7 @@ impl Repo {
         let traverser = ReadContext::new(&accessor);
         traverser.read_recursively(ReadRequest::new(
             DataType::Data,
-            &data_address.as_ref(),
+            data_address.as_ref(),
             Some(writer),
             self.log.clone(),
         ))
@@ -710,7 +722,7 @@ impl Repo {
             let traverser = ReadContext::new(&accessor);
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
-                &data_address.as_ref(),
+                data_address.as_ref(),
                 Some(&mut counter),
                 self.log.clone(),
             ))?;
@@ -745,7 +757,7 @@ impl Repo {
             let traverser = ReadContext::new(&accessor);
             traverser.read_recursively(ReadRequest::new(
                 DataType::Data,
-                &data_address.as_ref(),
+                data_address.as_ref(),
                 Some(&mut counter),
                 self.log.clone(),
             ))?;

@@ -86,8 +86,8 @@ impl ChunkProcessor {
                     .rev()
                     .chain([&last_gen_str].iter().cloned())
                 {
-                    let chunk_path =
-                        self.repo.chunk_path_by_digest(&digest, gen_str);
+                    let chunk_path = self.repo
+                        .chunk_path_by_digest(digest.as_digest_ref(), gen_str);
                     if chunk_path.exists() {
                         found = true;
                         if gen_str == &last_gen_str {
@@ -96,7 +96,7 @@ impl ChunkProcessor {
                             trace!(self.log, "already exists in previous generation";
                                    "path" => %chunk_path.display());
                             let dst_path = self.repo.chunk_path_by_digest(
-                                &digest,
+                                digest.as_digest_ref(),
                                 gen_strings.last().unwrap(),
                             );
                             self.aio
@@ -124,7 +124,7 @@ impl ChunkProcessor {
 
                 if !found {
                     let chunk_path = self.repo.chunk_path_by_digest(
-                        &digest,
+                        digest.as_digest_ref(),
                         gen_strings.last().unwrap(),
                     );
                     let sg = if data_type.should_compress() {
@@ -145,8 +145,10 @@ impl ChunkProcessor {
 
                     timer.start("tx-writer");
                     self.aio.write_checked_idempotent(
-                        self.repo
-                            .chunk_rel_path_by_digest(&digest, &last_gen_str),
+                        self.repo.chunk_rel_path_by_digest(
+                            digest.as_digest_ref(),
+                            &last_gen_str,
+                        ),
                         sg,
                     );
                 }
