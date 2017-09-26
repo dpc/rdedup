@@ -12,7 +12,7 @@
 //!    and primary reason `rdedup` was created)
 //!  * flat-file synchronization friendly (Dropbox, syncthing) backend
 //!    * cloud backends are WIP
-//!  * garbage collection
+//!  * incremental, scalable garbage collection
 //!  * variety of supported algorithms:
 //!    * chunking: bup, gear, fastcdc
 //!    * hashing: blake2b, sha256
@@ -21,11 +21,9 @@
 //!    * very easy to add new ones
 //!    * check `rdedup init --help` output for up-to-date list
 //!  * extreme performance and parallelism - see
-//!    [Rust fearless concurrency in `rdedup`]
-//!    (https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
+//!    [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
 //!  * attention to reliability (eg. `rdedup` is using `fsync` + `rename`
 //!    to avoid data corruption even in case of hardware crash)
-//!  * incremental, scalable garbage collection
 //!
 //! ## Strong parts
 //!
@@ -41,7 +39,7 @@
 //! `rdedup` currently does not implement own backup/restore functionality (own
 //! directory traversal), and because of that it's typically paired with `tar`
 //! or `rdup` tools. Built-in directory traversal could improve deduplication
-//! ratio for workloads with many small files.
+//! ratio for workloads with many small, frequently changing files.
 //!
 //! Cloud storage integrations are missing. The architecture to support it is
 //! mostly implemented, but the actual backends are not.
@@ -67,7 +65,9 @@
 //! [rustup]: https://www.rustup.rs/
 //!
 //! In case of troubles, check
-//! [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+//! [rdedup building
+//! issues](https://github.
+//! com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 //! or report a new one (sorry)!
 //!
 //! ## Usage
