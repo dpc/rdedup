@@ -84,7 +84,6 @@ type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
 
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
-// TODO: Parametrize over repo chunk size
 const DIGEST_SIZE: usize = 32;
 
 /// Type of user provided closure that will ask user for a passphrase is needed
@@ -356,8 +355,7 @@ impl Repo {
                         self.config.chunking.to_engine(),
                     );
 
-                    // TODO: Change to `enumerate_u64`
-                    let mut data = chunker.enumerate();
+                    let mut data = util::EnumerateU64::new(chunker);
 
                     while let Some(i_sg) =
                         timer.start_with("rx-and-chunking", || data.next())
