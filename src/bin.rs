@@ -57,12 +57,17 @@
 //! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
 //! but for Rust)
 //!
+//! If you're interested in running `rdedup` with maximum possible performance,
+//! try:
+//!
+//! ```
+//! RUSTFLAGS="-C target-cpu=native" cargo install rdedup
+//! ```
+//!
 //! [rustup]: https://www.rustup.rs/
 //!
 //! In case of troubles, check
-//! [rdedup building
-//! issues](https://github.
-//! com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
+//! [rdedup building issues](https://github.com/dpc/rdedup/issues?q=is%3Aissue+is%3Aclosed+label%3Abuilding)
 //! or report a new one (sorry)!
 //!
 //! ## Usage
