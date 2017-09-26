@@ -74,37 +74,29 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                 debug_assert_eq!(digest.len(), DIGEST_SIZE);
                 bytes = &bytes[needs..];
 
-                if let Some(ref mut writer) = *writer {
-                    read_context.read_recursively(ReadRequest::new(
-                        data_type,
-                        DataAddress {
-                            digest: DigestRef(digest),
-                            index_level: 0,
-                        },
-                        Some(writer),
-                        self.log.clone(),
-                    ))
-                } else {
-                    read_context.accessor.touch(DigestRef(digest))
-                }?;
+                read_context.read_recursively(ReadRequest::new(
+                    data_type,
+                    DataAddress {
+                        digest: DigestRef(digest),
+                        index_level: 0,
+                    },
+                    writer.as_mut().map(|w| w as &mut io::Write),
+                    self.log.clone(),
+                ))?;
             } else {
                 digest_buf.0.extend_from_slice(&bytes[..needs]);
                 debug_assert_eq!(digest_buf.0.len(), DIGEST_SIZE);
                 bytes = &bytes[needs..];
 
-                let res = if let Some(ref mut writer) = *writer {
-                    read_context.read_recursively(ReadRequest::new(
-                        data_type,
-                        DataAddress {
-                            digest: digest_buf.as_digest_ref(),
-                            index_level: 0,
-                        },
-                        Some(writer),
-                        self.log.clone(),
-                    ))
-                } else {
-                    read_context.accessor.touch(digest_buf.as_digest_ref())
-                };
+                let res = read_context.read_recursively(ReadRequest::new(
+                    data_type,
+                    DataAddress {
+                        digest: digest_buf.as_digest_ref(),
+                        index_level: 0,
+                    },
+                    writer.as_mut().map(|w| w as &mut io::Write),
+                    self.log.clone(),
+                ));
                 digest_buf.0.clear();
                 res?;
             }
