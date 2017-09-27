@@ -9,6 +9,7 @@ use slog_perf::TimeReporter;
 use std::sync::mpsc;
 use two_lock_queue;
 use {Digest, Generation};
+use std::io;
 
 pub(crate) struct Message {
     pub data: (u64, SGData),
@@ -88,37 +89,45 @@ impl ChunkProcessor {
                 {
                     let chunk_path = self.repo
                         .chunk_path_by_digest(digest.as_digest_ref(), gen_str);
-                    if chunk_path.exists() {
-                        found = true;
-                        if gen_str == &last_gen_str {
-                            trace!(self.log, "already exists"; "path" => %chunk_path.display());
-                        } else {
-                            trace!(self.log, "already exists in previous generation";
-                                   "path" => %chunk_path.display());
-                            let dst_path = self.repo.chunk_path_by_digest(
-                                digest.as_digest_ref(),
-                                gen_strings.last().unwrap(),
-                            );
-                            self.aio
-                                .rename(chunk_path.clone(), dst_path.clone())
-                                .wait()
-                                .unwrap_or_else(|_e| {
-                                    // chunk might have been upated concurrently; check
-                                    // if it's already in the destination
-                                    if self.aio
-                                        .read_metadata(dst_path.clone())
-                                        .wait()
-                                        .is_err()
-                                    {
-                                        panic!(
-                                            "rename failed {} -> {}",
-                                            chunk_path.display(),
-                                            dst_path.display()
-                                        )
-                                    }
-                                });
+                    match self.aio.read_metadata(chunk_path.clone()).wait() {
+                        Ok(_metadata) => {
+                            found = true;
+                            if gen_str == &last_gen_str {
+                                trace!(self.log, "already exists"; "path" => %chunk_path.display());
+                            } else {
+                                trace!(self.log, "already exists in previous generation";
+                                       "path" => %chunk_path.display());
+                                let dst_path = self.repo.chunk_path_by_digest(
+                                    digest.as_digest_ref(),
+                                    gen_strings.last().unwrap(),
+                                );
+                                self.aio
+                                    .rename(chunk_path.clone(), dst_path.clone())
+                                    .wait()
+                                    .unwrap_or_else(|_e| {
+                                        // chunk might have been upated concurrently; check
+                                        // if it's already in the destination
+                                        if self.aio
+                                            .read_metadata(dst_path.clone())
+                                                .wait()
+                                                .is_err()
+                                                {
+                                                    panic!(
+                                                        "rename failed {} -> {}",
+                                                        chunk_path.display(),
+                                                        dst_path.display()
+                                                        )
+                                                }
+                                    });
+                            }
+                            break;
                         }
-                        break;
+                        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {}
+                        Err(e) => panic!(
+                            "read_metadata failed for {}, err: {}",
+                            chunk_path.display(),
+                            e
+                        ),
                     }
                 }
 
