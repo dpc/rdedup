@@ -9,9 +9,6 @@ pub(crate) use self::whileok::*;
 mod readerveciter;
 pub(crate) use self::readerveciter::*;
 
-mod crypto;
-pub(crate) use self::crypto::*;
-
 /// Writer that counts how many bytes were written to it
 pub struct CounterWriter {
     pub count: u64,

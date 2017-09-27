@@ -1,9 +1,10 @@
-use {box_, pwhash, secretbox, serde, base64};
+use {box_, secretbox, serde, base64};
 use serde::Deserialize;
 use std::io;
 use chrono::prelude::*;
 use chrono;
 use hex::{FromHex, FromHexError, ToHex};
+use crypto::pwhash;
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;

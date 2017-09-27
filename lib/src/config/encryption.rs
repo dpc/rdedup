@@ -1,4 +1,4 @@
-use encryption;
+use {config, encryption};
 use std::io;
 use std::sync::Arc;
 use PassphraseFn;
@@ -6,7 +6,7 @@ use PassphraseFn;
 /// Types of supported encryption
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
-pub enum Encryption {
+pub(crate) enum Encryption {
     /// No encryption
     #[serde(rename = "none")]
     None,
@@ -20,11 +20,12 @@ impl encryption::EncryptionEngine for Encryption {
         &mut self,
         old_p: PassphraseFn,
         new_p: PassphraseFn,
+        pwhash: &config::PWHash,
     ) -> io::Result<()> {
         match *self {
             Encryption::None => Ok(()),
             Encryption::Curve25519(ref mut c) => {
-                c.change_passphrase(old_p, new_p)
+                c.change_passphrase(old_p, new_p, pwhash)
             }
         }
     }
@@ -32,19 +33,21 @@ impl encryption::EncryptionEngine for Encryption {
     fn encrypter(
         &self,
         pass: PassphraseFn,
+        pwhash: &config::PWHash,
     ) -> io::Result<encryption::ArcEncrypter> {
         match *self {
             Encryption::None => Ok(Arc::new(encryption::NopEncrypter)),
-            Encryption::Curve25519(ref c) => c.encrypter(pass),
+            Encryption::Curve25519(ref c) => c.encrypter(pass, pwhash),
         }
     }
     fn decrypter(
         &self,
         pass: PassphraseFn,
+        pwhash: &config::PWHash,
     ) -> io::Result<encryption::ArcDecrypter> {
         match *self {
             Encryption::None => Ok(Arc::new(encryption::NopDecrypter)),
-            Encryption::Curve25519(ref c) => c.decrypter(pass),
+            Encryption::Curve25519(ref c) => c.decrypter(pass, pwhash),
         }
     }
 }

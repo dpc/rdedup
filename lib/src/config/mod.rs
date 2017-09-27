@@ -4,7 +4,7 @@
 use {serde_yaml, PassphraseFn, SGData};
 
 use asyncio;
-use sodiumoxide::crypto::pwhash;
+use pwhash;
 
 use hashing;
 
@@ -35,48 +35,44 @@ pub fn lock_file_path(path: &Path) -> PathBuf {
     path.join(LOCK_FILE)
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-/// `Chunking` are the algorithms supported by rdedup
-pub enum PWHash {
-    /// `Bup` is the default algorithm, the chunk_bits value provided with
-    /// bup
-    /// is the bit shift to be used by rollsum. The valid range is between
-    /// 10
-    /// and 30 (1KB to 1GB)
+/// `PWHash` is algorithm used to derive the secret key from
+/// passphrase to unlock the sealed encryption key(s)
+pub(crate) enum PWHash {
     #[serde(rename = "scryptsalsa208sha256")]
-    SodiumOxide { mem_limit: u64, ops_limit: u64 },
+    SodiumOxide(pwhash::SodiumOxide),
 }
 
-/// Default implementation for the `Chunking`
 impl Default for PWHash {
     fn default() -> PWHash {
-        PWHash::SodiumOxide {
-            ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
-            mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
-        }
+        PWHash::SodiumOxide(Default::default())
     }
 }
 
 impl PWHash {
     fn from_settings(pwhash: settings::PWHash) -> Self {
         match pwhash {
-            settings::PWHash::Weak => PWHash::SodiumOxide {
-                ops_limit: 0,
-                mem_limit: 0,
-            },
-            settings::PWHash::Interactive => PWHash::SodiumOxide {
-                ops_limit: pwhash::OPSLIMIT_INTERACTIVE.0 as u64,
-                mem_limit: pwhash::MEMLIMIT_INTERACTIVE.0 as u64,
-            },
-            settings::PWHash::Strong => PWHash::SodiumOxide {
-                ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,
-                mem_limit: pwhash::MEMLIMIT_SENSITIVE.0 as u64,
-            },
+            settings::PWHash::Weak => {
+                PWHash::SodiumOxide(pwhash::SodiumOxide::new_weak())
+            }
+            settings::PWHash::Interactive => {
+                PWHash::SodiumOxide(pwhash::SodiumOxide::new_interactive())
+            }
+            settings::PWHash::Strong => {
+                PWHash::SodiumOxide(pwhash::SodiumOxide::new_sensitive())
+            }
         }
     }
 }
 
+impl pwhash::PWHash for PWHash {
+    fn derive_key(&self, passphrase: &str) -> io::Result<Vec<u8>> {
+        match *self {
+            PWHash::SodiumOxide(ref so) => so.derive_key(passphrase),
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
@@ -136,7 +132,7 @@ impl Nesting {
 /// This datastructure is used for serialization and deserialization
 /// of repo configuration that is stored as a repostiory metadata.
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Repo {
+pub(crate) struct Repo {
     pub version: u32,
     #[serde(default)]
     pub pwhash: PWHash,
@@ -157,16 +153,17 @@ impl Repo {
         pass: PassphraseFn,
         settings: settings::Repo,
     ) -> io::Result<Self> {
+        let pwhash = PWHash::from_settings(settings.pwhash);
         let encryption = match settings.encryption {
-            settings::Encryption::Curve25519 => {
-                Encryption::Curve25519(::encryption::Curve25519::new(pass)?)
-            }
+            settings::Encryption::Curve25519 => Encryption::Curve25519(
+                ::encryption::Curve25519::new(pass, &pwhash)?,
+            ),
             settings::Encryption::None => Encryption::None,
         };
 
         Ok(Repo {
             version: REPO_VERSION_CURRENT,
-            pwhash: PWHash::from_settings(settings.pwhash),
+            pwhash: pwhash,
             chunking: settings.chunking.0,
             encryption: encryption,
             compression: settings

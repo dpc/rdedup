@@ -34,7 +34,7 @@ extern crate zstd;
 use sgdata::SGData;
 use slog::{FnValue, Level, Logger};
 use slog_perf::TimeReporter;
-use sodiumoxide::crypto::{box_, pwhash, secretbox};
+use sodiumoxide::crypto::{self, box_, secretbox};
 use std::io;
 use std::collections::HashSet;
 use std::io::{Error, Read, Result, Write};
@@ -63,6 +63,8 @@ use encryption::EncryptionEngine;
 
 mod compression;
 use compression::ArcCompression;
+
+mod pwhash;
 
 pub mod settings;
 
@@ -199,7 +201,8 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
-        let decrypter = self.config.encryption.decrypter(pass)?;
+        let decrypter =
+            self.config.encryption.decrypter(pass, &self.config.pwhash)?;
 
         Ok(DecryptHandle {
             decrypter: decrypter,
@@ -211,7 +214,8 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
-        let encrypter = self.config.encryption.encrypter(pass)?;
+        let encrypter =
+            self.config.encryption.encrypter(pass, &self.config.pwhash)?;
 
 
         Ok(EncryptHandle {
@@ -314,7 +318,11 @@ impl Repo {
                 "rdedup v0 config format not supported",
             ))
         } else {
-            self.config.encryption.change_passphrase(old_p, new_p)?;
+            self.config.encryption.change_passphrase(
+                old_p,
+                new_p,
+                &self.config.pwhash,
+            )?;
             self.config.write(&self.aio)?;
             Ok(())
         }

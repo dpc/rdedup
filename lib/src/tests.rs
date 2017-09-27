@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{cmp, io};
 
 use std::collections::HashSet;
-use std::{fs, self};
+use std::{self, fs};
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
 use std::path;

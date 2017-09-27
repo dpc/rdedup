@@ -16,7 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 rdedup-cdc = "0.1.0"
-sodiumoxide = { version = "0.0.14", features = ["serde"] }
+sodiumoxide = { version = "0.0.15", features = ["serde"] }
 flate2 = "0.2"
 rust-lzma = "0.2"
 bzip2 = "0.3.2"

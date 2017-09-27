@@ -2,29 +2,37 @@
 
 use {box_, pwhash, secretbox, as_base64, from_base64};
 use PassphraseFn;
-
+use pwhash::PWHash;
 use hex::ToHex;
 
-use util;
 use sgdata::SGData;
 
 use std::io;
 use std::sync::Arc;
+use config;
 
 pub type ArcEncrypter = Arc<Encrypter + Send + Sync>;
 pub type ArcDecrypter = Arc<Decrypter + Send + Sync>;
 
-pub trait EncryptionEngine {
+pub(crate) trait EncryptionEngine {
     fn change_passphrase(
         &mut self,
         old_p: PassphraseFn,
         new_p: PassphraseFn,
+        pwhash: &config::PWHash,
     ) -> io::Result<()>;
 
-    fn encrypter(&self, passphrase_f: PassphraseFn)
-        -> io::Result<ArcEncrypter>;
-    fn decrypter(&self, passphrase_f: PassphraseFn)
-        -> io::Result<ArcDecrypter>;
+    fn encrypter(
+        &self,
+        passphrase_f: PassphraseFn,
+        pwhash: &config::PWHash,
+    ) -> io::Result<ArcEncrypter>;
+    fn decrypter(
+        &self,
+        passphrase_f: PassphraseFn,
+
+        pwhash: &config::PWHash,
+    ) -> io::Result<ArcDecrypter>;
 }
 
 pub trait Encrypter {
@@ -60,21 +68,23 @@ pub struct Curve25519 {
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub pub_key: box_::PublicKey,
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
-    pub salt: pwhash::Salt,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub nonce: secretbox::Nonce,
 }
 
 impl Curve25519 {
-    pub fn new(passphrase_f: PassphraseFn) -> super::Result<Self> {
+    pub(crate) fn new(
+        passphrase_f: PassphraseFn,
+        pwhash: &pwhash::PWHash,
+    ) -> super::Result<Self> {
         let (pk, sk) = box_::gen_keypair();
         let passphrase = passphrase_f()?;
 
-        let salt = pwhash::gen_salt();
         let nonce = secretbox::gen_nonce();
 
         let sealed_sk = {
-            let derived_key = util::derive_key(&passphrase, &salt)?;
+            let derived_key = secretbox::Key::from_slice(
+                &pwhash.derive_key(&passphrase)?[..32],
+            ).unwrap();
 
             secretbox::seal(&sk.0, &nonce, &derived_key)
         };
@@ -83,17 +93,20 @@ impl Curve25519 {
             sealed_sec_key: sealed_sk,
             pub_key: pk,
             nonce: nonce,
-            salt: salt,
         })
     }
 
     fn unseal_decrypt(
         &self,
         passphrase_f: &Fn() -> io::Result<String>,
+        pwhash: &config::PWHash,
     ) -> io::Result<box_::SecretKey> {
         let passphrase = passphrase_f()?;
 
-        let derived_key = util::derive_key(&passphrase, &self.salt)?;
+
+        let derived_key = secretbox::Key::from_slice(
+            &pwhash.derive_key(&passphrase)?[..32],
+        ).unwrap();
         let plain_seckey =
             secretbox::open(&self.sealed_sec_key, &self.nonce, &derived_key)
                 .map_err(|_| {
@@ -120,16 +133,18 @@ impl Curve25519 {
 impl EncryptionEngine for Curve25519 {
     fn change_passphrase(
         &mut self,
-        old_p: &Fn() -> io::Result<String>,
-        new_p: &Fn() -> io::Result<String>,
+        old_p: PassphraseFn,
+        new_p: PassphraseFn,
+        pwhash: &config::PWHash,
     ) -> io::Result<()> {
-        let sec_key = self.unseal_decrypt(old_p)?;
+        let sec_key = self.unseal_decrypt(old_p, pwhash)?;
 
         let new_passphrase = new_p()?;
 
         let sealed_sk = {
-            let derived_key = util::derive_key(&new_passphrase, &self.salt)?;
-
+            let derived_key = secretbox::Key::from_slice(
+                &pwhash.derive_key(&new_passphrase)?[..32],
+            ).unwrap();
             secretbox::seal(&sec_key.0, &self.nonce, &derived_key)
         };
 
@@ -137,7 +152,11 @@ impl EncryptionEngine for Curve25519 {
 
         Ok(())
     }
-    fn encrypter(&self, _pass: PassphraseFn) -> io::Result<ArcEncrypter> {
+    fn encrypter(
+        &self,
+        _pass: PassphraseFn,
+        _pwhash: &config::PWHash,
+    ) -> io::Result<ArcEncrypter> {
         let key = self.unseal_encrypt()?;
 
         Ok(Arc::new(Curve25519Encrypter { pub_key: key }))
@@ -145,8 +164,9 @@ impl EncryptionEngine for Curve25519 {
     fn decrypter(
         &self,
         pass: &Fn() -> io::Result<String>,
+        pwhash: &config::PWHash,
     ) -> io::Result<ArcDecrypter> {
-        let key = self.unseal_decrypt(pass)?;
+        let key = self.unseal_decrypt(pass, pwhash)?;
         Ok(Arc::new(Curve25519Decrypter { sec_key: key }))
     }
 }
