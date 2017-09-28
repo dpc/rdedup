@@ -138,13 +138,13 @@ pub(crate) struct Repo {
     pub pwhash: PWHash,
     #[serde(default)]
     pub chunking: Chunking,
-    pub encryption: Encryption,
-    #[serde(default)]
-    pub compression: Compression,
-    #[serde(default)]
-    pub nesting: Nesting,
     #[serde(default)]
     pub hashing: Hashing,
+    #[serde(default)]
+    pub compression: Compression,
+    pub encryption: Encryption,
+    #[serde(default)]
+    pub nesting: Nesting,
 }
 
 
