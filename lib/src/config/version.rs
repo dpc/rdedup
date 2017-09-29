@@ -5,8 +5,8 @@ use std::io;
 use std::path::PathBuf;
 use std::io::Write;
 
-pub const REPO_VERSION_LOWEST: u32 = 2;
-pub const REPO_VERSION_CURRENT: u32 = 2;
+pub const REPO_VERSION_LOWEST: u32 = 3;
+pub const REPO_VERSION_CURRENT: u32 = 3;
 pub const VERSION_FILE: &'static str = "version";
 
 pub(crate) struct VersionFile(u32);
