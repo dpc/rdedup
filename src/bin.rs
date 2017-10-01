@@ -51,7 +51,7 @@
 //!
 //! If you have `cargo` installed:
 //!
-//! ```
+//! ```norust
 //! cargo install rdedup --vers '^2' # for 2.x stable version
 //! cargo install rdedup --vers '^3' # for 3.x experimental, and unstable version
 //! ```
