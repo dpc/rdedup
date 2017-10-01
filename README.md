@@ -71,7 +71,8 @@ mostly implemented, but the actual backends are not.
 If you have `cargo` installed:
 
 ```rust
-cargo install rdedup
+cargo install rdedup --vers '^2' # for 2.x stable version
+cargo install rdedup --vers '^3' # for 3.x experimental, and unstable version
 ```
 
 If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -81,7 +82,7 @@ If you're interested in running `rdedup` with maximum possible performance,
 try:
 
 ```rust
-RUSTFLAGS="-C target-cpu=native" cargo install rdedup
+RUSTFLAGS="-C target-cpu=native" cargo install rdedup --vers ...
 ```
 
 [rustup]: https://www.rustup.rs/
