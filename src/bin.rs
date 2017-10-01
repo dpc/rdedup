@@ -62,7 +62,7 @@
 //! If you're interested in running `rdedup` with maximum possible performance,
 //! try:
 //!
-//! ```
+//! ```norust
 //! RUSTFLAGS="-C target-cpu=native" cargo install rdedup --vers ...
 //! ```
 //!
@@ -96,7 +96,7 @@
 //! In combination with [rdup][rdup] this can be used to store and restore your
 //! backup like this:
 //!
-//! ```
+//! ```norust
 //! rdup -x /dev/null "$HOME" | rdedup store home
 //! rdedup load home | rdup-up "$HOME.restored"
 //! ```
