@@ -34,7 +34,7 @@ slog-perf = "0.2"
 hex = "0.2"
 sgdata = { version = "0.1.0", path = "../sgdata" }
 rand = "0.3.14"
-dangerous_option = { git = "https://github.com/dpc/dangerous_option.git" }
+dangerous_option = "0.2"
 walkdir = "1.0.7"
 zstd = "0.4.14"
 sha2 = "0.6"
