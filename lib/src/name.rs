@@ -1,5 +1,5 @@
 use std::io;
-use asyncio;
+use aio;
 use std::path::PathBuf;
 use serde_yaml;
 use SGData;
@@ -26,7 +26,7 @@ impl Name {
     pub(crate) fn remove(
         name: &str,
         gen: Generation,
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<()> {
         let path = Name::path(name, gen);
         aio.remove(path).wait()
@@ -35,7 +35,7 @@ impl Name {
     pub(crate) fn remove_any(
         name: &str,
         gens: &[Generation],
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<()> {
         for gen in gens.iter().rev() {
             match Name::remove(name, *gen, aio) {
@@ -54,7 +54,7 @@ impl Name {
         name: &str,
         cur_generation: Generation,
         gens: &[Generation],
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<()> {
         let dst_path = Name::path(name, cur_generation);
         for gen in gens.iter().rev() {
@@ -89,7 +89,7 @@ impl Name {
     /// List all names
     pub(crate) fn list(
         gen: Generation,
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<Vec<String>> {
         let list = substitute_err_not_found(
             aio.list(PathBuf::from(gen.to_string()).join(NAME_SUBDIR))
@@ -111,7 +111,7 @@ impl Name {
 
     pub fn list_all(
         gens: &[Generation],
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<Vec<String>> {
         let mut res = vec![];
 
@@ -126,7 +126,7 @@ impl Name {
         &self,
         name: &str,
         gen: Generation,
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<()> {
         let serialized_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");
@@ -148,7 +148,7 @@ impl Name {
     pub fn load_from(
         name: &str,
         gen: Generation,
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<Self> {
         let path = Name::path(name, gen);
 
@@ -176,7 +176,7 @@ impl Name {
     pub(crate) fn load_from_any(
         name: &str,
         gens: &[Generation],
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
     ) -> io::Result<Self> {
         for gen in gens.iter().rev() {
             match Name::load_from(name, *gen, aio) {

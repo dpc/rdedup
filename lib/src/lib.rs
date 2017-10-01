@@ -46,8 +46,8 @@ mod iterators;
 
 mod config;
 
-mod asyncio;
-use asyncio::*;
+mod aio;
+use aio::*;
 
 mod hashing;
 mod chunking;
@@ -131,7 +131,7 @@ pub struct Repo {
     /// Logger
     log: slog::Logger,
 
-    aio: asyncio::AsyncIO,
+    aio: aio::AsyncIO,
 }
 
 /// A reading handle
@@ -252,7 +252,7 @@ impl Repo {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let aio = asyncio::AsyncIO::new(repo_path.to_owned(), log.clone());
+        let aio = aio::AsyncIO::new(repo_path.to_owned(), log.clone());
 
         Repo::ensure_repo_empty_or_new(&aio)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
@@ -279,7 +279,7 @@ impl Repo {
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
 
-        let aio = asyncio::AsyncIO::new(repo_path.to_owned(), log.clone());
+        let aio = aio::AsyncIO::new(repo_path.to_owned(), log.clone());
 
         if !repo_path.exists() {
             return Err(Error::new(
@@ -334,7 +334,7 @@ impl Repo {
         &'a self,
         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
         process_tx: two_lock_queue::Sender<chunk_processor::Message>,
-        aio: asyncio::AsyncIO,
+        aio: aio::AsyncIO,
         data_type: DataType,
     ) -> io::Result<OwnedDataAddress> {
         // Note: This channel is intentionally unbounded
@@ -832,7 +832,7 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let aio = asyncio::AsyncIO::new(self.path.clone(), self.log.clone());
+        let aio = aio::AsyncIO::new(self.path.clone(), self.log.clone());
 
         let stats = aio.stats();
 

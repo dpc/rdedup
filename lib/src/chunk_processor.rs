@@ -1,5 +1,5 @@
 use super::{DataType, Repo};
-use super::asyncio;
+use super::aio;
 use compression::ArcCompression;
 use encryption::ArcEncrypter;
 use hashing::ArcHasher;
@@ -20,7 +20,7 @@ pub(crate) struct Message {
 pub(crate) struct ChunkProcessor {
     repo: Repo,
     rx: two_lock_queue::Receiver<Message>,
-    aio: asyncio::AsyncIO,
+    aio: aio::AsyncIO,
     log: Logger,
     encrypter: ArcEncrypter,
     compressor: ArcCompression,
@@ -32,7 +32,7 @@ impl ChunkProcessor {
     pub fn new(
         repo: Repo,
         rx: two_lock_queue::Receiver<Message>,
-        aio: asyncio::AsyncIO,
+        aio: aio::AsyncIO,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
         hasher: ArcHasher,

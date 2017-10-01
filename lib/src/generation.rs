@@ -5,7 +5,7 @@ use std::io;
 use rand::{self, Rng};
 use chrono::prelude::*;
 use chrono;
-use asyncio;
+use aio;
 use util::{as_rfc3339, from_rfc3339};
 use serde_yaml;
 use std::path::Path;
@@ -129,7 +129,7 @@ impl Generation {
         }
     }
 
-    pub(crate) fn write(&self, aio: &asyncio::AsyncIO) -> io::Result<()> {
+    pub(crate) fn write(&self, aio: &aio::AsyncIO) -> io::Result<()> {
         let config = Config::new();
 
         let config_str =
@@ -143,10 +143,7 @@ impl Generation {
         Ok(())
     }
 
-    pub(crate) fn load_config(
-        &self,
-        aio: &asyncio::AsyncIO,
-    ) -> io::Result<Config> {
+    pub(crate) fn load_config(&self, aio: &aio::AsyncIO) -> io::Result<Config> {
         let path = Path::new(&self.to_string()).join("config.yaml");
         let sg = aio.read(path).wait()?;
 

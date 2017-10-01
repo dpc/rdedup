@@ -3,7 +3,7 @@
 
 use {serde_yaml, PassphraseFn, SGData};
 
-use asyncio;
+use aio;
 use pwhash;
 
 use hashing;
@@ -175,7 +175,7 @@ impl Repo {
     }
 
 
-    pub fn write(&self, aio: &asyncio::AsyncIO) -> super::Result<()> {
+    pub fn write(&self, aio: &aio::AsyncIO) -> super::Result<()> {
         let config_str =
             serde_yaml::to_string(self).expect("yaml serialization failed");
 
@@ -189,7 +189,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn read(aio: &asyncio::AsyncIO) -> super::Result<Self> {
+    pub fn read(aio: &aio::AsyncIO) -> super::Result<Self> {
         let config_data = aio.read(CONFIG_YML_FILE.into()).wait()?;
         let config_data = config_data.to_linear_vec();
 

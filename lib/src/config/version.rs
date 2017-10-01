@@ -1,5 +1,5 @@
 
-use asyncio;
+use aio;
 use SGData;
 use std::io;
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ impl VersionFile {
     pub(crate) fn current() -> VersionFile {
         VersionFile(REPO_VERSION_CURRENT)
     }
-    pub(crate) fn write(&self, aio: &asyncio::AsyncIO) -> io::Result<()> {
+    pub(crate) fn write(&self, aio: &aio::AsyncIO) -> io::Result<()> {
         let mut v = Vec::with_capacity(4 * 1024);
         {
             write!(&mut v, "{}", self.0)?;
@@ -28,7 +28,7 @@ impl VersionFile {
 
     #[allow(unknown_lints)]
     #[allow(absurd_extreme_comparisons)]
-    pub(crate) fn read(aio: &asyncio::AsyncIO) -> io::Result<VersionFile> {
+    pub(crate) fn read(aio: &aio::AsyncIO) -> io::Result<VersionFile> {
         let version = aio.read(PathBuf::from(VERSION_FILE))
             .wait()?
             .to_linear_vec();

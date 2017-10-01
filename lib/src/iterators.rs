@@ -1,6 +1,6 @@
 
 
-use asyncio;
+use aio;
 use hex::FromHex;
 
 use slog::Logger;
@@ -21,7 +21,7 @@ pub struct StoredChunks {
 
 impl StoredChunks {
     pub fn new(
-        aio: &asyncio::AsyncIO,
+        aio: &aio::AsyncIO,
         rel_path: PathBuf,
         digest_size: usize,
         log: Logger,
