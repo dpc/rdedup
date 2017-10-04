@@ -8,13 +8,12 @@ use slog;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std;
-use std::{fs, io, mem, thread};
+use std::{fs, io, thread};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use two_lock_queue;
-use walkdir::WalkDir;
 use std::cell::RefCell;
 
 mod local;
@@ -50,6 +49,12 @@ pub(crate) trait BackendInstance: Send {
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata>;
     fn list(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>>;
+
+    fn list_recursively(
+        &mut self,
+        path: PathBuf,
+        tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
+    );
 }
 
 struct WriteArgs {
@@ -573,32 +578,7 @@ impl AsyncIOThread {
         trace!(self.log, "list"; "path" => %path.display());
         self.time_reporter.start("list");
 
-        let path = self.root_path.join(path);
-
-        if !path.exists() {
-            return;
-        }
-
-        let mut v = Vec::with_capacity(128);
-
-        for path in WalkDir::new(path) {
-            match path {
-                Ok(path) => {
-                    if !path.file_type().is_file() {
-                        continue;
-                    }
-                    v.push(path.path().into());
-                    if v.len() > 100 {
-                        tx.send(Ok(mem::replace(&mut v, vec![])))
-                            .expect("send failed")
-                    }
-                }
-                Err(e) => tx.send(Err(e.into())).expect("send failed"),
-            }
-        }
-        if !v.is_empty() {
-            tx.send(Ok(v)).expect("send failed")
-        }
+        self.backend.borrow_mut().list_recursively(path, tx)
     }
 
     fn remove(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<()>>) {
