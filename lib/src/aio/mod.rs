@@ -39,14 +39,17 @@ pub(crate) trait BackendInstance: Send {
     fn write(
         &mut self,
         path: PathBuf,
-        idempotent: bool,
         sg: SGData,
+        idempotent: bool,
     ) -> io::Result<()>;
 
 
     fn read(&mut self, path: PathBuf) -> io::Result<SGData>;
 
     fn remove(&mut self, path: PathBuf) -> io::Result<()>;
+
+    fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata>;
+    fn list(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>>;
 }
 
 struct WriteArgs {
@@ -458,7 +461,7 @@ impl AsyncIOThread {
         let len = sg.len();
         let res = self.backend
             .borrow_mut()
-            .write(path.clone(), idempotent, sg);
+            .write(path.clone(), sg, idempotent);
         {
             let mut sh = self.shared.inner.lock().unwrap();
             sh.in_progress.remove(&path);
@@ -480,7 +483,13 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
-        let res = self.write_inner(path, sg, idempotent);
+        self.time_reporter.start("read");
+        let res = {
+            let _guard = self.pending_wait_and_insert(&path);
+            self.backend
+                .borrow_mut()
+                .write(path.clone(), sg, idempotent)
+        };
 
         if let Some(tx) = tx {
             self.time_reporter.start("write send response");
@@ -513,6 +522,7 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
+        self.time_reporter.start("read");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
             self.backend.borrow_mut().read(path.clone())
@@ -529,23 +539,15 @@ impl AsyncIOThread {
     ) {
         trace!(self.log, "read-metadata"; "path" => %path.display());
 
+        self.time_reporter.start("read-metadata");
         let path = self.root_path.join(path);
+        let res = {
+            let _guard = self.pending_wait_and_insert(&path);
+            self.backend.borrow_mut().read_metadata(path.clone())
+        };
 
-        let res = self.read_metadata_inner(path);
         self.time_reporter.start("read send response");
         tx.send(res).expect("send failed")
-    }
-
-    fn read_metadata_inner(&mut self, path: PathBuf) -> io::Result<Metadata> {
-        self.time_reporter.start("read-metadata");
-
-        let _guard = self.pending_wait_and_insert(&path);
-
-        let md = fs::metadata(&path)?;
-        Ok(Metadata {
-            len: md.len(),
-            is_file: md.is_file(),
-        })
     }
 
     fn list(
@@ -557,29 +559,10 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
-        let res = self.list_inner(path);
+        self.time_reporter.start("list");
+        let res = self.backend.borrow_mut().list(path);
         self.time_reporter.start("list send response");
         tx.send(res).expect("send failed")
-    }
-
-    fn list_inner(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {
-        self.time_reporter.start("list");
-
-        let mut v = Vec::with_capacity(128);
-
-        let dir = fs::read_dir(path);
-
-        match dir {
-            Ok(dir) => {
-                for entry in dir {
-                    let entry = entry?;
-                    v.push(entry.path());
-                }
-                Ok(v)
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
-            Err(e) => Err(e),
-        }
     }
 
     fn list_recursively(
@@ -623,6 +606,7 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
+        self.time_reporter.start("remove");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
             self.backend.borrow_mut().remove(path.clone())
