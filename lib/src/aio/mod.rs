@@ -1,13 +1,10 @@
 
 
-use INGRESS_BUFFER_SIZE;
-use config;
 use dangerous_option::DangerousOption as AutoOption;
 
+use config;
 use fs2::FileExt;
 use num_cpus;
-use rand;
-use rand::Rng;
 use sgdata::SGData;
 use slog;
 use slog::{Level, Logger};
@@ -15,12 +12,42 @@ use slog_perf::TimeReporter;
 use std;
 use std::{fs, io, mem, thread};
 use std::collections::HashSet;
-use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use two_lock_queue;
 use walkdir::WalkDir;
+use std::cell::RefCell;
+
+mod local;
+pub(crate) use self::local::Local;
+
+pub(crate) trait Backend: Send + Sync {
+    fn new_instance(&self) -> Box<BackendInstance>;
+}
+
+pub(crate) trait BackendInstance: Send {
+    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()>;
+
+    fn rename(
+        &mut self,
+        src_path: PathBuf,
+        dst_path: PathBuf,
+    ) -> io::Result<()>;
+
+
+    fn write(
+        &mut self,
+        path: PathBuf,
+        idempotent: bool,
+        sg: SGData,
+    ) -> io::Result<()>;
+
+
+    fn read(&mut self, path: PathBuf) -> io::Result<SGData>;
+
+    fn remove(&mut self, path: PathBuf) -> io::Result<()>;
+}
 
 struct WriteArgs {
     path: PathBuf,
@@ -60,7 +87,11 @@ pub struct AsyncIO {
 }
 
 impl AsyncIO {
-    pub fn new(root_path: PathBuf, log: Logger) -> Self {
+    pub(crate) fn new(
+        root_path: PathBuf,
+        backend: Box<Backend + Send + Sync>,
+        log: Logger,
+    ) -> Self {
         let thread_num = 4 * num_cpus::get();
         let (tx, rx) = two_lock_queue::channel(thread_num);
 
@@ -72,9 +103,10 @@ impl AsyncIO {
                 let shared = shared.clone();
                 let log = log.clone();
                 let root_path = root_path.clone();
+                let backend = backend.new_instance();
                 thread::spawn(move || {
                     let mut thread =
-                        AsyncIOThread::new(root_path, shared, rx, log);
+                        AsyncIOThread::new(root_path, shared, rx, backend, log);
                     thread.run();
                 })
             })
@@ -86,6 +118,7 @@ impl AsyncIO {
             join: join,
             log: log.clone(),
             stats: shared.clone(),
+            backend: backend,
         };
 
         AsyncIO {
@@ -136,10 +169,10 @@ impl AsyncIO {
             .expect("channel send failed");
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
-            Ok(batch) => Box::new(batch.into_iter().map(Ok)) as
-                Box<Iterator<Item = io::Result<PathBuf>>>,
-            Err(e) => Box::new(Some(Err(e)).into_iter()) as
-                Box<Iterator<Item = io::Result<PathBuf>>>,
+            Ok(batch) => Box::new(batch.into_iter().map(Ok))
+                as Box<Iterator<Item = io::Result<PathBuf>>>,
+            Err(e) => Box::new(Some(Err(e)).into_iter())
+                as Box<Iterator<Item = io::Result<PathBuf>>>,
         });
         Box::new(iter)
     }
@@ -258,6 +291,7 @@ pub struct AsyncIOShared {
     join: Vec<thread::JoinHandle<()>>,
     log: slog::Logger,
     stats: AsyncIOThreadShared,
+    backend: Box<Backend + Send + Sync>,
 }
 
 impl Drop for AsyncIOShared {
@@ -337,7 +371,7 @@ struct AsyncIOThread {
     rx: two_lock_queue::Receiver<Message>,
     log: Logger,
     time_reporter: TimeReporter,
-    rand_ext: String,
+    backend: RefCell<Box<BackendInstance>>,
 }
 
 struct PendingGuard<'a, 'b>(&'a AsyncIOThread, &'b PathBuf);
@@ -354,6 +388,7 @@ impl AsyncIOThread {
         root_path: PathBuf,
         shared: AsyncIOThreadShared,
         rx: two_lock_queue::Receiver<Message>,
+        backend: Box<BackendInstance>,
         log: Logger,
     ) -> Self {
         let t = TimeReporter::new_with_level(
@@ -367,10 +402,7 @@ impl AsyncIOThread {
             shared: shared,
             rx: rx,
             time_reporter: t,
-            rand_ext: rand::thread_rng()
-                .gen_ascii_chars()
-                .take(20)
-                .collect::<String>(),
+            backend: RefCell::new(backend),
         }
     }
 
@@ -408,6 +440,47 @@ impl AsyncIOThread {
         }
     }
 
+    fn write_inner(
+        &mut self,
+        path: PathBuf,
+        sg: SGData,
+        idempotent: bool,
+    ) -> io::Result<()> {
+        self.time_reporter.start("processing write");
+        // check `in_progress` and add atomically
+        // if not already there
+        loop {
+            let mut sh = self.shared.inner.lock().unwrap();
+
+            if sh.in_progress.contains(&path) {
+                if idempotent {
+                    return Ok(());
+                } else {
+                    // a bit lame, but will do, since this should not really
+                    // happen in practice anyway
+                    drop(sh);
+                    thread::sleep(std::time::Duration::from_millis(1000));
+                }
+            } else {
+                sh.in_progress.insert(path.clone());
+                break;
+            }
+        }
+
+        let len = sg.len();
+        let res = self.backend
+            .borrow_mut()
+            .write(path.clone(), idempotent, sg);
+        {
+            let mut sh = self.shared.inner.lock().unwrap();
+            sh.in_progress.remove(&path);
+            sh.write_stats.new_bytes += len as u64;
+            sh.write_stats.new_chunks += 1;
+        }
+
+        res
+    }
+
     fn write(
         &mut self,
         path: PathBuf,
@@ -419,7 +492,8 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
-        let res = self.write_inner(path, idempotent, sg);
+        let res = self.write_inner(path, sg, idempotent);
+
         if let Some(tx) = tx {
             self.time_reporter.start("write send response");
             tx.send(res).expect("send failed")
@@ -446,106 +520,19 @@ impl AsyncIOThread {
         PendingGuard(self, path)
     }
 
-    fn write_inner(
-        &mut self,
-        path: PathBuf,
-        idempotent: bool,
-        sg: SGData,
-    ) -> io::Result<()> {
-        self.time_reporter.start("processing write");
-
-        // check `in_progress` and add atomically
-        // if not already there
-        loop {
-            let mut sh = self.shared.inner.lock().unwrap();
-
-            if sh.in_progress.contains(&path) {
-                if idempotent {
-                    return Ok(());
-                } else {
-                    // a bit lame, but will do, since this should not really
-                    // happen in practice anyway
-                    drop(sh);
-                    thread::sleep(std::time::Duration::from_millis(1000));
-                }
-            } else {
-                sh.in_progress.insert(path.clone());
-                break;
-            }
-        }
-
-        // check if exists on disk
-        // remove from `in_progress` if it does
-        if idempotent && path.exists() {
-            let mut sh = self.shared.inner.lock().unwrap();
-            sh.in_progress.remove(&path);
-            return Ok(());
-        }
-
-        // write file to disk
-        self.time_reporter.start("write");
-
-        let tmp_path = path.with_extension(format!("{}.tmp", self.rand_ext));
-        let mut chunk_file = match fs::File::create(&tmp_path) {
-            Ok(file) => Ok(file),
-            Err(_) => {
-                fs::create_dir_all(path.parent().unwrap())?;
-                fs::File::create(&tmp_path)
-            }
-        }?;
-
-        let mut bytes_written = 0;
-        for data_part in sg.as_parts() {
-            chunk_file.write_all(data_part)?;
-            bytes_written += data_part.len() as u64;
-        }
-
-        self.time_reporter.start("fsync");
-
-        chunk_file.sync_data()?;
-        fs::rename(&tmp_path, &path)?;
-
-        self.time_reporter.start("stats");
-        let mut sh = self.shared.inner.lock().expect("couldn't acquire a lock");
-
-        sh.in_progress.remove(&path);
-        sh.write_stats.new_bytes += bytes_written;
-        sh.write_stats.new_chunks += 1;
-
-        drop(sh);
-        Ok(())
-    }
-
-
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {
         trace!(self.log, "read"; "path" => %path.display());
 
         let path = self.root_path.join(path);
 
-        let res = self.read_inner(path);
+        let res = {
+            let _guard = self.pending_wait_and_insert(&path);
+            self.backend.borrow_mut().read(path.clone())
+        };
         self.time_reporter.start("read send response");
         tx.send(res).expect("send failed")
     }
 
-    fn read_inner(&mut self, path: PathBuf) -> io::Result<SGData> {
-        self.time_reporter.start("read");
-
-        let _guard = self.pending_wait_and_insert(&path);
-
-        let mut file = fs::File::open(&path)?;
-
-        let mut bufs = Vec::with_capacity(16 * 1024 / INGRESS_BUFFER_SIZE);
-        loop {
-            let mut buf: Vec<u8> = vec![0u8; INGRESS_BUFFER_SIZE];
-            let len = file.read(&mut buf[..])?;
-
-            if len == 0 {
-                return Ok(SGData::from_many(bufs));
-            }
-            buf.truncate(len);
-            bufs.push(buf);
-        }
-    }
 
     fn read_metadata(
         &mut self,
@@ -648,17 +635,14 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
-        let res = self.remove_inner(path);
+        let res = {
+            let _guard = self.pending_wait_and_insert(&path);
+            self.backend.borrow_mut().remove(path.clone())
+        };
         self.time_reporter.start("remove send response");
         tx.send(res).expect("send failed")
     }
 
-    fn remove_inner(&mut self, path: PathBuf) -> io::Result<()> {
-        self.time_reporter.start("remove");
-
-        let _guard = self.pending_wait_and_insert(&path);
-        fs::remove_file(&path)
-    }
 
     fn remove_dir_all(
         &mut self,
@@ -669,17 +653,12 @@ impl AsyncIOThread {
 
         let path = self.root_path.join(path);
 
-        let res = self.remove_dir_all_inner(path);
+        self.time_reporter.start("remove-dir-all");
+        let res = self.backend.borrow_mut().remove_dir_all(path);
+
         self.time_reporter.start("remove send response");
         tx.send(res).expect("send failed")
     }
-
-    fn remove_dir_all_inner(&mut self, path: PathBuf) -> io::Result<()> {
-        self.time_reporter.start("remove-dir-all");
-
-        fs::remove_dir_all(&path)
-    }
-
 
     fn rename(
         &mut self,
@@ -693,25 +672,15 @@ impl AsyncIOThread {
         let src_path = self.root_path.join(src_path);
         let dst_path = self.root_path.join(dst_path);
 
-        let res = self.rename_inner(src_path, dst_path);
+        self.time_reporter.start("rename");
+        let res = {
+            let _guard = self.pending_wait_and_insert(&src_path);
+            let _guard = self.pending_wait_and_insert(&dst_path);
+            self.backend
+                .borrow_mut()
+                .rename(src_path.clone(), dst_path.clone())
+        };
         self.time_reporter.start("remove send response");
         tx.send(res).expect("send failed")
-    }
-
-    fn rename_inner(
-        &mut self,
-        src_path: PathBuf,
-        dst_path: PathBuf,
-    ) -> io::Result<()> {
-        self.time_reporter.start("rename");
-        let _guard = self.pending_wait_and_insert(&src_path);
-        let _guard = self.pending_wait_and_insert(&dst_path);
-        match fs::rename(&src_path, &dst_path) {
-            Ok(file) => Ok(file),
-            Err(_e) => {
-                fs::create_dir_all(dst_path.parent().unwrap())?;
-                fs::rename(&src_path, &dst_path)
-            }
-        }
     }
 }

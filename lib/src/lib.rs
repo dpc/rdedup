@@ -252,7 +252,11 @@ impl Repo {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let aio = aio::AsyncIO::new(repo_path.to_owned(), log.clone());
+        let aio = aio::AsyncIO::new(
+            repo_path.to_owned(),
+            Box::new(aio::Local::new(repo_path.into())),
+            log.clone(),
+        );
 
         Repo::ensure_repo_empty_or_new(&aio)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
@@ -279,7 +283,11 @@ impl Repo {
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
 
-        let aio = aio::AsyncIO::new(repo_path.to_owned(), log.clone());
+        let aio = aio::AsyncIO::new(
+            repo_path.to_owned(),
+            Box::new(aio::Local::new(repo_path.into())),
+            log.clone(),
+        );
 
         if !repo_path.exists() {
             return Err(Error::new(
@@ -488,8 +496,8 @@ impl Repo {
     ) -> io::Result<()> {
         let gen_config = gen.load_config(&self.aio)?;
 
-        if gen_config.created + chrono::Duration::seconds(min_age_secs as i64) >
-            chrono::Utc::now()
+        if gen_config.created + chrono::Duration::seconds(min_age_secs as i64)
+            > chrono::Utc::now()
         {
             info!(
                 self.log,
@@ -780,9 +788,8 @@ impl Repo {
             .iter()
             .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
             .filter(|&item| {
-                item != config::CONFIG_YML_FILE &&
-                    item != config::VERSION_FILE &&
-                    item != config::LOCK_FILE
+                item != config::CONFIG_YML_FILE && item != config::VERSION_FILE
+                    && item != config::LOCK_FILE
             })
             .filter_map(|item| match Generation::try_from(item) {
                 Ok(gen) => Some(gen),
@@ -832,7 +839,11 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let aio = aio::AsyncIO::new(self.path.clone(), self.log.clone());
+        let aio = aio::AsyncIO::new(
+            self.path.clone(),
+            Box::new(aio::Local::new(self.path.clone())),
+            self.log.clone(),
+        );
 
         let stats = aio.stats();
 
