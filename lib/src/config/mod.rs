@@ -27,13 +27,9 @@ pub(crate) use self::encryption::*;
 
 
 pub const DATA_SUBDIR: &'static str = "chunk";
-
 pub const LOCK_FILE: &'static str = ".lock";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
-pub fn lock_file_path(path: &Path) -> PathBuf {
-    path.join(LOCK_FILE)
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]

@@ -2,8 +2,6 @@
 
 use dangerous_option::DangerousOption as AutoOption;
 
-use config;
-use fs2::FileExt;
 use num_cpus;
 use sgdata::SGData;
 use slog;
@@ -23,6 +21,8 @@ mod local;
 pub(crate) use self::local::Local;
 
 pub(crate) trait Backend: Send + Sync {
+    fn lock_exclusive(&self) -> io::Result<fs::File>;
+    fn lock_shared(&self) -> io::Result<fs::File>;
     fn new_instance(&self) -> Box<BackendInstance>;
 }
 
@@ -83,7 +83,6 @@ enum Message {
 pub struct AsyncIO {
     shared: Arc<AsyncIOShared>,
     tx: AutoOption<two_lock_queue::Sender<Message>>,
-    path: PathBuf,
 }
 
 impl AsyncIO {
@@ -124,28 +123,17 @@ impl AsyncIO {
         AsyncIO {
             shared: Arc::new(shared),
             tx: AutoOption::new(tx),
-            path: root_path,
         }
     }
 
-    pub fn lock_exclusive(&self) -> io::Result<fs::File> {
-        let lock_path = config::lock_file_path(&self.path);
 
-        let file = fs::File::create(&lock_path)?;
-        file.lock_exclusive()?;
-
-        Ok(file)
+    pub(crate) fn lock_exclusive(&self) -> io::Result<fs::File> {
+        self.shared.backend.lock_exclusive()
     }
 
-    pub fn lock_shared(&self) -> io::Result<fs::File> {
-        let lock_path = config::lock_file_path(&self.path);
-
-        let file = fs::File::create(&lock_path)?;
-        file.lock_shared()?;
-
-        Ok(file)
+    pub(crate) fn lock_shared(&self) -> io::Result<fs::File> {
+        self.shared.backend.lock_shared()
     }
-
 
     pub fn stats(&self) -> AsyncIOThreadShared {
         self.shared.stats.clone()
