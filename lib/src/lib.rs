@@ -296,8 +296,6 @@ impl Repo {
             ));
         }
 
-        let _version = config::VersionFile::read(&aio)?;
-
         let config = config::Repo::read(&aio)?;
 
         let compression = config.compression.to_engine();
@@ -788,8 +786,7 @@ impl Repo {
             .iter()
             .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
             .filter(|&item| {
-                item != config::CONFIG_YML_FILE && item != config::VERSION_FILE
-                    && item != config::LOCK_FILE
+                item != config::CONFIG_YML_FILE && item != config::LOCK_FILE
             })
             .filter_map(|item| match Generation::try_from(item) {
                 Ok(gen) => Some(gen),

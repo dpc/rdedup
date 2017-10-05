@@ -15,16 +15,16 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-mod version;
 mod chunking;
 mod compression;
 mod encryption;
 
-pub(crate) use self::version::*;
 pub(crate) use self::chunking::*;
 pub(crate) use self::compression::*;
 pub(crate) use self::encryption::*;
 
+pub const REPO_VERSION_LOWEST: u32 = 3;
+pub const REPO_VERSION_CURRENT: u32 = 3;
 
 pub const DATA_SUBDIR: &'static str = "chunk";
 pub const LOCK_FILE: &'static str = ".lock";
@@ -180,20 +180,53 @@ impl Repo {
             SGData::from_single(config_str.into_bytes()),
         ).wait()?;
 
-        VersionFile::current().write(aio)?;
-
         Ok(())
     }
 
-    pub fn read(aio: &aio::AsyncIO) -> super::Result<Self> {
+    pub fn read(aio: &aio::AsyncIO) -> io::Result<Self> {
         let config_data = aio.read(CONFIG_YML_FILE.into()).wait()?;
         let config_data = config_data.to_linear_vec();
 
-        serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("couldn't parse yaml: {}", e.to_string()),
-            )
-        })
+        let config: Repo = serde_yaml::from_reader(config_data.as_slice())
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("couldn't parse yaml: {}", e.to_string()),
+                )
+            })?;
+
+        check_version(config.version)?;
+
+        Ok(config)
     }
+}
+
+fn check_version(version_int: u32) -> io::Result<()> {
+    if version_int > REPO_VERSION_CURRENT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "repo version {} higher than \
+                 supported {}; update?",
+                version_int,
+                REPO_VERSION_CURRENT
+            ),
+        ));
+    }
+    // This if statement triggers the absurd_extreme_comparisons because the
+    // minimum repo version is also the smallest value of a u32
+    if version_int < REPO_VERSION_LOWEST {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "repo version {} lower than \
+                 lowest supported {}; \
+                 restore using older version?",
+                version_int,
+                REPO_VERSION_LOWEST
+            ),
+        ));
+    }
+
+    Ok(())
 }
