@@ -2,6 +2,8 @@ mod lib {
     pub use super::super::*;
 }
 
+use url::Url;
+
 use util::{ReaderVecIter, WhileOk};
 use hex::ToHex;
 use iterators::StoredChunks;
@@ -49,8 +51,20 @@ fn test_repo(pass: &str) -> lib::Repo {
     let mut settings = settings::Repo::new();
     // Make it fasts to use
     settings.set_pwhash(settings::PWHash::Weak);
-    lib::Repo::init(&rand_tmp_dir(), &|| Ok(pass.into()), settings, None)
-        .unwrap()
+    let url = Url::from_file_path(rand_tmp_dir()).unwrap();
+    lib::Repo::init(&url, &|| Ok(pass.into()), settings, None).unwrap()
+}
+
+fn test_repo_dir(pass: &str) -> (lib::Repo, PathBuf) {
+    let mut settings = settings::Repo::new();
+    // Make it fasts to use
+    settings.set_pwhash(settings::PWHash::Weak);
+    let dir = rand_tmp_dir();
+    let url = Url::from_file_path(&dir).unwrap();
+    (
+        lib::Repo::init(&url, &|| Ok(pass.into()), settings, None).unwrap(),
+        dir,
+    )
 }
 
 /// Generate data that repease some chunks
@@ -246,7 +260,7 @@ fn change_passphrase() {
         let mut settings = settings::Repo::new();
         settings.set_pwhash(settings::PWHash::Weak);
         let repo = lib::Repo::init(
-            &dir_path,
+            &Url::from_file_path(dir_path).unwrap(),
             &|| Ok(prev_passphrase.into()),
             settings,
             None,
@@ -260,7 +274,9 @@ fn change_passphrase() {
     }
 
     for &p in &["a", "", "foo", "bar"] {
-        let mut repo = lib::Repo::open(dir_path, None).unwrap();
+        let mut repo =
+            lib::Repo::open(&Url::from_file_path(dir_path).unwrap(), None)
+                .unwrap();
         repo.change_passphrase(
             &|| Ok(prev_passphrase.into()),
             &|| Ok(p.into()),
@@ -270,7 +286,9 @@ fn change_passphrase() {
 
 
     {
-        let repo = lib::Repo::open(dir_path, None).unwrap();
+        let repo =
+            lib::Repo::open(&Url::from_directory_path(dir_path).unwrap(), None)
+                .unwrap();
         let dec_handle =
             repo.unlock_decrypt(&|| Ok(prev_passphrase.into())).unwrap();
         let mut data_after = vec![];
@@ -279,13 +297,14 @@ fn change_passphrase() {
         assert_eq!(data_before, data_after);
     }
 
-    let repo = lib::Repo::open(dir_path, None).unwrap();
+    let repo =
+        lib::Repo::open(&Url::from_file_path(dir_path).unwrap(), None).unwrap();
     wipe(&repo);
 }
 
 #[test]
 fn verify_name() {
-    let repo = test_repo(PASS);
+    let (repo, dir) = test_repo_dir(PASS);
 
     let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
     let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
@@ -301,7 +320,7 @@ fn verify_name() {
     // Corrupt first chunk we find
     let generations = repo.read_generations().unwrap();
 
-    let chunk_path = repo.path().join(generations[0].to_string()).join("chunk");
+    let chunk_path = dir.join(generations[0].to_string()).join("chunk");
     for l1 in fs::read_dir(&chunk_path).unwrap() {
         let l1 = l1.unwrap();
         if l1.path().is_dir() {
@@ -409,13 +428,16 @@ fn test_custom_chunking_size() {
             }
             settings.set_pwhash(settings::PWHash::Weak);
             lib::Repo::init(
-                &dir_path,
+                &Url::from_file_path(dir_path.clone()).unwrap(),
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
             ).unwrap();
 
-            let repo = lib::Repo::open(&dir_path, None).unwrap();
+            let repo = lib::Repo::open(
+                &Url::from_directory_path(dir_path).unwrap(),
+                None,
+            ).unwrap();
             assert_eq!(settings.chunking.0, repo.config.chunking);
             wipe(&repo);
         }
@@ -445,13 +467,15 @@ fn test_custom_nesting() {
             }
             settings.set_pwhash(settings::PWHash::Weak);
             lib::Repo::init(
-                &dir_path,
+                &Url::from_file_path(dir_path.clone()).unwrap(),
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
             ).unwrap();
 
-            let repo = lib::Repo::open(&dir_path, None).unwrap();
+            let repo =
+                lib::Repo::open(&Url::from_file_path(dir_path).unwrap(), None)
+                    .unwrap();
             assert_eq!(lib::config::Nesting(level), repo.config.nesting);
 
             // Test Store, Load, RM, and GC

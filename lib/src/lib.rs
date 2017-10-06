@@ -28,9 +28,11 @@ extern crate slog;
 extern crate slog_perf;
 extern crate sodiumoxide;
 extern crate two_lock_queue;
+extern crate url;
 extern crate walkdir;
 extern crate zstd;
 
+use url::Url;
 use sgdata::SGData;
 use slog::{FnValue, Level, Logger};
 use slog_perf::TimeReporter;
@@ -120,9 +122,7 @@ pub struct DuResults {
 /// Rdedup repository
 #[derive(Clone)]
 pub struct Repo {
-    /// Path of the repository
-    path: PathBuf,
-
+    url: Url,
     config: config::Repo,
 
     compression: compression::ArcCompression,
@@ -223,10 +223,6 @@ impl Repo {
         })
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
     fn ensure_repo_empty_or_new(aio: &AsyncIO) -> Result<()> {
         let list = aio.list(PathBuf::from(".")).wait();
 
@@ -241,7 +237,7 @@ impl Repo {
 
     /// Create new rdedup repository
     pub fn init<L>(
-        repo_path: &Path,
+        url: &Url,
         passphrase: PassphraseFn,
         settings: settings::Repo,
         log: L,
@@ -252,11 +248,8 @@ impl Repo {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let aio = aio::AsyncIO::new(
-            repo_path.to_owned(),
-            Box::new(aio::Local::new(repo_path.into())),
-            log.clone(),
-        );
+        let backend = aio::backend_from_url(url)?;
+        let aio = aio::AsyncIO::new(backend, log.clone());
 
         Repo::ensure_repo_empty_or_new(&aio)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
@@ -266,7 +259,7 @@ impl Repo {
         let hasher = config.hashing.to_hasher();
 
         Ok(Repo {
-            path: repo_path.into(),
+            url: url.clone(),
             config: config,
             compression: compression,
             hasher: hasher,
@@ -275,33 +268,22 @@ impl Repo {
         })
     }
 
-    pub fn open<L>(repo_path: &Path, log: L) -> Result<Repo>
+    pub fn open<L>(url: &Url, log: L) -> Result<Repo>
     where
         L: Into<Option<Logger>>,
     {
         let log = log.into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-
-        let aio = aio::AsyncIO::new(
-            repo_path.to_owned(),
-            Box::new(aio::Local::new(repo_path.into())),
-            log.clone(),
-        );
-
-        if !repo_path.exists() {
-            return Err(Error::new(
-                io::ErrorKind::NotFound,
-                format!("repo not found: {}", repo_path.to_string_lossy()),
-            ));
-        }
+        let backend = aio::backend_from_url(url)?;
+        let aio = aio::AsyncIO::new(backend, log.clone());
 
         let config = config::Repo::read(&aio)?;
 
         let compression = config.compression.to_engine();
         let hasher = config.hashing.to_hasher();
         Ok(Repo {
-            path: repo_path.to_owned(),
+            url: url.clone(),
             config: config,
             compression: compression,
             hasher: hasher,
@@ -626,15 +608,6 @@ impl Repo {
         )
     }
 
-    fn chunk_path_by_digest(
-        &self,
-        digest: DigestRef,
-        gen_str: &str,
-    ) -> PathBuf {
-        self.path
-            .join(self.chunk_rel_path_by_digest(digest, gen_str))
-    }
-
     pub fn list_names(&self) -> io::Result<Vec<String>> {
         let _lock = self.aio.lock_shared();
         Name::list_all(&self.read_generations()?, &self.aio)
@@ -836,11 +809,8 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let aio = aio::AsyncIO::new(
-            self.path.clone(),
-            Box::new(aio::Local::new(self.path.clone())),
-            self.log.clone(),
-        );
+        let backend = backend_from_url(&self.url)?;
+        let aio = aio::AsyncIO::new(backend, self.log.clone());
 
         let stats = aio.stats();
 

@@ -42,3 +42,4 @@ blake2 = "0.6"
 digest = "0.6"
 bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
+url = "*"

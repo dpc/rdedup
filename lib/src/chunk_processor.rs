@@ -87,8 +87,10 @@ impl ChunkProcessor {
                     .rev()
                     .chain([&last_gen_str].iter().cloned())
                 {
-                    let chunk_path = self.repo
-                        .chunk_path_by_digest(digest.as_digest_ref(), gen_str);
+                    let chunk_path = self.repo.chunk_rel_path_by_digest(
+                        digest.as_digest_ref(),
+                        gen_str,
+                    );
                     match self.aio.read_metadata(chunk_path.clone()).wait() {
                         Ok(_metadata) => {
                             found = true;
@@ -97,10 +99,11 @@ impl ChunkProcessor {
                             } else {
                                 trace!(self.log, "already exists in previous generation";
                                        "path" => %chunk_path.display());
-                                let dst_path = self.repo.chunk_path_by_digest(
-                                    digest.as_digest_ref(),
-                                    gen_strings.last().unwrap(),
-                                );
+                                let dst_path = self.repo
+                                    .chunk_rel_path_by_digest(
+                                        digest.as_digest_ref(),
+                                        gen_strings.last().unwrap(),
+                                    );
                                 self.aio
                                     .rename(chunk_path.clone(), dst_path.clone())
                                     .wait()
@@ -132,7 +135,7 @@ impl ChunkProcessor {
                 }
 
                 if !found {
-                    let chunk_path = self.repo.chunk_path_by_digest(
+                    let chunk_path = self.repo.chunk_rel_path_by_digest(
                         digest.as_digest_ref(),
                         gen_strings.last().unwrap(),
                     );

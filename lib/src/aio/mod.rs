@@ -1,4 +1,6 @@
+extern crate url;
 
+use self::url::Url;
 
 use dangerous_option::DangerousOption as AutoOption;
 
@@ -95,7 +97,6 @@ pub struct AsyncIO {
 
 impl AsyncIO {
     pub(crate) fn new(
-        root_path: PathBuf,
         backend: Box<Backend + Send + Sync>,
         log: Logger,
     ) -> Self {
@@ -109,11 +110,10 @@ impl AsyncIO {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 let log = log.clone();
-                let root_path = root_path.clone();
                 let backend = backend.new_instance();
                 thread::spawn(move || {
                     let mut thread =
-                        AsyncIOThread::new(root_path, shared, rx, backend, log);
+                        AsyncIOThread::new(shared, rx, backend, log);
                     thread.run();
                 })
             })
@@ -362,7 +362,6 @@ impl AsyncIOThreadShared {
 }
 
 struct AsyncIOThread {
-    root_path: PathBuf,
     shared: AsyncIOThreadShared,
     rx: two_lock_queue::Receiver<Message>,
     log: Logger,
@@ -381,7 +380,6 @@ impl<'a, 'b> Drop for PendingGuard<'a, 'b> {
 
 impl AsyncIOThread {
     fn new(
-        root_path: PathBuf,
         shared: AsyncIOThreadShared,
         rx: two_lock_queue::Receiver<Message>,
         backend: Box<BackendInstance>,
@@ -393,7 +391,6 @@ impl AsyncIOThread {
             Level::Debug,
         );
         AsyncIOThread {
-            root_path: root_path,
             log: log.new(o!("module" => "asyncio")),
             shared: shared,
             rx: rx,
@@ -486,8 +483,6 @@ impl AsyncIOThread {
     ) {
         trace!(self.log, "write"; "path" => %path.display());
 
-        let path = self.root_path.join(path);
-
         self.time_reporter.start("read");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
@@ -525,8 +520,6 @@ impl AsyncIOThread {
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {
         trace!(self.log, "read"; "path" => %path.display());
 
-        let path = self.root_path.join(path);
-
         self.time_reporter.start("read");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
@@ -545,7 +538,6 @@ impl AsyncIOThread {
         trace!(self.log, "read-metadata"; "path" => %path.display());
 
         self.time_reporter.start("read-metadata");
-        let path = self.root_path.join(path);
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
             self.backend.borrow_mut().read_metadata(path.clone())
@@ -561,8 +553,6 @@ impl AsyncIOThread {
         tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
     ) {
         trace!(self.log, "list"; "path" => %path.display());
-
-        let path = self.root_path.join(path);
 
         self.time_reporter.start("list");
         let res = self.backend.borrow_mut().list(path);
@@ -584,8 +574,6 @@ impl AsyncIOThread {
     fn remove(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<()>>) {
         trace!(self.log, "remove"; "path" => %path.display());
 
-        let path = self.root_path.join(path);
-
         self.time_reporter.start("remove");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
@@ -603,8 +591,6 @@ impl AsyncIOThread {
     ) {
         trace!(self.log, "remove-dir-all"; "path" => %path.display());
 
-        let path = self.root_path.join(path);
-
         self.time_reporter.start("remove-dir-all");
         let res = self.backend.borrow_mut().remove_dir_all(path);
 
@@ -621,9 +607,6 @@ impl AsyncIOThread {
         trace!(self.log, "rename"; "src-path" => %src_path.display(), "dst-path"
                => %dst_path.display());
 
-        let src_path = self.root_path.join(src_path);
-        let dst_path = self.root_path.join(dst_path);
-
         self.time_reporter.start("rename");
         let res = {
             let _guard = self.pending_wait_and_insert(&src_path);
@@ -635,4 +618,21 @@ impl AsyncIOThread {
         self.time_reporter.start("remove send response");
         tx.send(res).expect("send failed")
     }
+}
+
+// ```norust
+// let s = "backblaze:myid#bucket";
+// let s = "file:/foo/bar";
+// ```
+pub(crate) fn backend_from_url(
+    u: &Url,
+) -> io::Result<Box<Backend + Send + Sync>> {
+    if u.scheme() == "file" {
+        return Ok(Box::new(Local::new(PathBuf::from(u.path()))));
+    }
+
+    return Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("Unsupported scheme: {}", u.scheme()),
+    ));
 }

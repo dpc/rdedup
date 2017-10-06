@@ -19,10 +19,12 @@ pub(crate) fn lock_file_path(path: &Path) -> PathBuf {
     path.join(config::LOCK_FILE)
 }
 
+#[derive(Debug)]
 pub(crate) struct Local {
     path: PathBuf,
 }
 
+#[derive(Debug)]
 struct LocalInstance {
     path: PathBuf,
     rand_ext: String,
@@ -70,6 +72,9 @@ impl BackendInstance for LocalInstance {
         src_path: PathBuf,
         dst_path: PathBuf,
     ) -> io::Result<()> {
+        let src_path = self.path.join(src_path);
+        let dst_path = self.path.join(dst_path);
+
         match fs::rename(&src_path, &dst_path) {
             Ok(file) => Ok(file),
             Err(_e) => {
@@ -81,6 +86,7 @@ impl BackendInstance for LocalInstance {
 
 
     fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
+        let path = self.path.join(path);
         fs::remove_dir_all(&path)
     }
 
@@ -90,6 +96,7 @@ impl BackendInstance for LocalInstance {
         sg: SGData,
         idempotent: bool,
     ) -> io::Result<()> {
+        let path = self.path.join(path);
         // check if exists on disk
         // remove from `in_progress` if it does
         if idempotent && path.exists() {
@@ -117,6 +124,8 @@ impl BackendInstance for LocalInstance {
 
 
     fn read(&mut self, path: PathBuf) -> io::Result<SGData> {
+        let path = self.path.join(path);
+
         let mut file = fs::File::open(&path)?;
 
         let mut bufs = Vec::with_capacity(16 * 1024 / INGRESS_BUFFER_SIZE);
@@ -133,11 +142,13 @@ impl BackendInstance for LocalInstance {
     }
 
     fn remove(&mut self, path: PathBuf) -> io::Result<()> {
+        let path = self.path.join(path);
         fs::remove_file(&path)
     }
 
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
+        let path = self.path.join(path);
         let md = fs::metadata(&path)?;
         Ok(Metadata {
             len: md.len(),
@@ -146,6 +157,7 @@ impl BackendInstance for LocalInstance {
     }
 
     fn list(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {
+        let path = self.path.join(path);
         let mut v = Vec::with_capacity(128);
 
         let dir = fs::read_dir(path);

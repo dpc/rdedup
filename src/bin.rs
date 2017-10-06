@@ -53,7 +53,8 @@
 //!
 //! ```norust
 //! cargo install rdedup --vers '^2' # for 2.x stable version
-//! cargo install rdedup --vers '^3' # for 3.x experimental, and unstable version
+//! cargo install rdedup --vers '^3' # for 3.x experimental, and unstable
+//! version
 //! ```
 //!
 //! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -129,28 +130,39 @@ extern crate rpassword;
 extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
+extern crate url;
 
-
+use url::Url;
+use std::error::Error;
 use lib::Repo;
 use lib::settings;
 use hex::ToHex;
 use slog::Drain;
 use std::{env, io, process};
 
-use std::path::PathBuf;
 use std::str::FromStr;
+
+// Url parse with `io::Result` shortcut
+fn parse_url(s: &str) -> io::Result<Url> {
+    Url::parse(s).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("URI parsing error : {}", e.description()),
+        )
+    })
+}
 
 #[derive(Clone)]
 struct Options {
-    dir: PathBuf,
+    url: Url,
     debug_level: u32,
     settings: settings::Repo,
 }
 
 impl Options {
-    fn new(path: PathBuf) -> Options {
+    fn new(url: Url) -> Options {
         Options {
-            dir: path,
+            url: url,
             debug_level: 0,
             settings: settings::Repo::new(),
         }
@@ -311,6 +323,8 @@ fn run() -> io::Result<()> {
         (about: "Data deduplication toolkit")
         (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. \
          Override `RDEDUP_DIR` environment variable.")
+        (@arg REPO_URI : -u --repo +takes_value "Rdedup repository URI. \
+         Override `RDEDUP_URI` environment variable.")
         (@arg VERBOSE: -v ... "Increase debugging level for general messages")
         (@arg VERBOSE_TIMINGS: -t ... "Increase debugging level for timings")
         (@subcommand init =>
@@ -374,16 +388,54 @@ fn run() -> io::Result<()> {
         .get_matches();
 
 
-    let dir = if let Some(dir) = matches.value_of_os("REPO_DIR") {
-        PathBuf::from(dir)
+    let url: Url = if let Some(loc) = matches.value_of_os("REPO_URI") {
+        if matches.value_of_os("REPO_DIR").is_some() {
+            eprintln!("Can't use both --dir or --repo at the same time");
+            process::exit(-1);
+        }
+
+        let s = loc.to_os_string().into_string().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("URI not valid UTF-8 string"),
+            )
+        })?;
+        parse_url(&s)?
+    } else if let Some(dir) = matches.value_of_os("REPO_DIR") {
+        Url::from_file_path(dir).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("URI parsing error: {}", dir.to_string_lossy()),
+            )
+        })?
+    } else if let Some(loc) = env::var_os("RDEDUP_URI") {
+        if env::var_os("RDEDUP_DIR").is_some() {
+            eprintln!(
+                "Can't use both RDEDUP_REPOSITORY and RDEDUP_DIR  at the same time"
+            );
+            process::exit(-1);
+        }
+
+        let s = loc.to_os_string().into_string().map_err(|_e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("URI not valid UTF-8 string"),
+            )
+        })?;
+        parse_url(&s)?
     } else if let Some(dir) = env::var_os("RDEDUP_DIR") {
-        PathBuf::from(dir)
+        Url::from_file_path(&dir).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("URI parsing error: {}", dir.to_string_lossy()),
+            )
+        })?
     } else {
-        eprintln!("Repository dir path not specified");
+        eprintln!("Repository location not specified");
         process::exit(-1);
     };
 
-    let mut options = Options::new(dir);
+    let mut options = Options::new(url);
 
     let log = create_logger(
         matches.occurrences_of("VERBOSE") as u32,
@@ -424,7 +476,7 @@ fn run() -> io::Result<()> {
                 options.set_hashing(hashing);
             }
             let _ = Repo::init(
-                &options.dir,
+                &options.url,
                 &|| util::read_new_passphrase(),
                 options.settings,
                 log,
@@ -432,7 +484,7 @@ fn run() -> io::Result<()> {
         }
         ("store", Some(matches)) => {
             let name = matches.value_of("NAME").expect("name agument missing");
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
             let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
             let stats = repo.write(name, &mut io::stdin(), &enc)?;
             println!("{} new chunks", stats.new_chunks);
@@ -440,25 +492,25 @@ fn run() -> io::Result<()> {
         }
         ("load", Some(matches)) => {
             let name = matches.value_of("NAME").expect("name agument missing");
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
             repo.read(name, &mut io::stdout(), &dec)?;
         }
         ("change_passphrase", Some(_matches)) => {
-            let mut repo = Repo::open(&options.dir, log)?;
+            let mut repo = Repo::open(&options.url, log)?;
             repo.change_passphrase(
                 &|| read_passphrase(),
                 &|| read_new_passphrase(),
             )?;
         }
         ("remove", Some(matches)) => {
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
             for name in matches.values_of("NAME").expect("names missing") {
                 repo.rm(name)?;
             }
         }
         ("du", Some(matches)) => {
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
 
             for name in matches.values_of("NAME").expect("names missing") {
@@ -474,19 +526,19 @@ fn run() -> io::Result<()> {
             } else {
                 60 * 60 * 24
             };
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
 
             repo.gc(grace_secs)?;
         }
         ("list", Some(_matches)) => {
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
 
             for name in try!(repo.list_names()) {
                 println!("{}", name);
             }
         }
         ("verify", Some(matches)) => {
-            let repo = Repo::open(&options.dir, log)?;
+            let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
             for name in matches.values_of("NAME").expect("values") {
                 let results = repo.verify(name, &dec)?;
