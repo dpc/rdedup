@@ -53,7 +53,8 @@
 //!
 //! ```norust
 //! cargo install rdedup --vers '^2' # for 2.x stable version
-//! cargo install rdedup --vers '^3' # for 3.x experimental, and unstable version
+//! cargo install rdedup --vers '^3' # for 3.x experimental, and unstable
+//! version
 //! ```
 //!
 //! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -174,9 +175,13 @@ impl Options {
 
     fn set_compression(&mut self, s: &str) {
         let compression = match s {
+            #[cfg(feature = "deflate")]
             "deflate" => lib::settings::Compression::Deflate,
+            #[cfg(feature = "xz")]
             "xz2" => lib::settings::Compression::Xz2,
+            #[cfg(feature = "zstandard")]
             "zstd" => lib::settings::Compression::Zstd,
+            #[cfg(feature = "bzip")]
             "bzip2" => lib::settings::Compression::Bzip2,
             "none" => lib::settings::Compression::None,
             _ => {

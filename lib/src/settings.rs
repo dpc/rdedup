@@ -5,33 +5,44 @@ use std::io;
 
 #[derive(Clone)]
 pub enum Compression {
+    #[cfg(feature = "with-deflate")]
     Deflate,
+    #[cfg(feature = "with-xz2")]
     Xz2,
+    #[cfg(feature = "with-bzip2")]
     Bzip2,
+    #[cfg(feature = "with-zstd")]
     Zstd,
     None,
 }
 
 impl Default for Compression {
     fn default() -> Self {
-        Compression::Deflate
+        #[cfg(feature = "with-deflate")]
+        return Compression::Deflate;
+        #[cfg(not(feature = "with-deflate"))]
+        return Compression::None;
     }
 }
 
 impl Compression {
-    pub fn to_config(&self, level: i32) -> config::Compression {
+    pub fn to_config(&self, _level: i32) -> config::Compression {
         match *self {
+            #[cfg(feature = "with-deflate")]
             Compression::Deflate => {
-                config::Compression::Deflate(config::Deflate::new(level))
+                config::Compression::Deflate(config::Deflate::new(_level))
             }
+            #[cfg(feature = "with-xz2")]
             Compression::Xz2 => {
-                config::Compression::Xz2(config::Xz2::new(level))
+                config::Compression::Xz2(config::Xz2::new(_level))
             }
+            #[cfg(feature = "with-bzip2")]
             Compression::Bzip2 => {
-                config::Compression::Bzip2(config::Bzip2::new(level))
+                config::Compression::Bzip2(config::Bzip2::new(_level))
             }
+            #[cfg(feature = "with-zstd")]
             Compression::Zstd => {
-                config::Compression::Zstd(config::Zstd::new(level))
+                config::Compression::Zstd(config::Zstd::new(_level))
             }
             Compression::None => config::Compression::None,
         }

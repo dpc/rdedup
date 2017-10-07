@@ -14,12 +14,16 @@ readme = "README.md"
 name = "rdedup_lib"
 path = "src/lib.rs"
 
+[features]
+# Optional compression features
+with-bzip2 = ["bzip2"]
+with-deflate = ["flate2"]
+with-xz2 = ["rust-lzma"]
+with-zstd = ["zstd"]
+
 [dependencies]
 rdedup-cdc = "0.1.0"
 sodiumoxide = { version = "0.0.15", features = ["serde"] }
-flate2 = "0.2"
-rust-lzma = "0.2"
-bzip2 = "0.3.2"
 fs2 = "0.4"
 serde = "0.9"
 serde_derive = "0.9"
@@ -36,9 +40,13 @@ sgdata = { version = "0.1.0", path = "../sgdata" }
 rand = "0.3.14"
 dangerous_option = "0.2"
 walkdir = "1.0.7"
-zstd = "0.4.14"
 sha2 = "0.6"
 blake2 = "0.6"
 digest = "0.6"
 bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
+
+bzip2 = { version = "0.3.2", optional = true }
+flate2 = { version = "0.2", optional = true }
+rust-lzma = { version = "0.2", optional = true }
+zstd = { version = "0.4.14", optional = true}

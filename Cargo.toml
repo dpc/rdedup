@@ -37,7 +37,7 @@ debug-assertions = false
 members = [ "tester" ]
 
 [dependencies]
-rdedup-lib = { version = "3.0.0-0.1.0", path = "lib" }
+rdedup-lib = { version = "3.0.0-0.1.0", path = "lib"}
 log = "0.3.6"
 hex = "0.2"
 clap = "2"

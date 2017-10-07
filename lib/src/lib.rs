@@ -1,18 +1,13 @@
-
 #![allow(dead_code)]
-
 extern crate base64;
 extern crate blake2;
 extern crate bytevec;
-extern crate bzip2;
 extern crate chrono;
 extern crate crossbeam;
 extern crate dangerous_option;
 extern crate digest;
-extern crate flate2;
 extern crate fs2;
 extern crate hex;
-extern crate lzma;
 extern crate num_cpus;
 extern crate owning_ref;
 extern crate rand;
@@ -29,6 +24,14 @@ extern crate slog_perf;
 extern crate sodiumoxide;
 extern crate two_lock_queue;
 extern crate walkdir;
+
+#[cfg(feature = "with-bzip2")]
+extern crate bzip2;
+#[cfg(feature = "with-deflate")]
+extern crate flate2;
+#[cfg(feature = "with-xz2")]
+extern crate lzma;
+#[cfg(feature = "with-zstd")]
 extern crate zstd;
 
 use sgdata::SGData;
