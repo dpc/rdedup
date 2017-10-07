@@ -11,6 +11,13 @@ repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
 exclude = ["lib/**/*", "tester/**"]
 
+[features]
+default = ["with-bzip2","with-deflate","with-xz2","with-zstd"]
+with-bzip2 = ["rdedup-lib/with-bzip2"]
+with-deflate = ["rdedup-lib/with-deflate"]
+with-xz2 = ["rdedup-lib/with-xz2"]
+with-zstd = ["rdedup-lib/with-zstd"]
+
 [[bin]]
 name = "rdedup"
 path = "src/bin.rs"
