@@ -186,9 +186,13 @@ impl Options {
 
     fn set_compression(&mut self, s: &str) {
         let compression = match s {
+            #[cfg(feature = "deflate")]
             "deflate" => lib::settings::Compression::Deflate,
+            #[cfg(feature = "xz")]
             "xz2" => lib::settings::Compression::Xz2,
+            #[cfg(feature = "zstandard")]
             "zstd" => lib::settings::Compression::Zstd,
+            #[cfg(feature = "bzip")]
             "bzip2" => lib::settings::Compression::Bzip2,
             "none" => lib::settings::Compression::None,
             _ => {
