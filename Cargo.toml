@@ -35,6 +35,13 @@ debug-assertions = false
 
 [workspace]
 
+[features]
+default = ["with-bzip2","with-deflate","with-xz2","with-zstd"]
+with-bzip2 = ["rdedup-lib/with-bzip2"]
+with-deflate = ["rdedup-lib/with-deflate"]
+with-xz2 = ["rdedup-lib/with-xz2"]
+with-zstd = ["rdedup-lib/with-zstd"]
+
 [dependencies]
 rdedup-lib = { version = "2.0.0-0.2", path = "lib" }
 log = "0.3.6"

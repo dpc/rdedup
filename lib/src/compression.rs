@@ -1,13 +1,24 @@
-use bzip2;
-use flate2;
-use lzma;
+#[cfg(feature="with-zstd")]
 use owning_ref::ArcRef;
 use sgdata::SGData;
+#[cfg(feature="with-zstd")]
 use std;
-use std::{cmp, io};
-
-use std::io::{Read, Write};
+use std::io;
+#[cfg(feature="with-xz2")]
+use std::cmp;
+#[cfg(feature="with-zstd")]
+use std::io::Read;
+#[cfg(any(feature="with-bzip2",feature="with-deflate",feature="with-xz2",feature="with-zstd"))]
+use std::io::Write;
 use std::sync::Arc;
+
+#[cfg(feature="with-bzip2")]
+use bzip2;
+#[cfg(feature="with-deflate")]
+use flate2;
+#[cfg(feature="with-xz2")]
+use lzma;
+#[cfg(feature="with-zstd")]
 use zstd;
 
 pub type ArcCompression = Arc<Compression + Send + Sync>;
@@ -27,11 +38,11 @@ impl Compression for NoCompression {
         Ok(buf)
     }
 }
-
+#[cfg(feature="with-deflate")]
 pub struct Deflate {
     level: flate2::Compression,
 }
-
+#[cfg(feature="with-deflate")]
 impl Deflate {
     pub fn new(level: i32) -> Self {
         let level = if level < 0 {
@@ -45,7 +56,7 @@ impl Deflate {
         Deflate { level: level }
     }
 }
-
+#[cfg(feature="with-deflate")]
 impl Compression for Deflate {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut compressor = flate2::write::DeflateEncoder::new(
@@ -70,11 +81,11 @@ impl Compression for Deflate {
         Ok(SGData::from_single(decompressor.finish()?))
     }
 }
-
+#[cfg(feature="with-bzip2")]
 pub struct Bzip2 {
     level: bzip2::Compression,
 }
-
+#[cfg(feature="with-bzip2")]
 impl Bzip2 {
     pub fn new(level: i32) -> Self {
         let level = if level < 0 {
@@ -88,7 +99,7 @@ impl Bzip2 {
         Bzip2 { level: level }
     }
 }
-
+#[cfg(feature="with-bzip2")]
 impl Compression for Bzip2 {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut compressor = bzip2::write::BzEncoder::new(
@@ -113,11 +124,11 @@ impl Compression for Bzip2 {
         Ok(SGData::from_single(decompressor.finish()?))
     }
 }
-
+#[cfg(feature="with-xz2")]
 pub struct Xz2 {
     level: u32,
 }
-
+#[cfg(feature="with-xz2")]
 impl Xz2 {
     pub fn new(level: i32) -> Self {
         let level = cmp::min(cmp::max(level + 6, 0), 10) as u32;
@@ -125,7 +136,7 @@ impl Xz2 {
         Xz2 { level: level }
     }
 }
-
+#[cfg(feature="with-xz2")]
 impl Compression for Xz2 {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
@@ -171,23 +182,23 @@ impl Compression for Xz2 {
     }
 }
 
-
+#[cfg(feature="with-zstd")]
 pub struct Zstd {
     level: i32,
 }
-
+#[cfg(feature="with-zstd")]
 impl Zstd {
     pub fn new(level: i32) -> Self {
         Zstd { level: level }
     }
 }
-
+#[cfg(feature="with-zstd")]
 struct SGReader<'a> {
     parts: &'a [ArcRef<Vec<u8>, [u8]>],
     parts_i: usize,
     part_offset: usize,
 }
-
+#[cfg(feature="with-zstd")]
 impl<'a> SGReader<'a> {
     fn new(parts: &'a SGData) -> Self {
         SGReader {
@@ -197,7 +208,7 @@ impl<'a> SGReader<'a> {
         }
     }
 }
-
+#[cfg(feature="with-zstd")]
 impl<'a> io::Read for SGReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
@@ -219,7 +230,7 @@ impl<'a> io::Read for SGReader<'a> {
         }
     }
 }
-
+#[cfg(feature="with-zstd")]
 impl Compression for Zstd {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
