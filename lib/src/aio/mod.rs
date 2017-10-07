@@ -439,7 +439,6 @@ impl AsyncIOThread {
         sg: SGData,
         idempotent: bool,
     ) -> io::Result<()> {
-        self.time_reporter.start("processing write");
         // check `in_progress` and add atomically
         // if not already there
         loop {
@@ -484,12 +483,7 @@ impl AsyncIOThread {
         trace!(self.log, "write"; "path" => %path.display());
 
         self.time_reporter.start("read");
-        let res = {
-            let _guard = self.pending_wait_and_insert(&path);
-            self.backend
-                .borrow_mut()
-                .write(path.clone(), sg, idempotent)
-        };
+        let res = self.write_inner(path, sg, idempotent);
 
         if let Some(tx) = tx {
             self.time_reporter.start("write send response");
