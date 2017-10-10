@@ -12,8 +12,10 @@ use std::sync::mpsc;
 use walkdir::WalkDir;
 
 use super::{Backend, BackendInstance};
+use super::{Lock, Metadata};
 use config;
-use super::Metadata;
+
+impl Lock for fs::File {}
 
 pub(crate) fn lock_file_path(path: &Path) -> PathBuf {
     path.join(config::LOCK_FILE)
@@ -31,32 +33,32 @@ struct LocalInstance {
 }
 
 impl Backend for Local {
-    fn new_instance(&self) -> Box<BackendInstance> {
-        Box::new(LocalInstance {
+    fn new_instance(&self) -> io::Result<Box<BackendInstance>> {
+        Ok(Box::new(LocalInstance {
             path: self.path.clone(),
             rand_ext: rand::thread_rng()
                 .gen_ascii_chars()
                 .take(20)
                 .collect::<String>(),
-        })
+        }))
     }
 
-    fn lock_exclusive(&self) -> io::Result<fs::File> {
+    fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
         file.lock_exclusive()?;
 
-        Ok(file)
+        Ok(Box::new(file))
     }
 
-    fn lock_shared(&self) -> io::Result<fs::File> {
+    fn lock_shared(&self) -> io::Result<Box<Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
         file.lock_shared()?;
 
-        Ok(file)
+        Ok(Box::new(file))
     }
 }
 

@@ -46,6 +46,10 @@ digest = "0.6"
 bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 url = "*"
+backblaze-b2 = "*"
+hyper = "*"
+hyper-native-tls = "*"
+serde_json = "*"
 
 bzip2 = { version = "0.3.2", optional = true }
 flate2 = { version = "0.2", optional = true }

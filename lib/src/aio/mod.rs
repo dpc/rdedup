@@ -10,7 +10,7 @@ use slog;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std;
-use std::{fs, io, thread};
+use std::{io, thread};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -20,11 +20,16 @@ use std::cell::RefCell;
 
 mod local;
 pub(crate) use self::local::Local;
+mod b2;
+pub(crate) use self::b2::B2;
+
+
+pub(crate) trait Lock {}
 
 pub(crate) trait Backend: Send + Sync {
-    fn lock_exclusive(&self) -> io::Result<fs::File>;
-    fn lock_shared(&self) -> io::Result<fs::File>;
-    fn new_instance(&self) -> Box<BackendInstance>;
+    fn lock_exclusive(&self) -> io::Result<Box<Lock>>;
+    fn lock_shared(&self) -> io::Result<Box<Lock>>;
+    fn new_instance(&self) -> io::Result<Box<BackendInstance>>;
 }
 
 pub(crate) trait BackendInstance: Send {
@@ -99,27 +104,33 @@ impl AsyncIO {
     pub(crate) fn new(
         backend: Box<Backend + Send + Sync>,
         log: Logger,
-    ) -> Self {
+    ) -> io::Result<Self> {
         let thread_num = 4 * num_cpus::get();
         let (tx, rx) = two_lock_queue::channel(thread_num);
 
         let shared = AsyncIOThreadShared::new();
 
-        let join = (0..thread_num)
+        let mut spawn_res: Vec<io::Result<_>> = (0..thread_num)
             .map(|_| {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 let log = log.clone();
-                let backend = backend.new_instance();
-                thread::spawn(move || {
+                let backend = backend.new_instance()?;
+                Ok(thread::spawn(move || {
                     let mut thread =
                         AsyncIOThread::new(shared, rx, backend, log);
                     thread.run();
-                })
+                }))
             })
             .collect();
 
         drop(rx);
+
+        let mut join = vec![];
+
+        for r in spawn_res.drain(..) {
+            join.push(r?);
+        }
 
         let shared = AsyncIOShared {
             join: join,
@@ -128,18 +139,18 @@ impl AsyncIO {
             backend: backend,
         };
 
-        AsyncIO {
+        Ok(AsyncIO {
             shared: Arc::new(shared),
             tx: AutoOption::new(tx),
-        }
+        })
     }
 
 
-    pub(crate) fn lock_exclusive(&self) -> io::Result<fs::File> {
+    pub(crate) fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
         self.shared.backend.lock_exclusive()
     }
 
-    pub(crate) fn lock_shared(&self) -> io::Result<fs::File> {
+    pub(crate) fn lock_shared(&self) -> io::Result<Box<Lock>> {
         self.shared.backend.lock_shared()
     }
 
@@ -615,14 +626,40 @@ impl AsyncIOThread {
 }
 
 // ```norust
-// let s = "backblaze:myid#bucket";
 // let s = "file:/foo/bar";
+// let s = "b2:myid#bucket";
 // ```
 pub(crate) fn backend_from_url(
     u: &Url,
 ) -> io::Result<Box<Backend + Send + Sync>> {
     if u.scheme() == "file" {
         return Ok(Box::new(Local::new(PathBuf::from(u.path()))));
+    } else if u.scheme() == "b2" {
+        let id = u.path();
+        let bucket = u.fragment().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bucket in the url missing",
+            )
+        })?;
+        let key = std::env::var_os("RDEDUP_B2_KEY")
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "RDEDUP_B2_KEY environment variable not found",
+                )
+            })?
+            .into_string()
+            .map_err(|os_string| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "b2 key is not utf8 string: {}",
+                        os_string.to_string_lossy()
+                    ),
+                )
+            })?;
+        return Ok(Box::new(B2::new(id, bucket, &key)));
     }
 
     return Err(io::Error::new(

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate backblaze_b2;
 extern crate base64;
 extern crate blake2;
 extern crate bytevec;
@@ -8,6 +9,8 @@ extern crate dangerous_option;
 extern crate digest;
 extern crate fs2;
 extern crate hex;
+extern crate hyper;
+extern crate hyper_native_tls;
 extern crate num_cpus;
 extern crate owning_ref;
 extern crate rand;
@@ -15,6 +18,7 @@ extern crate rdedup_cdc as rollsum;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 extern crate serde_yaml;
 extern crate sgdata;
 extern crate sha2;
@@ -252,7 +256,7 @@ impl Repo {
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
         let backend = aio::backend_from_url(url)?;
-        let aio = aio::AsyncIO::new(backend, log.clone());
+        let aio = aio::AsyncIO::new(backend, log.clone())?;
 
         Repo::ensure_repo_empty_or_new(&aio)?;
         let config = config::Repo::new_from_settings(passphrase, settings)?;
@@ -279,7 +283,7 @@ impl Repo {
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
         let backend = aio::backend_from_url(url)?;
-        let aio = aio::AsyncIO::new(backend, log.clone());
+        let aio = aio::AsyncIO::new(backend, log.clone())?;
 
         let config = config::Repo::read(&aio)?;
 
@@ -813,7 +817,7 @@ impl Repo {
             mpsc::sync_channel(self.write_cpu_thread_num());
 
         let backend = backend_from_url(&self.url)?;
-        let aio = aio::AsyncIO::new(backend, self.log.clone());
+        let aio = aio::AsyncIO::new(backend, self.log.clone())?;
 
         let stats = aio.stats();
 
