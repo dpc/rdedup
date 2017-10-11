@@ -1,6 +1,7 @@
 //! Config: options de/serialized to files
-//! from `settings`
+//! from `settings`.
 
+// {{{ use and mod
 use {serde_yaml, PassphraseFn, SGData};
 
 use aio;
@@ -22,6 +23,7 @@ mod encryption;
 pub(crate) use self::chunking::*;
 pub(crate) use self::compression::*;
 pub(crate) use self::encryption::*;
+// }}}
 
 pub const REPO_VERSION_LOWEST: u32 = 3;
 pub const REPO_VERSION_CURRENT: u32 = 3;
@@ -30,7 +32,7 @@ pub const DATA_SUBDIR: &'static str = "chunk";
 pub const LOCK_FILE: &'static str = ".lock";
 pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
-
+// {{{ PWHash
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 /// `PWHash` is algorithm used to derive the secret key from
@@ -69,7 +71,9 @@ impl pwhash::PWHash for PWHash {
         }
     }
 }
+// }}}
 
+// {{{ Hashing
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum Hashing {
@@ -93,6 +97,9 @@ impl Hashing {
         }
     }
 }
+// }}}
+
+// {{{ Nesting
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct Nesting(pub u8);
 impl Default for Nesting {
@@ -122,7 +129,9 @@ impl Nesting {
         dir.join(&hex_digest)
     }
 }
+// }}}
 
+// {{{ Repo
 /// Rdedup repository configuration
 ///
 /// This datastructure is used for serialization and deserialization
@@ -230,3 +239,5 @@ fn check_version(version_int: u32) -> io::Result<()> {
 
     Ok(())
 }
+// }}}
+// vim: foldmethod=marker foldmarker={{{,}}}

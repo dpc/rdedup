@@ -108,6 +108,7 @@ const DIGEST_SIZE: usize = 32;
 type PassphraseFn<'a> = &'a Fn() -> io::Result<String>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// Data type (index/data)
 pub enum DataType {
     Index,
     Data,
@@ -146,6 +147,7 @@ pub struct DecryptHandle {
 pub struct EncryptHandle {
     encrypter: ArcEncrypter,
 }
+
 // {{{ Repo
 /// Rdedup repository handle
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-
+// {{{ use and mod
 use rand;
 use rand::Rng;
 use INGRESS_BUFFER_SIZE;
@@ -14,6 +14,7 @@ use walkdir::WalkDir;
 use super::{Backend, BackendThread};
 use super::{Lock, Metadata};
 use config;
+// }}}
 
 impl Lock for fs::File {}
 
@@ -211,3 +212,5 @@ impl BackendThread for LocalThread {
         }
     }
 }
+
+// vim: foldmethod=marker foldmarker={{{,}}}

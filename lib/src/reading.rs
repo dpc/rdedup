@@ -1,3 +1,5 @@
+//! Primitives used for reading the chunked data stored in the `Repo`
+// {{{ use and mod
 use std;
 use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
 use VerifyResults;
@@ -9,6 +11,7 @@ use {ArcCompression, ArcDecrypter};
 use slog::{FnValue, Logger};
 use hex::ToHex;
 use Generation;
+// }}}
 
 /// Translates index stream into data stream
 ///
@@ -558,3 +561,4 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
         Ok(())
     }
 }
+// vim: foldmethod=marker foldmarker={{{,}}}
