@@ -13,7 +13,7 @@ use std;
 
 use aio;
 
-use super::{Backend, BackendInstance};
+use super::{Backend, BackendThread};
 use super::Metadata;
 
 use hyper::Client;
@@ -52,7 +52,7 @@ struct Auth {
     upload_auth: UploadAuthorization,
 }
 
-struct B2Instance {
+struct B2Thread {
     cred: B2Credentials,
     auth: RefCell<Option<Auth>>,
     client: Client,
@@ -60,7 +60,7 @@ struct B2Instance {
 }
 
 /// Retry operations that can fail due to network/service issues
-fn retry<F, R>(instance: Option<&B2Instance>, f: F) -> io::Result<R>
+fn retry<F, R>(instance: Option<&B2Thread>, f: F) -> io::Result<R>
 where
     F: Fn() -> Result<R, B2Error>,
 {
@@ -104,7 +104,7 @@ where
     }
 }
 
-impl B2Instance {
+impl B2Thread {
     fn reauth(&self) -> io::Result<()> {
         let auth = retry(None, || {
             let auth = self.cred.authorize(&self.client)?;
@@ -130,7 +130,7 @@ impl B2Instance {
         let client = Client::with_connector(connector);
 
 
-        let mut i = B2Instance {
+        let mut i = B2Thread {
             cred: cred.clone(),
             client: client,
             auth: RefCell::new(None),
@@ -144,9 +144,9 @@ impl B2Instance {
 }
 
 impl Backend for B2 {
-    fn new_instance(&self) -> io::Result<Box<BackendInstance>> {
+    fn new_thread(&self) -> io::Result<Box<BackendThread>> {
         Ok(Box::new(
-            B2Instance::new_from_cred(&self.cred, self.bucket.clone())?,
+            B2Thread::new_from_cred(&self.cred, self.bucket.clone())?,
         ))
     }
 
@@ -173,7 +173,7 @@ impl B2 {
     }
 }
 
-impl BackendInstance for B2Instance {
+impl BackendThread for B2Thread {
     fn rename(
         &mut self,
         src_path: PathBuf,

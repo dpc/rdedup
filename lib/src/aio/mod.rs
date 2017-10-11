@@ -1,5 +1,4 @@
-extern crate url;
-
+use url;
 use self::url::Url;
 
 use dangerous_option::DangerousOption as AutoOption;
@@ -23,47 +22,11 @@ pub(crate) use self::local::Local;
 mod b2;
 pub(crate) use self::b2::B2;
 
-
-pub(crate) trait Lock {}
-
-pub(crate) trait Backend: Send + Sync {
-    fn lock_exclusive(&self) -> io::Result<Box<Lock>>;
-    fn lock_shared(&self) -> io::Result<Box<Lock>>;
-    fn new_instance(&self) -> io::Result<Box<BackendInstance>>;
-}
-
-pub(crate) trait BackendInstance: Send {
-    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()>;
-
-    fn rename(
-        &mut self,
-        src_path: PathBuf,
-        dst_path: PathBuf,
-    ) -> io::Result<()>;
+mod backend;
+use self::backend::*;
 
 
-    fn write(
-        &mut self,
-        path: PathBuf,
-        sg: SGData,
-        idempotent: bool,
-    ) -> io::Result<()>;
-
-
-    fn read(&mut self, path: PathBuf) -> io::Result<SGData>;
-
-    fn remove(&mut self, path: PathBuf) -> io::Result<()>;
-
-    fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata>;
-    fn list(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>>;
-
-    fn list_recursively(
-        &mut self,
-        path: PathBuf,
-        tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
-    );
-}
-
+// {{{ Misc
 struct WriteArgs {
     path: PathBuf,
     data: SGData,
@@ -76,7 +39,35 @@ pub(crate) struct Metadata {
     is_file: bool,
 }
 
+/// A result of async io operation
+///
+/// It behaves a bit like a future/promise. It is happening
+/// in the background, and only calling `wait` will make sure
+/// the operations completed and return result.
+#[must_use]
+pub struct AsyncIOResult<T> {
+    rx: mpsc::Receiver<io::Result<T>>,
+}
+
+impl<T> AsyncIOResult<T> {
+    /// Block until result arrives
+    pub fn wait(self) -> io::Result<T> {
+        self.rx.recv().expect("No `AsyncIO` thread response")
+    }
+}
+
+
+#[derive(Clone, Debug)]
+pub struct WriteStats {
+    pub new_chunks: usize,
+    pub new_bytes: u64,
+}
+// }}}
+
+// {{{ Message
 /// Message sent to a worker pool
+///
+/// Each type of job
 enum Message {
     Write(WriteArgs),
     Read(PathBuf, mpsc::Sender<io::Result<SGData>>),
@@ -87,16 +78,18 @@ enum Message {
     RemoveDirAll(PathBuf, mpsc::Sender<io::Result<()>>),
     Rename(PathBuf, PathBuf, mpsc::Sender<io::Result<()>>),
 }
+// }}}
 
+// {{{ AsyncIO
 /// A handle to a async-io worker pool
 ///
-/// This object abstracts away file system asynchronous operations. In the
-/// future, it will be supplied/parametrized by an underlying logic,
-/// implementing
-/// different backends (filesystem, protocols to remote locations etc).
+/// This object abstracts away asynchronous operations on the backend.
 #[derive(Clone)]
 pub struct AsyncIO {
+    /// Data shared between threads of the pool.
     shared: Arc<AsyncIOShared>,
+    /// tx endpoind of mpmc queue used to send jobs
+    /// to the pool.
     tx: AutoOption<two_lock_queue::Sender<Message>>,
 }
 
@@ -115,7 +108,7 @@ impl AsyncIO {
                 let rx = rx.clone();
                 let shared = shared.clone();
                 let log = log.clone();
-                let backend = backend.new_instance()?;
+                let backend = backend.new_thread()?;
                 Ok(thread::spawn(move || {
                     let mut thread =
                         AsyncIOThread::new(shared, rx, backend, log);
@@ -292,8 +285,12 @@ impl Drop for AsyncIO {
         AutoOption::take_unchecked(&mut self.tx);
     }
 }
+// }}}
 
+// {{{ AsyncIOShared & internals
 /// Arc-ed shared `AsyncIO` data
+///
+/// Bunch of stuff shared between each thread of the worker pool
 pub struct AsyncIOShared {
     join: Vec<thread::JoinHandle<()>>,
     log: slog::Logger,
@@ -310,33 +307,11 @@ impl Drop for AsyncIOShared {
     }
 }
 
-/// A result of async io operation
-///
-/// It behaves a bit like a future/promise. It is happening
-/// in the background, and only calling `wait` will make sure
-/// the operations completed and return result.
-#[must_use]
-pub struct AsyncIOResult<T> {
-    rx: mpsc::Receiver<io::Result<T>>,
-}
-
-impl<T> AsyncIOResult<T> {
-    /// Block until result arrives
-    pub fn wait(self) -> io::Result<T> {
-        self.rx.recv().expect("No `AsyncIO` thread response")
-    }
-}
-
-
-#[derive(Clone, Debug)]
-pub struct WriteStats {
-    pub new_chunks: usize,
-    pub new_bytes: u64,
-}
-
-
 struct AsyncIOSharedInner {
+    /// Keeps tracks of `write` stats.
     write_stats: WriteStats,
+    /// PathBufs being currently processed by the pool.
+    /// Used to synchronize operations between each other.
     in_progress: HashSet<PathBuf>,
 }
 
@@ -371,15 +346,19 @@ impl AsyncIOThreadShared {
         sh.write_stats.clone()
     }
 }
+// }}}
 
+// {{{ AsyncIOThread
+/// A single thread in the worker pool.
 struct AsyncIOThread {
     shared: AsyncIOThreadShared,
     rx: two_lock_queue::Receiver<Message>,
     log: Logger,
     time_reporter: TimeReporter,
-    backend: RefCell<Box<BackendInstance>>,
+    backend: RefCell<Box<BackendThread>>,
 }
 
+/// Guard that removes entry from the pending paths on drop
 struct PendingGuard<'a, 'b>(&'a AsyncIOThread, &'b PathBuf);
 
 impl<'a, 'b> Drop for PendingGuard<'a, 'b> {
@@ -393,7 +372,7 @@ impl AsyncIOThread {
     fn new(
         shared: AsyncIOThreadShared,
         rx: two_lock_queue::Receiver<Message>,
-        backend: Box<BackendInstance>,
+        backend: Box<BackendThread>,
         log: Logger,
     ) -> Self {
         let t = TimeReporter::new_with_level(
@@ -624,7 +603,10 @@ impl AsyncIOThread {
         tx.send(res).expect("send failed")
     }
 }
+// }}}
 
+
+/// Convert URL to a backend instance
 // ```norust
 // let s = "file:/foo/bar";
 // let s = "b2:myid#bucket";
@@ -667,3 +649,5 @@ pub(crate) fn backend_from_url(
         format!("Unsupported scheme: {}", u.scheme()),
     ));
 }
+
+// vim: foldmethod=marker foldmarker={{{,}}}

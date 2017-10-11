@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use walkdir::WalkDir;
 
-use super::{Backend, BackendInstance};
+use super::{Backend, BackendThread};
 use super::{Lock, Metadata};
 use config;
 
@@ -27,14 +27,14 @@ pub(crate) struct Local {
 }
 
 #[derive(Debug)]
-struct LocalInstance {
+struct LocalThread {
     path: PathBuf,
     rand_ext: String,
 }
 
 impl Backend for Local {
-    fn new_instance(&self) -> io::Result<Box<BackendInstance>> {
-        Ok(Box::new(LocalInstance {
+    fn new_thread(&self) -> io::Result<Box<BackendThread>> {
+        Ok(Box::new(LocalThread {
             path: self.path.clone(),
             rand_ext: rand::thread_rng()
                 .gen_ascii_chars()
@@ -68,7 +68,7 @@ impl Local {
     }
 }
 
-impl BackendInstance for LocalInstance {
+impl BackendThread for LocalThread {
     fn rename(
         &mut self,
         src_path: PathBuf,

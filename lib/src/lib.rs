@@ -1,4 +1,6 @@
-#![allow(dead_code)]
+#![allow(unused)]
+
+// {{{ extern crate ...
 extern crate backblaze_b2;
 extern crate base64;
 extern crate blake2;
@@ -38,7 +40,9 @@ extern crate flate2;
 extern crate lzma;
 #[cfg(feature = "with-zstd")]
 extern crate zstd;
+// }}}
 
+// {{{ use and mod
 use url::Url;
 use sgdata::SGData;
 use slog::{FnValue, Level, Logger};
@@ -90,6 +94,7 @@ mod name;
 use self::name::*;
 
 use std::error::Error as ErrorError;
+// }}}
 
 type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
@@ -126,7 +131,7 @@ pub struct DuResults {
     pub bytes: u64,
 }
 
-/// Rdedup repository
+/// Rdedup repository handle
 #[derive(Clone)]
 pub struct Repo {
     url: Url,
@@ -141,11 +146,16 @@ pub struct Repo {
     aio: aio::AsyncIO,
 }
 
-/// A reading handle
+/// A decryption handle
+///
+/// Used as an argument to operations that decrypt data.
 pub struct DecryptHandle {
     decrypter: ArcDecrypter,
 }
 
+/// A encryption handle
+///
+/// Used as an argument to operations that encrypt data.
 pub struct EncryptHandle {
     encrypter: ArcEncrypter,
 }
@@ -163,6 +173,10 @@ impl Digest {
 #[derive(Copy, Clone)]
 struct DigestRef<'a>(&'a [u8]);
 
+
+/// An unique id representing some stored in the `Repo`
+///
+/// Holds `digest` as a reference
 struct DataAddress<'a> {
     // number of times the data index
     // was written (and then index of an index and so forth)
@@ -173,6 +187,9 @@ struct DataAddress<'a> {
 }
 
 #[derive(Clone)]
+/// An unique id representing some stored in the `Repo`
+///
+/// With owned `digest`
 struct OwnedDataAddress {
     // number of times the data index
     // was written (and then index of an index and so forth)
@@ -199,6 +216,7 @@ impl From<Name> for OwnedDataAddress {
         }
     }
 }
+
 /// Opaque wrapper over secret key
 pub struct SecretKey(box_::SecretKey);
 
@@ -870,3 +888,5 @@ impl Repo {
 
 #[cfg(test)]
 mod tests;
+
+// vim: foldmethod=marker foldmarker={{{,}}}
