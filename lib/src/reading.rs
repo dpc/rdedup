@@ -1,5 +1,5 @@
 use std;
-use {DataAddress, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
+use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
 use VerifyResults;
 use std::io;
 use std::cell::RefCell;
@@ -74,7 +74,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
                 read_context.read_recursively(ReadRequest::new(
                     data_type,
-                    DataAddress {
+                    DataAddressRef {
                         digest: DigestRef(digest),
                         index_level: 0,
                     },
@@ -88,7 +88,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
 
                 let res = read_context.read_recursively(ReadRequest::new(
                     data_type,
-                    DataAddress {
+                    DataAddressRef {
                         digest: digest_buf.as_digest_ref(),
                         index_level: 0,
                     },
@@ -117,7 +117,7 @@ impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
 /// Information specific to a given read operation
 /// of a data in the Repo
 pub(crate) struct ReadRequest<'a> {
-    data_address: DataAddress<'a>,
+    data_address: DataAddressRef<'a>,
     data_type: DataType,
     writer: Option<&'a mut Write>,
     log: Logger,
@@ -126,7 +126,7 @@ pub(crate) struct ReadRequest<'a> {
 impl<'a> ReadRequest<'a> {
     pub(crate) fn new(
         data_type: DataType,
-        data_address: DataAddress<'a>,
+        data_address: DataAddressRef<'a>,
         writer: Option<&'a mut Write>,
         log: Logger,
     ) -> Self {
@@ -164,7 +164,7 @@ impl<'a> ReadContext<'a> {
             req.log.clone(),
         );
 
-        let da = DataAddress {
+        let da = DataAddressRef {
             digest: req.data_address.digest,
             index_level: req.data_address.index_level - 1,
         };

@@ -310,7 +310,7 @@ impl Repo {
         process_tx: two_lock_queue::Sender<chunk_processor::Message>,
         aio: aio::AsyncIO,
         data_type: DataType,
-    ) -> io::Result<OwnedDataAddress> {
+    ) -> io::Result<DataAddress> {
         // Note: This channel is intentionally unbounded
         // The processing loop runs in sort of a loop (actually more of a
         // recursive spiral). Unless this channel is unbounded it's possible
@@ -390,7 +390,7 @@ impl Repo {
                 address.index_level += 1;
                 Ok(address)
             } else {
-                Ok(OwnedDataAddress {
+                Ok(DataAddress {
                     index_level: 0,
                     digest: first_digest,
                 })
@@ -512,7 +512,7 @@ impl Repo {
               "name" => name_str,
               "gen" => FnValue(|_| cur_gen.to_string()));
         let name = Name::load_from_any(name_str, generations, &self.aio)?;
-        let data_address: OwnedDataAddress = name.into();
+        let data_address: DataAddress = name.into();
 
         let accessor = GenerationUpdateChunkAccessor::new(
             self,
@@ -537,7 +537,7 @@ impl Repo {
 
     fn reachable_recursively_insert(
         &self,
-        da: DataAddress,
+        da: DataAddressRef,
         reachable_digests: &mut HashSet<Vec<u8>>,
         generations: Vec<Generation>,
     ) -> Result<()> {
@@ -563,7 +563,7 @@ impl Repo {
         for name_str in &all_names {
             match Name::load_from_any(name_str, &generations, &self.aio) {
                 Ok(name) => {
-                    let data_address: OwnedDataAddress = name.into();
+                    let data_address: DataAddress = name.into();
                     info!(self.log, "processing"; "name" => name_str);
                     self.reachable_recursively_insert(
                         data_address.as_ref(),
@@ -660,7 +660,7 @@ impl Repo {
         let generations = self.read_generations()?;
 
         let name = Name::load_from_any(name_str, &generations, &self.aio)?;
-        let data_address: OwnedDataAddress = name.into();
+        let data_address: DataAddress = name.into();
 
 
         let accessor = self.get_chunk_accessor(
@@ -682,7 +682,7 @@ impl Repo {
 
         let generations = self.read_generations()?;
         let name = Name::load_from_any(name_str, &generations, &self.aio)?;
-        let data_address: OwnedDataAddress = name.into();
+        let data_address: DataAddress = name.into();
 
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
@@ -716,7 +716,7 @@ impl Repo {
         let generations = self.read_generations()?;
 
         let name = Name::load_from_any(name_str, &generations, &self.aio)?;
-        let data_address: OwnedDataAddress = name.into();
+        let data_address: DataAddress = name.into();
 
 
         let mut counter = CounterWriter::new();

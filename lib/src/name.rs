@@ -5,7 +5,7 @@ use serde_yaml;
 use SGData;
 use util::*;
 use DIGEST_SIZE;
-use {DataAddress, Generation, OwnedDataAddress};
+use {DataAddress, DataAddressRef, Generation};
 
 pub(crate) const NAME_SUBDIR: &'static str = "name";
 
@@ -192,8 +192,8 @@ impl Name {
     }
 }
 
-impl<'a> From<DataAddress<'a>> for Name {
-    fn from(da: DataAddress) -> Self {
+impl<'a> From<DataAddressRef<'a>> for Name {
+    fn from(da: DataAddressRef) -> Self {
         Name {
             digest: da.digest.0.into(),
             index_level: da.index_level,
@@ -201,8 +201,8 @@ impl<'a> From<DataAddress<'a>> for Name {
     }
 }
 
-impl From<OwnedDataAddress> for Name {
-    fn from(da: OwnedDataAddress) -> Self {
+impl From<DataAddress> for Name {
+    fn from(da: DataAddress) -> Self {
         Name {
             digest: da.digest.0,
             index_level: da.index_level,
