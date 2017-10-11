@@ -147,24 +147,6 @@ pub struct DecryptHandle {
 pub struct EncryptHandle {
     encrypter: ArcEncrypter,
 }
-
-
-#[derive(Clone)]
-struct Digest(Vec<u8>);
-
-impl Digest {
-    fn as_digest_ref(&self) -> DigestRef {
-        DigestRef(self.0.as_slice())
-    }
-}
-
-#[derive(Copy, Clone)]
-struct DigestRef<'a>(&'a [u8]);
-
-
-/// Opaque wrapper over secret key
-struct SecretKey(box_::SecretKey);
-
 // {{{ Repo
 /// Rdedup repository handle
 #[derive(Clone)]
