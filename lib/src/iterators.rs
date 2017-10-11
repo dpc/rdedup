@@ -20,6 +20,7 @@ pub struct StoredChunks {
 }
 
 impl StoredChunks {
+    #[allow(dead_code)] // tests
     pub fn new(
         aio: &aio::AsyncIO,
         rel_path: PathBuf,

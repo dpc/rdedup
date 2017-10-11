@@ -35,8 +35,8 @@ struct WriteArgs {
 }
 
 pub(crate) struct Metadata {
-    len: u64,
-    is_file: bool,
+    _len: u64,
+    _is_file: bool,
 }
 
 /// A result of async io operation
@@ -159,6 +159,8 @@ impl AsyncIO {
         AsyncIOResult { rx: rx }
     }
 
+    // TODO: No need for it anymore?
+    #[allow(dead_code)]
     pub fn list_recursively(
         &self,
         path: PathBuf,
@@ -190,6 +192,7 @@ impl AsyncIO {
         AsyncIOResult { rx: rx }
     }
 
+    // TODO: No need for it anymore
     #[allow(dead_code)]
     pub fn write_idempotent(
         &self,
@@ -210,6 +213,7 @@ impl AsyncIO {
 
     /// Will panic the worker thread if fails, but does not require
     /// managing the result
+    // TODO: No need for it anymore
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
         self.tx

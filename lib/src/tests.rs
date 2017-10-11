@@ -365,17 +365,6 @@ fn test_stored_chunks_iter() {
     );
     assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
 
-    // Insert garbage file into chunks folder
-    // let garbage_file_path = repo.path().join("chunk/garbage.data");
-    // {
-    // let mut f = fs::File::create(&garbage_file_path).unwrap();
-    // f.write_all(&data).unwrap();
-    // }
-    // chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    // assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
-    //
-    // fs::remove_file(&garbage_file_path).unwrap();
-
     // Add a second name to the repo and compare chunks
     let data2 = rand_data(1024 * 1024);
     repo.write("data2", &mut io::Cursor::new(&data2), &enc_handle)

@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 // {{{ extern crate ...
 extern crate backblaze_b2;
 extern crate base64;
@@ -54,6 +52,7 @@ use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
+
 
 mod iterators;
 
@@ -500,7 +499,6 @@ impl Repo {
             self,
             Arc::clone(&self.compression),
             generations.to_vec(),
-            cur_gen,
         );
         {
             let traverser = ReadContext::new(&accessor);
@@ -538,6 +536,7 @@ impl Repo {
     }
 
     /// Return all reachable chunks
+    #[allow(dead_code)] // tests
     fn list_reachable_chunks(&self) -> Result<HashSet<Vec<u8>>> {
         let generations = self.read_generations()?;
         let mut reachable_digests = HashSet::new();

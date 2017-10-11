@@ -475,9 +475,6 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
 /// to the latest generation
 pub(crate) struct GenerationUpdateChunkAccessor<'a> {
     raw: DefaultChunkAccessor<'a>,
-    accessed: RefCell<HashSet<Vec<u8>>>,
-    errors: RefCell<Vec<(Vec<u8>, Error)>>,
-    cur_generation: Generation,
 }
 
 impl<'a> GenerationUpdateChunkAccessor<'a> {
@@ -485,7 +482,6 @@ impl<'a> GenerationUpdateChunkAccessor<'a> {
         repo: &'a Repo,
         compression: ArcCompression,
         generations: Vec<Generation>,
-        cur_generation: Generation,
     ) -> Self {
         GenerationUpdateChunkAccessor {
             raw: DefaultChunkAccessor::new(
@@ -494,18 +490,9 @@ impl<'a> GenerationUpdateChunkAccessor<'a> {
                 compression,
                 generations,
             ),
-            accessed: RefCell::new(HashSet::new()),
-            errors: RefCell::new(Vec::new()),
-            cur_generation: cur_generation,
         }
     }
 
-    pub(crate) fn get_results(self) -> VerifyResults {
-        VerifyResults {
-            scanned: self.accessed.borrow().len(),
-            errors: self.errors.into_inner(),
-        }
-    }
 }
 
 impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {

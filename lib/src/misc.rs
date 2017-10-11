@@ -1,6 +1,5 @@
 // {{{ use
 use Name;
-use sodiumoxide::crypto::{self, box_, secretbox};
 // }}}
 
 // {{{ DataAddress & DataAddressRef
@@ -61,8 +60,5 @@ impl Digest {
 #[derive(Copy, Clone)]
 pub(crate) struct DigestRef<'a>(pub(crate) &'a [u8]);
 // }}}
-
-/// Opaque wrapper over secret key
-struct SecretKey(box_::SecretKey);
 
 // vim: foldmethod=marker foldmarker={{{,}}}

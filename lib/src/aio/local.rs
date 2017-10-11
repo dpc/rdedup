@@ -153,8 +153,8 @@ impl BackendThread for LocalThread {
         let path = self.path.join(path);
         let md = fs::metadata(&path)?;
         Ok(Metadata {
-            len: md.len(),
-            is_file: md.is_file(),
+            _len: md.len(),
+            _is_file: md.is_file(),
         })
     }
 
