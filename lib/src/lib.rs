@@ -93,6 +93,9 @@ use self::generation::*;
 mod name;
 use self::name::*;
 
+mod misc;
+use self::misc::*;
+
 use std::error::Error as ErrorError;
 // }}}
 
@@ -131,21 +134,6 @@ pub struct DuResults {
     pub bytes: u64,
 }
 
-/// Rdedup repository handle
-#[derive(Clone)]
-pub struct Repo {
-    url: Url,
-    config: config::Repo,
-
-    compression: compression::ArcCompression,
-    hasher: hashing::ArcHasher,
-
-    /// Logger
-    log: slog::Logger,
-
-    aio: aio::AsyncIO,
-}
-
 /// A decryption handle
 ///
 /// Used as an argument to operations that decrypt data.
@@ -174,51 +162,24 @@ impl Digest {
 struct DigestRef<'a>(&'a [u8]);
 
 
-/// An unique id representing some stored in the `Repo`
-///
-/// Holds `digest` as a reference
-struct DataAddress<'a> {
-    // number of times the data index
-    // was written (and then index of an index and so forth)
-    // until it was reduced to a final digest
-    index_level: u32,
-    // final digest
-    digest: DigestRef<'a>,
-}
-
-#[derive(Clone)]
-/// An unique id representing some stored in the `Repo`
-///
-/// With owned `digest`
-struct OwnedDataAddress {
-    // number of times the data index
-    // was written (and then index of an index and so forth)
-    // until it was reduced to a final digest
-    index_level: u32,
-    // final digest
-    digest: Digest,
-}
-
-impl OwnedDataAddress {
-    fn as_ref(&self) -> DataAddress {
-        DataAddress {
-            index_level: self.index_level,
-            digest: self.digest.as_digest_ref(),
-        }
-    }
-}
-
-impl From<Name> for OwnedDataAddress {
-    fn from(name: Name) -> Self {
-        OwnedDataAddress {
-            index_level: name.index_level,
-            digest: Digest(name.digest),
-        }
-    }
-}
-
 /// Opaque wrapper over secret key
-pub struct SecretKey(box_::SecretKey);
+struct SecretKey(box_::SecretKey);
+
+// {{{ Repo
+/// Rdedup repository handle
+#[derive(Clone)]
+pub struct Repo {
+    url: Url,
+    config: config::Repo,
+
+    compression: compression::ArcCompression,
+    hasher: hashing::ArcHasher,
+
+    /// Logger
+    log: slog::Logger,
+
+    aio: aio::AsyncIO,
+}
 
 impl Repo {
     pub fn unlock_decrypt(
@@ -885,6 +846,7 @@ impl Repo {
         Ok(stats.get_stats())
     }
 }
+// }}}
 
 #[cfg(test)]
 mod tests;
