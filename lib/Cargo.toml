@@ -47,7 +47,7 @@ bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 url = "*"
 backblaze-b2 = "*"
-hyper = "*"
+hyper = "0.10"
 hyper-native-tls = "*"
 serde_json = "*"
 

@@ -1,5 +1,6 @@
 // {{{ use
-use {Digest, DigestRef, Name};
+use Name;
+use sodiumoxide::crypto::{self, box_, secretbox};
 // }}}
 
 // {{{ DataAddress & DataAddressRef
@@ -49,16 +50,16 @@ impl From<Name> for DataAddress {
 
 // {{{ Digest & DigestRef
 #[derive(Clone)]
-struct Digest(Vec<u8>);
+pub(crate) struct Digest(pub(crate) Vec<u8>);
 
 impl Digest {
-    fn as_digest_ref(&self) -> DigestRef {
+    pub(crate) fn as_digest_ref(&self) -> DigestRef {
         DigestRef(self.0.as_slice())
     }
 }
 
 #[derive(Copy, Clone)]
-struct DigestRef<'a>(&'a [u8]);
+pub(crate) struct DigestRef<'a>(pub(crate) &'a [u8]);
 // }}}
 
 /// Opaque wrapper over secret key
