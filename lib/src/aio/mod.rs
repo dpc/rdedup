@@ -1,3 +1,4 @@
+//! Asynchronous IO operations & backends
 use url;
 use self::url::Url;
 
