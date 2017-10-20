@@ -27,4 +27,12 @@ cd ..
 xdg-open target/doc/rdedup/index.html
 ```
 
+## Testing
 
+Most unit tests are implemented in `rdedup-lib`.
+
+`scripts/e2e-test.sh` and `scripts/e2e-test-full.sh` implement some
+basic data integrity tests, exercising all possible configuration options.
+
+`./tester` implements a simple program that drives `rdedup` with random
+operations on the repo.
