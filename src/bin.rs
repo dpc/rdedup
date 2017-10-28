@@ -121,7 +121,6 @@
 //! [ddar]: https://github.com/basak/ddar/
 //! [ddar-issue]: https://github.com/basak/ddar/issues/10
 
-#[macro_use]
 extern crate clap;
 extern crate hex;
 extern crate rdedup_lib as lib;
@@ -139,6 +138,7 @@ use lib::settings;
 use hex::ToHex;
 use slog::Drain;
 use std::{env, io, process};
+use clap::{Arg, SubCommand};
 
 use std::str::FromStr;
 
@@ -320,84 +320,57 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
 }
 
 fn run() -> io::Result<()> {
-    let matches = clap_app!(
-        rdedup =>
-        (version: env!("CARGO_PKG_VERSION"))
-        (author: "Dawid Ciężarkiewicz <dpc@dpc.pw>")
-        (about: "Data deduplication toolkit")
-        (@arg REPO_DIR: -d --dir +takes_value "Path to rdedup repository. \
-         Override `RDEDUP_DIR` environment variable.")
-        (@arg REPO_URI : -u --repo +takes_value "Rdedup repository URI. \
-         Override `RDEDUP_URI` environment variable.")
-        (@arg VERBOSE: -v ... "Increase debugging level for general messages")
-        (@arg VERBOSE_TIMINGS: -t ... "Increase debugging level for timings")
-        (@subcommand init =>
-         (about: "Create a new repository")
-         (@arg PWHASH: --pwhash possible_values(&["strong", "interactive", "weak"])
-          +takes_value "Set pwhash strength. Default: strong")
-         (@arg CHUNKING: --chunking possible_values(&["bup", "gear", "fastcdc"])
-          +takes_value "Set chunking scheme. Default: gear")
-         (@arg CHUNK_SIZE: --("chunk-size") {validate_chunk_size}
-          +takes_value "Set average chunk size")
-         (@arg ENCRYPTION: --encryption possible_values(&["curve25519", "none"])
-          +takes_value "Set encryption scheme. Default: curve25519")
-         (@arg COMPRESSION : --compression possible_values(
-                 &["deflate", "xz2", "zstd", "bzip2", "none"]
-                 )
-          +takes_value "Set compression scheme. Default: deflate")
-         (@arg COMPRESSION_LEVEL : --("compression-level")
-          +takes_value "Set compression level where negative numbers mean \
-          \"faster\" and positive ones \"smaller\". Default: 0")
-         (@arg NESTING: --nesting {validate_nesting}
-          +takes_value "Set level of folder nesting. Default: 2")
-         (@arg HASHING: --hashing possible_values(&["sha256", "blake2b"])
-          +takes_value "Set hashing scheme. Default: blake2b")
-        )
-        (@subcommand store =>
-         (about: "Store data from repository")
-         (@arg NAME: +required "Name to store")
-        )
-        (@subcommand load =>
-         (about: "Load data from repository")
-         (@arg NAME:  +required "Name to load")
-        )
-        (@subcommand list =>
-         (visible_alias: "ls")
-         (about: "List names stored in the repository")
-        )
-        (@subcommand change_passphrase =>
-         (visible_alias: "chpasswd")
-         (about: "Change the passphrase protecting the encryption key (if any)")
-        )
-        (@subcommand remove =>
-         (visible_alias: "rm")
-         (about: "Remove name(s) stored in the repository")
-         (@arg NAME: +required ... "Names to remove")
-        )
-        (@subcommand gc =>
-         (about: "Garbage collect unreferenced chunks")
-         (@arg GRACE_TIME: --grace
-          +takes_value "Set grace time. Default: 1 day")
-        )
-        (@subcommand verify =>
-         (about: "Verify integrity of data stored in the repository")
-         (@arg NAME: +required ... "Names to verify")
-        )
-        (@subcommand du =>
-         (about: "Calculate disk usage of a give data stored in the repository")
-         (@arg NAME: +required ... "Names to check")
-        )
-
-        ).setting(clap::AppSettings::SubcommandRequiredElseHelp)
+    let matches = clap::App::new("rdedup")
+        .version(env!("CARGO_PKG_VERSION"))
+        .author("Dawid Ciężarkiewicz <dpc@dpc.pw>")
+        .about("Data deduplication toolkit")
+        .arg(Arg::with_name("REPO_DIR").short("d").long("dir").takes_value(true).value_name("PATH")
+             .help("Path to rdedup repository. Override `RDEDUP_DIR` environment variable"))
+        .arg(Arg::with_name("REPO_URI").short("u").long("repo").takes_value(true).value_name("URI").conflicts_with("REPO_DIR")
+             .help("Rdedup repository URI. Overrides the `RDEDUP_URI` environment variable"))
+        .arg(Arg::with_name("VERBOSE").short("v").multiple(true).help("Increase debugging level for general messages"))
+        .arg(Arg::with_name("VERBOSE_TIMINGS").short("t").multiple(true).help("Increase debugging level for timings"))
+        .subcommand(SubCommand::with_name("init").display_order(0)
+                    .about("Create a new repository")
+                    .arg(Arg::with_name("PWHASH").long("pwhash").takes_value(true).value_name("STRENGTH").possible_values(&["strong", "interactive", "weak"])
+                         .default_value("strong").help("Set pwhash strength"))
+                    .arg(Arg::with_name("CHUNKING").long("chunking").takes_value(true).value_name("SCHEME").possible_values(&["bup", "gear", "fastcdc"])
+                         .default_value("fastcdc").help("Set chunking scheme"))
+                    .arg(Arg::with_name("CHUNK_SIZE").long("chunk-size").takes_value(true).value_name("N").validator(validate_chunk_size)
+                         .default_value("128K").help("Set average chunk size"))
+                    .arg(Arg::with_name("ENCRYPTION").long("encryption").takes_value(true).value_name("SCHEME").possible_values(&["curve25519", "none"])
+                         .default_value("curve25519").help("Set encryption scheme"))
+                    .arg(Arg::with_name("COMPRESSION").long("compression").takes_value(true).value_name("SCHEME")
+                         .possible_values(&["deflate", "xz2", "zstd", "bzip2", "none"])
+                         .default_value("zstd").help("Set compression scheme"))
+                    .arg(Arg::with_name("COMPRESSION_LEVEL").long("compression-level").takes_value(true).value_name("N")
+                         .default_value("0").help("Set compression level where negative numbers mean \"faster\" and positive ones \
+                                                   \"smaller\""))
+                    .arg(Arg::with_name("NESTING").long("nesting").takes_value(true).value_name("N").validator(validate_nesting)
+                         .default_value("2").help("Set level of folder nesting"))
+                    .arg(Arg::with_name("HASHING").long("hashing").takes_value(true).value_name("SCHEME").possible_values(&["sha256", "blake2b"])
+                         .default_value("blake2b").help("Set hashing scheme")))
+        .subcommand(SubCommand::with_name("store").about("Store data to repository").display_order(1)
+                    .arg(Arg::with_name("NAME").required(true).help("Name to store to")))
+        .subcommand(SubCommand::with_name("load").about("Load data from repository").display_order(2)
+                    .arg(Arg::with_name("NAME").required(true).help("Name to load from")))
+        .subcommand(SubCommand::with_name("list").visible_alias("ls").about("List names stored in the repository").display_order(3))
+        .subcommand(SubCommand::with_name("remove").visible_alias("rm").about("Remove name(s) stored in the repository").display_order(4)
+                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to remove")))
+        .subcommand(SubCommand::with_name("change_passphrase").visible_alias("chpasswd")
+                    .about("Change the passphrase protecting the encryption key (if any)"))
+        .subcommand(SubCommand::with_name("gc").about("Garbage collect unreferenced chunks")
+                    .arg(Arg::with_name("GRACE_TIME").long("grace").takes_value(true).value_name("SECONDS").default_value("86400")
+                         .help("Set grace time in seconds")))
+        .subcommand(SubCommand::with_name("verify").about("Verify integrity of data stored in the repository")
+                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to verify")))
+        .subcommand(SubCommand::with_name("du").about("Calculate disk usage due to the data stored for a set of names")
+                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to check")))
+        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
 
     let url: Url = if let Some(loc) = matches.value_of_os("REPO_URI") {
-        if matches.value_of_os("REPO_DIR").is_some() {
-            eprintln!("Can't use both --dir or --repo at the same time");
-            process::exit(-1);
-        }
-
         let s = loc.to_os_string().into_string().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -449,7 +422,7 @@ fn run() -> io::Result<()> {
     match matches.subcommand() {
         ("init", Some(matches)) => {
             options.set_chunking(
-                matches.value_of("CHUNKING").unwrap_or("gear"),
+                matches.value_of("CHUNKING").unwrap(),
                 matches
                     .value_of("CHUNK_SIZE")
                     .map(|s| {
@@ -457,28 +430,12 @@ fn run() -> io::Result<()> {
                     })
                     .map(|u| u.trailing_zeros()),
             );
-            if let Some(encryption) = matches.value_of("ENCRYPTION") {
-                options.set_encryption(encryption);
-            }
-            if let Some(pwhash) = matches.value_of("PWHASH") {
-                options.settings.set_pwhash(settings::PWHash::from(pwhash));
-            }
-            if let Some(compression) = matches.value_of("COMPRESSION") {
-                options.set_compression(compression);
-            }
-            if let Some(compression_level) =
-                matches.value_of("COMPRESSION_LEVEL")
-            {
-                options.settings.set_compression_level(
-                    i32::from_str(compression_level).unwrap(),
-                );
-            }
-            if let Some(nesting) = matches.value_of("NESTING") {
-                options.set_nesting(u8::from_str(nesting).unwrap());
-            }
-            if let Some(hashing) = matches.value_of("HASHING") {
-                options.set_hashing(hashing);
-            }
+            options.set_encryption(matches.value_of("ENCRYPTION").unwrap());
+            options.settings.set_pwhash(settings::PWHash::from(matches.value_of("PWHASH").unwrap()));
+            options.set_compression(matches.value_of("COMPRESSION").unwrap());
+            options.settings.set_compression_level(i32::from_str(matches.value_of("COMPRESSION_LEVEL").unwrap()).expect("invalid compression level"));
+            options.set_nesting(u8::from_str(matches.value_of("NESTING").unwrap()).unwrap());
+            options.set_hashing(matches.value_of("HASHING").unwrap());
             let _ = Repo::init(
                 &options.url,
                 &|| util::read_new_passphrase(),
@@ -524,12 +481,7 @@ fn run() -> io::Result<()> {
             }
         }
         ("gc", Some(matches)) => {
-            let grace_secs = if let Some(grace) = matches.value_of("GRACE_TIME")
-            {
-                u64::from_str(grace).unwrap()
-            } else {
-                60 * 60 * 24
-            };
+            let grace_secs = u64::from_str(matches.value_of("GRACE_TIME").unwrap()).expect("invalid grace time");
             let repo = Repo::open(&options.url, log)?;
 
             repo.gc(grace_secs)?;
