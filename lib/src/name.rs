@@ -81,8 +81,7 @@ impl Name {
     pub(crate) fn path(name: &str, gen: Generation) -> PathBuf {
         let mut path: PathBuf = gen.to_string().into();
         path.push(NAME_SUBDIR);
-        path.push(name);
-        path.set_extension("yml");
+        path.push(name.to_string() + ".yml");
         path
     }
 
