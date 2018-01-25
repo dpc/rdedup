@@ -1,6 +1,6 @@
 [package]
 name = "rdedup"
-version = "3.0.0-0.1.0"
+version = "3.0.0-0.2.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Data deduplication with compression and public key encryption. - binary"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
@@ -44,7 +44,7 @@ debug-assertions = false
 members = [ "tester" ]
 
 [dependencies]
-rdedup-lib = { version = "3.0.0-0.1.0", path = "lib"}
+rdedup-lib = { version = "3.0.0-0.2.0", path = "lib"}
 log = "0.3.6"
 hex = "0.2"
 clap = "2"
@@ -52,4 +52,4 @@ rpassword = "0.2.3"
 slog = { version = "2.0.10", features = ["max_level_trace", "release_max_level_trace"]}
 slog-term = "2"
 slog-async = "2"
-url = "*"
+url = "1"
