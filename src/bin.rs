@@ -512,6 +512,8 @@ fn run() -> io::Result<()> {
 }
 
 fn main() {
+    eprintln!("Warning! This is an unstable version of `rdedup`.");
+    eprintln!("Check github README to install last stable version.");
     if let Err(e) = run() {
         eprintln!("Error: {}", e);
         process::exit(-1);
