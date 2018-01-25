@@ -8,8 +8,10 @@ use chrono;
 use aio;
 use util::{as_rfc3339, from_rfc3339};
 use serde_yaml;
-use std::path::Path;
+use std::path::{PathBuf};
 use SGData;
+
+pub const CONFIG_YML_FILE: &'static str = "config.yml";
 
 /// Generation config, serialized in a file
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -129,6 +131,10 @@ impl Generation {
         }
     }
 
+    pub(crate) fn config_path(&self) -> PathBuf {
+        PathBuf::from(self.to_string()).join(CONFIG_YML_FILE)
+    }
+
     pub(crate) fn write(&self, aio: &aio::AsyncIO) -> io::Result<()> {
         let config = Config::new();
 
@@ -136,7 +142,7 @@ impl Generation {
             serde_yaml::to_string(&config).expect("yaml serialization failed");
 
         aio.write(
-            Path::new(&self.to_string()).join("config.yaml"),
+            self.config_path(),
             SGData::from_single(config_str.into_bytes()),
         ).wait()?;
 
@@ -144,7 +150,7 @@ impl Generation {
     }
 
     pub(crate) fn load_config(&self, aio: &aio::AsyncIO) -> io::Result<Config> {
-        let path = Path::new(&self.to_string()).join("config.yaml");
+        let path = self.config_path();
         let sg = aio.read(path).wait()?;
 
         let config_data = sg.to_linear_vec();

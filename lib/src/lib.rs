@@ -744,9 +744,19 @@ impl Repo {
             .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
             .filter(|&item| {
                 item != config::CONFIG_YML_FILE && item != config::LOCK_FILE
+                    && !item.ends_with(".yml")
             })
             .filter_map(|item| match Generation::try_from(item) {
-                Ok(gen) => Some(gen),
+                Ok(gen) => if self.aio.read_metadata(gen.config_path()).wait().is_ok() {
+                    Some(gen)
+                } else {
+                    warn!(
+                        self.log,
+                        "skipping dead generation: `{}` (config missing)",
+                        item,
+                    );
+                    None
+                },
                 Err(e) => {
                     warn!(
                         self.log,
