@@ -443,7 +443,18 @@ impl Repo {
         gen: Generation,
         min_age_secs: u64,
     ) -> io::Result<()> {
-        let gen_config = gen.load_config(&self.aio)?;
+        let gen_config = match gen.load_config(&self.aio) {
+            Ok(c) => c,
+            Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                info!(
+                    self.log,
+                    "Generation config file not found. Rerun GC later to finish";
+                    );
+
+                return Ok(());
+            },
+            Err(e) => return Err(e)
+        };
 
         if gen_config.created + chrono::Duration::seconds(min_age_secs as i64)
             > chrono::Utc::now()
@@ -476,6 +487,10 @@ impl Repo {
             || (),
         )?;
 
+        self.aio
+            .remove_dir_all(PathBuf::from(gen.to_string())
+                            .join(config::DATA_SUBDIR))
+            .wait()?;
         self.aio
             .remove_dir_all(PathBuf::from(gen.to_string()))
             .wait()?;
