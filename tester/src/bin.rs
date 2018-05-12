@@ -3,14 +3,14 @@ extern crate hex;
 extern crate rand;
 extern crate sha2;
 
-use std::process::{Command, Stdio};
-use std::io::Write;
-use std::default::Default;
-use std::collections::HashMap;
-use std::io;
-use rand::{thread_rng, Rng};
 use digest::{FixedOutput, Input};
 use hex::ToHex;
+use rand::{thread_rng, Rng};
+use std::collections::HashMap;
+use std::default::Default;
+use std::io;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 /// Generate data that has plenty of redundancy
@@ -48,7 +48,10 @@ impl ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::weak_rng()
+        .gen_iter()
+        .take(len)
+        .collect::<Vec<u8>>()
 }
 
 fn simple_digest(data: &[u8]) -> Vec<u8> {
@@ -74,20 +77,30 @@ fn run_rdedup_with(args: &[&str], input: Vec<u8>) -> std::process::Output {
         .spawn()
         .expect("failed to execute child");
 
-
     {
         // limited borrow of stdin
-        let stdin = child.stdin.as_mut().expect("failed to get stdin");
-        stdin.write_all(&input).expect("failed to write to stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("failed to get stdin");
+        stdin
+            .write_all(&input)
+            .expect("failed to write to stdin");
     }
 
-    let out = child.wait_with_output().expect("failed to wait on child");
+    let out = child
+        .wait_with_output()
+        .expect("failed to wait on child");
 
     if !out.status.success() {
         eprintln!("stdout:");
-        std::io::stderr().write_all(&out.stdout).unwrap();
+        std::io::stderr()
+            .write_all(&out.stdout)
+            .unwrap();
         eprintln!("stderr:");
-        std::io::stderr().write_all(&out.stderr).unwrap();
+        std::io::stderr()
+            .write_all(&out.stderr)
+            .unwrap();
     }
 
     assert!(out.status.success());
@@ -131,24 +144,26 @@ impl TestState {
             digest: simple_digest(&data).to_hex(),
             len: data.len(),
         };
-        eprintln!("Storing name: {} of size {}", name.digest, name.len);
+        eprintln!(
+            "Storing name: {} of size {}",
+            name.digest, name.len
+        );
         let _out = run_rdedup_with(&vec!["store", &name.digest], data);
         self.names.insert(name.digest.clone(), name);
 
         Ok(())
     }
 
-
     fn select_random_name(&self) -> NameStats {
-
-        let random_name = rand::sample(&mut thread_rng(), self.names.keys(), 1)[0];
+        let random_name =
+            rand::sample(&mut thread_rng(), self.names.keys(), 1)[0];
 
         self.names.get(random_name).unwrap().clone()
     }
 
     fn load_one(&mut self) -> io::Result<()> {
         if self.names.is_empty() {
-            return Ok(())
+            return Ok(());
         }
         let name = self.select_random_name();
 
@@ -163,7 +178,7 @@ impl TestState {
 
     fn verify_one(&mut self) -> io::Result<()> {
         if self.names.is_empty() {
-            return Ok(())
+            return Ok(());
         }
         let name = self.select_random_name();
 
@@ -173,11 +188,9 @@ impl TestState {
         Ok(())
     }
 
-
-
     fn rm_one(&mut self) -> io::Result<()> {
         if self.names.is_empty() {
-            return Ok(())
+            return Ok(());
         }
         let name = self.select_random_name();
 
@@ -188,11 +201,13 @@ impl TestState {
         Ok(())
     }
 
-
     fn gc(&mut self) -> io::Result<()> {
         eprintln!("GC");
         let grace = thread_rng().gen_range(0, 2000);
-        let _out = run_rdedup_with(&vec!["gc", "--grace", &grace.to_string()], vec![]);
+        let _out = run_rdedup_with(
+            &vec!["gc", "--grace", &grace.to_string()],
+            vec![],
+        );
         Ok(())
     }
 }
@@ -216,8 +231,8 @@ fn main() {
             test.rm_one().unwrap();
         }
 
-        match  thread_rng().gen_range(0, 6) {
-            0|1 => test.store_one().unwrap(),
+        match thread_rng().gen_range(0, 6) {
+            0 | 1 => test.store_one().unwrap(),
             2 => test.load_one().unwrap(),
             3 => test.rm_one().unwrap(),
             4 => test.verify_one().unwrap(),

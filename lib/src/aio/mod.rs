@@ -1,6 +1,6 @@
 //! Asynchronous IO operations & backends
-use url;
 use self::url::Url;
+use url;
 
 use dangerous_option::DangerousOption as AutoOption;
 
@@ -10,13 +10,13 @@ use slog;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std;
-use std::{io, thread};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::{io, thread};
 use two_lock_queue;
-use std::cell::RefCell;
 
 mod local;
 pub(crate) use self::local::Local;
@@ -25,7 +25,6 @@ pub(crate) use self::b2::B2;
 
 mod backend;
 use self::backend::*;
-
 
 // {{{ Misc
 struct WriteArgs {
@@ -53,10 +52,11 @@ pub struct AsyncIOResult<T> {
 impl<T> AsyncIOResult<T> {
     /// Block until result arrives
     pub fn wait(self) -> io::Result<T> {
-        self.rx.recv().expect("No `AsyncIO` thread response")
+        self.rx
+            .recv()
+            .expect("No `AsyncIO` thread response")
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct WriteStats {
@@ -138,7 +138,6 @@ impl AsyncIO {
             tx: AutoOption::new(tx),
         })
     }
-
 
     pub(crate) fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
         self.shared.backend.lock_exclusive()
@@ -307,7 +306,8 @@ impl Drop for AsyncIOShared {
     fn drop(&mut self) {
         trace!(self.log, "Waiting for all threads to finish");
         for join in self.join.drain(..) {
-            join.join().expect("AsyncIO worker thread panicked")
+            join.join()
+                .expect("AsyncIO worker thread panicked")
         }
     }
 }
@@ -518,7 +518,6 @@ impl AsyncIOThread {
         tx.send(res).expect("send failed")
     }
 
-
     fn read_metadata(
         &mut self,
         path: PathBuf,
@@ -529,7 +528,9 @@ impl AsyncIOThread {
         self.time_reporter.start("read-metadata");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
-            self.backend.borrow_mut().read_metadata(path.clone())
+            self.backend
+                .borrow_mut()
+                .read_metadata(path.clone())
         };
 
         self.time_reporter.start("read send response");
@@ -557,7 +558,9 @@ impl AsyncIOThread {
         trace!(self.log, "list"; "path" => %path.display());
         self.time_reporter.start("list");
 
-        self.backend.borrow_mut().list_recursively(path, tx)
+        self.backend
+            .borrow_mut()
+            .list_recursively(path, tx)
     }
 
     fn remove(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<()>>) {
@@ -571,7 +574,6 @@ impl AsyncIOThread {
         self.time_reporter.start("remove send response");
         tx.send(res).expect("send failed")
     }
-
 
     fn remove_dir_all(
         &mut self,
@@ -609,7 +611,6 @@ impl AsyncIOThread {
     }
 }
 // }}}
-
 
 /// Convert URL to a backend instance
 // ```norust

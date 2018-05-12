@@ -61,7 +61,10 @@ pub(crate) struct EnumerateU64<I> {
 
 impl<I> EnumerateU64<I> {
     pub(crate) fn new(i: I) -> Self {
-        Self { iter: i, count: 0 }
+        Self {
+            iter: i,
+            count: 0,
+        }
     }
 }
 

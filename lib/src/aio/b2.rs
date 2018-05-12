@@ -3,26 +3,26 @@
 use serde_json;
 
 use sgdata::SGData;
-use std::{fs, io};
+use std;
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::cell::RefCell;
-use std::borrow::BorrowMut;
-use std;
+use std::{fs, io};
 
 use aio;
 
-use super::{Backend, BackendThread};
 use super::Metadata;
+use super::{Backend, BackendThread};
 
-use hyper::Client;
-use hyper::net::HttpsConnector;
-use hyper_native_tls::NativeTlsClient;
 use backblaze_b2::raw::authorize::{B2Authorization, B2Credentials};
+use backblaze_b2::raw::files::FileNameListing;
 use backblaze_b2::raw::upload::UploadAuthorization;
 use backblaze_b2::B2Error;
-use backblaze_b2::raw::files::FileNameListing;
+use hyper::net::HttpsConnector;
+use hyper::Client;
+use hyper_native_tls::NativeTlsClient;
 
 use config;
 
@@ -39,7 +39,6 @@ impl Lock {
 }
 
 impl aio::Lock for Lock {}
-
 
 #[derive(Debug)]
 pub(crate) struct B2 {
@@ -80,8 +79,7 @@ where
                             io::ErrorKind::ConnectionAborted,
                             format!(
                                 "Gave up b2 operation after {} retries: {}",
-                                err_counter,
-                                e
+                                err_counter, e
                             ),
                         )
                     });
@@ -129,7 +127,6 @@ impl B2Thread {
         let connector = HttpsConnector::new(ssl);
         let client = Client::with_connector(connector);
 
-
         let mut i = B2Thread {
             cred: cred.clone(),
             client: client,
@@ -145,17 +142,22 @@ impl B2Thread {
 
 impl Backend for B2 {
     fn new_thread(&self) -> io::Result<Box<BackendThread>> {
-        Ok(Box::new(
-            B2Thread::new_from_cred(&self.cred, self.bucket.clone())?,
-        ))
+        Ok(Box::new(B2Thread::new_from_cred(
+            &self.cred,
+            self.bucket.clone(),
+        )?))
     }
 
     fn lock_exclusive(&self) -> io::Result<Box<aio::Lock>> {
-        Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
+        Ok(Box::new(Lock::new(PathBuf::from(
+            config::LOCK_FILE,
+        ))))
     }
 
     fn lock_shared(&self) -> io::Result<Box<aio::Lock>> {
-        Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
+        Ok(Box::new(Lock::new(PathBuf::from(
+            config::LOCK_FILE,
+        ))))
     }
 }
 
@@ -188,7 +190,6 @@ impl BackendThread for B2Thread {
         }
     }
 
-
     fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
         fs::remove_dir_all(&path)
     }
@@ -202,7 +203,6 @@ impl BackendThread for B2Thread {
         Ok(())
     }
 
-
     fn read(&mut self, path: PathBuf) -> io::Result<SGData> {
         Ok(SGData::empty())
     }
@@ -210,7 +210,6 @@ impl BackendThread for B2Thread {
     fn remove(&mut self, path: PathBuf) -> io::Result<()> {
         Ok(())
     }
-
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
         unimplemented!();
@@ -247,7 +246,6 @@ impl BackendThread for B2Thread {
             .collect();
         Ok(v)
     }
-
 
     fn list_recursively(
         &mut self,

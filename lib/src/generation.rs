@@ -1,14 +1,14 @@
-use std;
-use hex::{self, FromHex};
-use bytevec;
-use std::io;
-use rand::{self, Rng};
-use chrono::prelude::*;
-use chrono;
 use aio;
-use util::{as_rfc3339, from_rfc3339};
+use bytevec;
+use chrono;
+use chrono::prelude::*;
+use hex::{self, FromHex};
+use rand::{self, Rng};
 use serde_yaml;
-use std::path::{PathBuf};
+use std;
+use std::io;
+use std::path::PathBuf;
+use util::{as_rfc3339, from_rfc3339};
 use SGData;
 
 pub const CONFIG_YML_FILE: &'static str = "config.yml";

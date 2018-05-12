@@ -1,8 +1,6 @@
-
-
-use DIGEST_SIZE;
-use SGData;
 use blake2;
+use SGData;
+use DIGEST_SIZE;
 
 use digest::FixedOutput;
 use digest::Input;
@@ -46,7 +44,6 @@ impl Hasher for Sha256 {
 
 pub struct Blake2b;
 
-
 impl Hasher for Blake2b {
     fn calculate_digest(&self, sg: &SGData) -> Vec<u8> {
         let mut blake2 = blake2::Blake2b::default();
@@ -60,7 +57,6 @@ impl Hasher for Blake2b {
 
         vec_result
     }
-
 
     fn calculate_digest_simple(&self, data: &[u8]) -> Vec<u8> {
         let mut blake2 = blake2::Blake2b::default();

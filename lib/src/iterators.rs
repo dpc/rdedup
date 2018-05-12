@@ -1,5 +1,3 @@
-
-
 use aio;
 use hex::FromHex;
 

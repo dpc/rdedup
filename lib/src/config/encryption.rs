@@ -1,7 +1,7 @@
-use {config, encryption};
 use std::io;
 use std::sync::Arc;
 use PassphraseFn;
+use {config, encryption};
 
 /// Types of supported encryption
 #[derive(Serialize, Deserialize, Clone)]

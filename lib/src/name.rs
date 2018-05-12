@@ -1,9 +1,9 @@
-use std::io;
 use aio;
-use std::path::PathBuf;
 use serde_yaml;
-use SGData;
+use std::io;
+use std::path::PathBuf;
 use util::*;
+use SGData;
 use DIGEST_SIZE;
 use {DataAddress, DataAddressRef, Generation};
 
@@ -96,16 +96,14 @@ impl Name {
             || vec![],
         )?;
 
-        Ok(
-            list.iter()
-                .map(|e| {
-                    e.file_stem()
-                        .expect(&format!("malformed name: {:?}", e))
-                        .to_string_lossy()
-                        .to_string()
-                })
-                .collect(),
-        )
+        Ok(list.iter()
+            .map(|e| {
+                e.file_stem()
+                    .expect(&format!("malformed name: {:?}", e))
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect())
     }
 
     pub fn list_all(
@@ -139,8 +137,10 @@ impl Name {
             ));
         }
 
-        aio.write(path, SGData::from_single(serialized_str.into_bytes()))
-            .wait()?;
+        aio.write(
+            path,
+            SGData::from_single(serialized_str.into_bytes()),
+        ).wait()?;
         Ok(())
     }
 
@@ -165,7 +165,10 @@ impl Name {
         if name.digest.len() != DIGEST_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("parsed digest has wrong size: {}", name.digest.len()),
+                format!(
+                    "parsed digest has wrong size: {}",
+                    name.digest.len()
+                ),
             ));
         }
 

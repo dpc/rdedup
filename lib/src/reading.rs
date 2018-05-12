@@ -1,16 +1,16 @@
 //! Primitives used for reading the chunked data stored in the `Repo`
 // {{{ use and mod
+use hex::ToHex;
+use slog::{FnValue, Logger};
 use std;
-use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
-use VerifyResults;
-use std::io;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::io;
 use std::io::Write;
-use {ArcCompression, ArcDecrypter};
-use slog::{FnValue, Logger};
-use hex::ToHex;
 use Generation;
+use VerifyResults;
+use {ArcCompression, ArcDecrypter};
+use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
 // }}}
 
 /// Translates index stream into data stream
@@ -152,7 +152,9 @@ pub(crate) struct ReadContext<'a> {
 
 impl<'a> ReadContext<'a> {
     pub(crate) fn new(accessor: &'a ChunkAccessor) -> Self {
-        ReadContext { accessor: accessor }
+        ReadContext {
+            accessor: accessor,
+        }
     }
 
     fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
@@ -208,7 +210,6 @@ impl<'a> ReadContext<'a> {
     }
 }
 
-
 /// Abstraction over accessing chunks stored in the repository
 pub(crate) trait ChunkAccessor {
     fn repo(&self) -> &Repo;
@@ -220,7 +221,6 @@ pub(crate) trait ChunkAccessor {
         data_type: DataType,
         writer: &mut Write,
     ) -> io::Result<()>;
-
 
     fn touch(&self, _digest: DigestRef) -> io::Result<()>;
 }
@@ -245,7 +245,10 @@ impl<'a> DefaultChunkAccessor<'a> {
             repo: repo,
             decrypter: decrypter,
             compression: compression,
-            gen_strings: generations.iter().map(|g| g.to_string()).collect(),
+            gen_strings: generations
+                .iter()
+                .map(|g| g.to_string())
+                .collect(),
         }
     }
 }
@@ -266,7 +269,8 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         let mut data_gen_str = None;
 
         for gen_str in self.gen_strings.iter().rev() {
-            let path = self.repo.chunk_rel_path_by_digest(digest, gen_str);
+            let path = self.repo
+                .chunk_rel_path_by_digest(digest, gen_str);
             match self.repo.aio.read(path).wait() {
                 Ok(d) => {
                     data = Some(d);
@@ -287,10 +291,10 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         let data_gen_str = data_gen_str.unwrap();
 
         if cur_gen_str != data_gen_str {
-            let data_gen_path =
-                self.repo.chunk_rel_path_by_digest(digest, data_gen_str);
-            let cur_gen_path =
-                self.repo.chunk_rel_path_by_digest(digest, cur_gen_str);
+            let data_gen_path = self.repo
+                .chunk_rel_path_by_digest(digest, data_gen_str);
+            let cur_gen_path = self.repo
+                .chunk_rel_path_by_digest(digest, cur_gen_str);
 
             // `rename` is best effort
             //
@@ -310,7 +314,6 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
                 }
             }
         }
-
 
         let data = data.unwrap();
         let data = if data_type.should_encrypt() {
@@ -346,7 +349,6 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
             Ok(())
         }
     }
-
 
     fn touch(&self, _digest: DigestRef) -> io::Result<()> {
         Ok(())
@@ -388,7 +390,9 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
     }
 
     fn touch(&self, digest: DigestRef) -> io::Result<()> {
-        self.accessed.borrow_mut().insert(digest.0.into());
+        self.accessed
+            .borrow_mut()
+            .insert(digest.0.into());
         Ok(())
     }
 
@@ -399,7 +403,8 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         writer: &mut Write,
     ) -> io::Result<()> {
         self.touch(digest)?;
-        self.raw.read_chunk_into(digest, data_type, writer)
+        self.raw
+            .read_chunk_into(digest, data_type, writer)
     }
 }
 
@@ -458,7 +463,8 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
             }
             accessed.insert(digest.0.into());
         }
-        let res = self.raw.read_chunk_into(digest, data_type, writer);
+        let res = self.raw
+            .read_chunk_into(digest, data_type, writer);
 
         if res.is_err() {
             self.errors
@@ -472,7 +478,6 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         self.raw.touch(digest)
     }
 }
-
 
 /// `ChunkAccessor` that update accessed chunks
 /// to the latest generation
@@ -495,7 +500,6 @@ impl<'a> GenerationUpdateChunkAccessor<'a> {
             ),
         }
     }
-
 }
 
 impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
@@ -509,7 +513,8 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
         data_type: DataType,
         writer: &mut Write,
     ) -> io::Result<()> {
-        self.raw.read_chunk_into(digest, data_type, writer)
+        self.raw
+            .read_chunk_into(digest, data_type, writer)
     }
 
     fn touch(&self, digest: DigestRef) -> io::Result<()> {
@@ -517,7 +522,9 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
         let mut data_gen_str = None;
 
         for gen_str in self.raw.gen_strings.iter().rev() {
-            let path = self.raw.repo.chunk_rel_path_by_digest(digest, gen_str);
+            let path = self.raw
+                .repo
+                .chunk_rel_path_by_digest(digest, gen_str);
             match self.raw.repo.aio.read_metadata(path).wait() {
                 Ok(_metadata) => {
                     data_gen_str = Some(gen_str);
@@ -537,10 +544,12 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
         let data_gen_str = data_gen_str.unwrap();
 
         if cur_gen_str != data_gen_str {
-            let data_gen_path =
-                self.raw.repo.chunk_rel_path_by_digest(digest, data_gen_str);
-            let cur_gen_path =
-                self.raw.repo.chunk_rel_path_by_digest(digest, cur_gen_str);
+            let data_gen_path = self.raw
+                .repo
+                .chunk_rel_path_by_digest(digest, data_gen_str);
+            let cur_gen_path = self.raw
+                .repo
+                .chunk_rel_path_by_digest(digest, cur_gen_str);
 
             // `rename` is best effort
             let res = self.raw

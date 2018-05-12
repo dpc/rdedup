@@ -152,7 +152,6 @@ pub(crate) struct Repo {
     pub nesting: Nesting,
 }
 
-
 impl Repo {
     pub fn new_from_settings(
         pass: PassphraseFn,
@@ -178,7 +177,6 @@ impl Repo {
             hashing: settings.hashing.to_config(),
         })
     }
-
 
     pub fn write(&self, aio: &aio::AsyncIO) -> super::Result<()> {
         let config_str =
@@ -217,8 +215,7 @@ fn check_version(version_int: u32) -> io::Result<()> {
             format!(
                 "repo version {} higher than \
                  supported {}; update?",
-                version_int,
-                REPO_VERSION_CURRENT
+                version_int, REPO_VERSION_CURRENT
             ),
         ));
     }
@@ -231,8 +228,7 @@ fn check_version(version_int: u32) -> io::Result<()> {
                 "repo version {} lower than \
                  lowest supported {}; \
                  restore using older version?",
-                version_int,
-                REPO_VERSION_LOWEST
+                version_int, REPO_VERSION_LOWEST
             ),
         ));
     }

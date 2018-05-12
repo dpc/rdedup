@@ -1,10 +1,10 @@
-use {box_, secretbox, serde, base64};
+use chrono;
+use chrono::prelude::*;
+use crypto::pwhash;
+use hex::{FromHex, FromHexError, ToHex};
 use serde::Deserialize;
 use std::io;
-use chrono::prelude::*;
-use chrono;
-use hex::{FromHex, FromHexError, ToHex};
-use crypto::pwhash;
+use {base64, box_, secretbox, serde};
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;
@@ -53,7 +53,6 @@ impl MyTryFromBytes for Vec<u8> {
         Ok(Vec::from(slice))
     }
 }
-
 
 pub fn from_base64<T, D>(deserializer: D) -> Result<T, D::Error>
 where

@@ -4,21 +4,21 @@ mod lib {
 
 use url::Url;
 
-use util::{ReaderVecIter, WhileOk};
 use hex::ToHex;
 use iterators::StoredChunks;
 use rand::{self, Rng};
 use settings;
 use sha2::{Digest, Sha256};
+use util::{ReaderVecIter, WhileOk};
 
 use std::{cmp, io};
 
 use std::collections::HashSet;
-use std::{self, fs};
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
 use std::path;
 use std::path::PathBuf;
+use std::{self, fs};
 
 const PASS: &'static str = "FOO";
 const DIGEST_SIZE: usize = 32;
@@ -121,7 +121,10 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::weak_rng()
+        .gen_iter()
+        .take(len)
+        .collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -144,15 +147,18 @@ fn zero_size() {
     let repo = test_repo(PASS);
     {
         let zero = Vec::new();
-        let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
+        let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+            .unwrap();
         repo.write("zero", &mut io::Cursor::new(zero), &enc_handle)
             .unwrap();
     }
 
     let mut read_zero = Vec::new();
     {
-        let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
-        repo.read("zero", &mut read_zero, &dec_handle).unwrap();
+        let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into()))
+            .unwrap();
+        repo.read("zero", &mut read_zero, &dec_handle)
+            .unwrap();
     }
 
     assert_eq!(read_zero.len(), 0);
@@ -164,8 +170,10 @@ fn zero_size() {
 fn byte_size() {
     let repo = test_repo(PASS);
 
-    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
-    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
+    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+        .unwrap();
+    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into()))
+        .unwrap();
 
     let tests = [0u8, 1, 13, 255];
     for &b in &tests {
@@ -177,7 +185,8 @@ fn byte_size() {
     for &b in &tests {
         let mut data = Vec::new();
         let name = vec![b].to_hex();
-        repo.read(&name, &mut data, &dec_handle).unwrap();
+        repo.read(&name, &mut data, &dec_handle)
+            .unwrap();
         assert_eq!(data, vec![b]);
     }
 
@@ -189,14 +198,17 @@ fn random_sanity() {
     let mut names = vec![];
 
     let repo = test_repo(PASS);
-    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
-    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
+    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+        .unwrap();
+    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into()))
+        .unwrap();
 
     for i in 0..10 {
         let mut data =
             ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
         let name = format!("{:x}", i);
-        repo.write(&name, &mut data, &enc_handle).unwrap();
+        repo.write(&name, &mut data, &enc_handle)
+            .unwrap();
         names.push((name, data.finish()));
     }
 
@@ -204,7 +216,8 @@ fn random_sanity() {
 
     for &(ref name, ref digest) in &names {
         let mut data = vec![];
-        repo.read(&name, &mut data, &dec_handle).unwrap();
+        repo.read(&name, &mut data, &dec_handle)
+            .unwrap();
 
         let mut sha = Sha256::default();
         sha.input(&data);
@@ -218,7 +231,8 @@ fn random_sanity() {
 
         {
             let mut data = vec![];
-            repo.read(&name, &mut data, &dec_handle).unwrap();
+            repo.read(&name, &mut data, &dec_handle)
+                .unwrap();
 
             let mut sha = Sha256::default();
             sha.input(&data);
@@ -266,11 +280,14 @@ fn change_passphrase() {
             None,
         ).unwrap();
 
-        let enc_handle =
-            repo.unlock_encrypt(&|| Ok(prev_passphrase.into())).unwrap();
-
-        repo.write("data", &mut io::Cursor::new(&data_before), &enc_handle)
+        let enc_handle = repo.unlock_encrypt(&|| Ok(prev_passphrase.into()))
             .unwrap();
+
+        repo.write(
+            "data",
+            &mut io::Cursor::new(&data_before),
+            &enc_handle,
+        ).unwrap();
     }
 
     for &p in &["a", "", "foo", "bar"] {
@@ -284,15 +301,16 @@ fn change_passphrase() {
         prev_passphrase = p;
     }
 
-
     {
-        let repo =
-            lib::Repo::open(&Url::from_directory_path(dir_path).unwrap(), None)
-                .unwrap();
-        let dec_handle =
-            repo.unlock_decrypt(&|| Ok(prev_passphrase.into())).unwrap();
+        let repo = lib::Repo::open(
+            &Url::from_directory_path(dir_path).unwrap(),
+            None,
+        ).unwrap();
+        let dec_handle = repo.unlock_decrypt(&|| Ok(prev_passphrase.into()))
+            .unwrap();
         let mut data_after = vec![];
-        repo.read("data", &mut data_after, &dec_handle).unwrap();
+        repo.read("data", &mut data_after, &dec_handle)
+            .unwrap();
 
         assert_eq!(data_before, data_after);
     }
@@ -306,8 +324,10 @@ fn change_passphrase() {
 fn verify_name() {
     let (repo, dir) = test_repo_dir(PASS);
 
-    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
-    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
+    let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into()))
+        .unwrap();
+    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+        .unwrap();
     let data = rand_data(1024);
     {
         repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
@@ -320,7 +340,8 @@ fn verify_name() {
     // Corrupt first chunk we find
     let generations = repo.read_generations().unwrap();
 
-    let chunk_path = dir.join(generations[0].to_string()).join("chunk");
+    let chunk_path = dir.join(generations[0].to_string())
+        .join("chunk");
     for l1 in fs::read_dir(&chunk_path).unwrap() {
         let l1 = l1.unwrap();
         if l1.path().is_dir() {
@@ -352,7 +373,8 @@ fn test_stored_chunks_iter() {
     let repo = test_repo(PASS);
     let data = rand_data(1024 * 1024);
 
-    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
+    let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+        .unwrap();
 
     repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
         .unwrap();
@@ -363,15 +385,28 @@ fn test_stored_chunks_iter() {
         chunks_from_indexes.iter().count(),
         chunks_from_iter.iter().count()
     );
-    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+    assert_eq!(
+        chunks_from_indexes
+            .difference(&chunks_from_iter)
+            .count(),
+        0
+    );
 
     // Add a second name to the repo and compare chunks
     let data2 = rand_data(1024 * 1024);
-    repo.write("data2", &mut io::Cursor::new(&data2), &enc_handle)
-        .unwrap();
+    repo.write(
+        "data2",
+        &mut io::Cursor::new(&data2),
+        &enc_handle,
+    ).unwrap();
     let chunks_from_indexes2 = repo.list_reachable_chunks().unwrap();
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+    assert_eq!(
+        chunks_from_indexes
+            .difference(&chunks_from_iter)
+            .count(),
+        0
+    );
 
     // Remove the second name and make sure the difference
     repo.rm("data2").unwrap();
@@ -386,14 +421,21 @@ fn test_stored_chunks_iter() {
     // removal
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
     assert_eq!(
-        chunks_from_indexes2.difference(&chunks_from_iter).count(),
+        chunks_from_indexes2
+            .difference(&chunks_from_iter)
+            .count(),
         0
     );
 
     repo.gc(0).unwrap();
     // Chunks from iterator should equal the first reachable list
     chunks_from_iter = list_stored_chunks(&repo).unwrap();
-    assert_eq!(chunks_from_indexes.difference(&chunks_from_iter).count(), 0);
+    assert_eq!(
+        chunks_from_indexes
+            .difference(&chunks_from_iter)
+            .count(),
+        0
+    );
 }
 
 #[test]
@@ -405,15 +447,20 @@ fn test_custom_chunking_size() {
 
             let result = settings.use_bup_chunking(Some(bits));
 
-
             if bits < 10 || bits > 30 {
                 if result.is_err() {
                     continue;
                 } else {
-                    panic!("expected an error for value {:}, but got Ok", bits);
+                    panic!(
+                        "expected an error for value {:}, but got Ok",
+                        bits
+                    );
                 }
             } else if result.is_err() {
-                panic!("expected Ok, but got {:}", result.err().unwrap());
+                panic!(
+                    "expected Ok, but got {:}",
+                    result.err().unwrap()
+                );
             }
             settings.set_pwhash(settings::PWHash::Weak);
             lib::Repo::init(
@@ -441,7 +488,6 @@ fn test_custom_nesting() {
             let mut settings = settings::Repo::new();
             let result = settings.set_nesting(level);
 
-
             if level > 31 {
                 if result.is_err() {
                     continue;
@@ -452,7 +498,10 @@ fn test_custom_nesting() {
                     );
                 }
             } else if result.is_err() {
-                panic!("expected Ok, but got {:}", result.err().unwrap());
+                panic!(
+                    "expected Ok, but got {:}",
+                    result.err().unwrap()
+                );
             }
             settings.set_pwhash(settings::PWHash::Weak);
             lib::Repo::init(
@@ -469,14 +518,17 @@ fn test_custom_nesting() {
 
             // Test Store, Load, RM, and GC
             let data = rand_data(1024 * 1024);
-            let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into())).unwrap();
-            let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into())).unwrap();
+            let enc_handle = repo.unlock_encrypt(&|| Ok(PASS.into()))
+                .unwrap();
+            let dec_handle = repo.unlock_decrypt(&|| Ok(PASS.into()))
+                .unwrap();
 
             repo.write("data", &mut io::Cursor::new(&data), &enc_handle)
                 .unwrap();
 
             let mut load_data = vec![];
-            repo.read("data", &mut load_data, &dec_handle).unwrap();
+            repo.read("data", &mut load_data, &dec_handle)
+                .unwrap();
 
             assert_eq!(load_data, data);
 

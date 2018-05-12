@@ -33,7 +33,6 @@ impl SodiumOxide {
         }
     }
 
-
     pub(crate) fn new_sensitive() -> Self {
         Self {
             ops_limit: pwhash::OPSLIMIT_SENSITIVE.0 as u64,

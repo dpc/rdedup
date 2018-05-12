@@ -41,18 +41,17 @@ extern crate zstd;
 // }}}
 
 // {{{ use and mod
-use url::Url;
 use sgdata::SGData;
 use slog::{FnValue, Level, Logger};
 use slog_perf::TimeReporter;
 use sodiumoxide::crypto::{self, box_, secretbox};
-use std::io;
 use std::collections::HashSet;
+use std::io;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
-
+use url::Url;
 
 mod iterators;
 
@@ -61,8 +60,8 @@ mod config;
 mod aio;
 use aio::*;
 
-mod hashing;
 mod chunking;
+mod hashing;
 
 mod chunk_processor;
 use chunk_processor::*;
@@ -170,8 +169,9 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
-        let decrypter =
-            self.config.encryption.decrypter(pass, &self.config.pwhash)?;
+        let decrypter = self.config
+            .encryption
+            .decrypter(pass, &self.config.pwhash)?;
 
         Ok(DecryptHandle {
             decrypter: decrypter,
@@ -183,9 +183,9 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
-        let encrypter =
-            self.config.encryption.encrypter(pass, &self.config.pwhash)?;
-
+        let encrypter = self.config
+            .encryption
+            .encrypter(pass, &self.config.pwhash)?;
 
         Ok(EncryptHandle {
             encrypter: encrypter,
@@ -285,7 +285,6 @@ impl Repo {
         }
     }
 
-
     /// Write a chunk of data to the repo.
     fn chunk_and_write_data_thread<'a>(
         &'a self,
@@ -351,8 +350,9 @@ impl Repo {
             let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
 
             timer.start("digest-rx");
-            let first_digest =
-                digests_rx.next().expect("At least one index digest");
+            let first_digest = digests_rx
+                .next()
+                .expect("At least one index digest");
 
             if let Some(second_digest) =
                 timer.start_with("digest-rx", || digests_rx.next())
@@ -452,8 +452,8 @@ impl Repo {
                     );
 
                 return Ok(());
-            },
-            Err(e) => return Err(e)
+            }
+            Err(e) => return Err(e),
         };
 
         if gen_config.created + chrono::Duration::seconds(min_age_secs as i64)
@@ -488,8 +488,9 @@ impl Repo {
         )?;
 
         self.aio
-            .remove_dir_all(PathBuf::from(gen.to_string())
-                            .join(config::DATA_SUBDIR))
+            .remove_dir_all(
+                PathBuf::from(gen.to_string()).join(config::DATA_SUBDIR),
+            )
             .wait()?;
         self.aio
             .remove_dir_all(PathBuf::from(gen.to_string()))
@@ -547,9 +548,12 @@ impl Repo {
             generations,
         );
         let traverser = ReadContext::new(&accessor);
-        traverser.read_recursively(
-            ReadRequest::new(DataType::Data, da, None, self.log.clone()),
-        )
+        traverser.read_recursively(ReadRequest::new(
+            DataType::Data,
+            da,
+            None,
+            self.log.clone(),
+        ))
     }
 
     /// Return all reachable chunks
@@ -578,7 +582,6 @@ impl Repo {
 
         Ok(reachable_digests)
     }
-
 
     fn chunk_rel_path_by_digest(
         &self,
@@ -609,7 +612,10 @@ impl Repo {
         let generations = self.read_generations()?;
 
         if generations.is_empty() {
-            info!(self.log, "Nothing in the repository yet, nothing to gc");
+            info!(
+                self.log,
+                "Nothing in the repository yet, nothing to gc"
+            );
             return Ok(());
         }
 
@@ -659,7 +665,6 @@ impl Repo {
 
         let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: DataAddress = name.into();
-
 
         let accessor = self.get_chunk_accessor(
             Some(Arc::clone(&dec.decrypter)),
@@ -716,7 +721,6 @@ impl Repo {
         let name = Name::load_from_any(name_str, &generations, &self.aio)?;
         let data_address: DataAddress = name.into();
 
-
         let mut counter = CounterWriter::new();
         let accessor = VerifyingChunkAccessor::new(
             self,
@@ -747,13 +751,16 @@ impl Repo {
                     && !item.ends_with(".yml")
             })
             .filter_map(|item| match Generation::try_from(item) {
-                Ok(gen) => if self.aio.read_metadata(gen.config_path()).wait().is_ok() {
+                Ok(gen) => if self.aio
+                    .read_metadata(gen.config_path())
+                    .wait()
+                    .is_ok()
+                {
                     Some(gen)
                 } else {
                     warn!(
                         self.log,
-                        "skipping dead generation: `{}` (config missing)",
-                        item,
+                        "skipping dead generation: `{}` (config missing)", item,
                     );
                     None
                 },
@@ -848,9 +855,12 @@ impl Repo {
             chunk_and_write.join()
         });
 
-
         let name: Name = data_address?.into();
-        name.write_as(name_str, *generations.last().unwrap(), &self.aio)?;
+        name.write_as(
+            name_str,
+            *generations.last().unwrap(),
+            &self.aio,
+        )?;
         Ok(stats.get_stats())
     }
 }

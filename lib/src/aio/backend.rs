@@ -3,12 +3,10 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-
 /// A lock held on the backend
 ///
 /// It doesn't do much, except unlock on `drop`.
 pub(crate) trait Lock {}
-
 
 /// Backend API
 ///
@@ -39,14 +37,12 @@ pub(crate) trait BackendThread: Send {
         dst_path: PathBuf,
     ) -> io::Result<()>;
 
-
     fn write(
         &mut self,
         path: PathBuf,
         sg: SGData,
         idempotent: bool,
     ) -> io::Result<()>;
-
 
     fn read(&mut self, path: PathBuf) -> io::Result<SGData>;
 

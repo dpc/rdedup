@@ -131,14 +131,14 @@ extern crate slog_async;
 extern crate slog_term;
 extern crate url;
 
-use url::Url;
-use std::error::Error;
-use lib::Repo;
-use lib::settings;
-use hex::ToHex;
-use slog::Drain;
-use std::{env, io, process};
 use clap::{Arg, SubCommand};
+use hex::ToHex;
+use lib::settings;
+use lib::Repo;
+use slog::Drain;
+use std::error::Error;
+use std::{env, io, process};
+use url::Url;
 
 use std::str::FromStr;
 
@@ -167,7 +167,6 @@ impl Options {
             settings: settings::Repo::new(),
         }
     }
-
 
     fn set_encryption(&mut self, s: &str) {
         let encryption = match s {
@@ -240,10 +239,11 @@ impl Options {
     }
 
     fn set_nesting(&mut self, level: u8) {
-        self.settings.set_nesting(level).expect("invalid nesting");
+        self.settings
+            .set_nesting(level)
+            .expect("invalid nesting");
     }
 }
-
 
 mod util;
 use util::{read_new_passphrase, read_passphrase};
@@ -369,7 +369,6 @@ fn run() -> io::Result<()> {
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
-
     let url: Url = if let Some(loc) = matches.value_of_os("REPO_URI") {
         let s = loc.to_os_string().into_string().map_err(|_| {
             io::Error::new(
@@ -431,10 +430,19 @@ fn run() -> io::Result<()> {
                     .map(|u| u.trailing_zeros()),
             );
             options.set_encryption(matches.value_of("ENCRYPTION").unwrap());
-            options.settings.set_pwhash(settings::PWHash::from(matches.value_of("PWHASH").unwrap()));
+            options
+                .settings
+                .set_pwhash(settings::PWHash::from(
+                    matches.value_of("PWHASH").unwrap(),
+                ));
             options.set_compression(matches.value_of("COMPRESSION").unwrap());
-            options.settings.set_compression_level(i32::from_str(matches.value_of("COMPRESSION_LEVEL").unwrap()).expect("invalid compression level"));
-            options.set_nesting(u8::from_str(matches.value_of("NESTING").unwrap()).unwrap());
+            options.settings.set_compression_level(
+                i32::from_str(matches.value_of("COMPRESSION_LEVEL").unwrap())
+                    .expect("invalid compression level"),
+            );
+            options.set_nesting(
+                u8::from_str(matches.value_of("NESTING").unwrap()).unwrap(),
+            );
             options.set_hashing(matches.value_of("HASHING").unwrap());
             let _ = Repo::init(
                 &options.url,
@@ -444,7 +452,9 @@ fn run() -> io::Result<()> {
             )?;
         }
         ("store", Some(matches)) => {
-            let name = matches.value_of("NAME").expect("name agument missing");
+            let name = matches
+                .value_of("NAME")
+                .expect("name agument missing");
             let repo = Repo::open(&options.url, log)?;
             let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
             let stats = repo.write(name, &mut io::stdin(), &enc)?;
@@ -452,21 +462,25 @@ fn run() -> io::Result<()> {
             println!("{} new bytes", stats.new_bytes);
         }
         ("load", Some(matches)) => {
-            let name = matches.value_of("NAME").expect("name agument missing");
+            let name = matches
+                .value_of("NAME")
+                .expect("name agument missing");
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
             repo.read(name, &mut io::stdout(), &dec)?;
         }
         ("change_passphrase", Some(_matches)) => {
             let mut repo = Repo::open(&options.url, log)?;
-            repo.change_passphrase(
-                &|| read_passphrase(),
-                &|| read_new_passphrase(),
-            )?;
+            repo.change_passphrase(&|| read_passphrase(), &|| {
+                read_new_passphrase()
+            })?;
         }
         ("remove", Some(matches)) => {
             let repo = Repo::open(&options.url, log)?;
-            for name in matches.values_of("NAME").expect("names missing") {
+            for name in matches
+                .values_of("NAME")
+                .expect("names missing")
+            {
                 repo.rm(name)?;
             }
         }
@@ -474,14 +488,19 @@ fn run() -> io::Result<()> {
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
 
-            for name in matches.values_of("NAME").expect("names missing") {
+            for name in matches
+                .values_of("NAME")
+                .expect("names missing")
+            {
                 let result = repo.du(name, &dec)?;
                 println!("{} chunks", result.chunks);
                 println!("{} bytes", result.bytes);
             }
         }
         ("gc", Some(matches)) => {
-            let grace_secs = u64::from_str(matches.value_of("GRACE_TIME").unwrap()).expect("invalid grace time");
+            let grace_secs = u64::from_str(
+                matches.value_of("GRACE_TIME").unwrap(),
+            ).expect("invalid grace time");
             let repo = Repo::open(&options.url, log)?;
 
             repo.gc(grace_secs)?;
@@ -499,7 +518,10 @@ fn run() -> io::Result<()> {
             for name in matches.values_of("NAME").expect("values") {
                 let results = repo.verify(name, &dec)?;
                 println!("scanned {} chunk(s)", results.scanned);
-                println!("found {} corrupted chunk(s)", results.errors.len());
+                println!(
+                    "found {} corrupted chunk(s)",
+                    results.errors.len()
+                );
                 for err in results.errors {
                     println!("chunk {} - {}", &err.0.to_hex(), err.1);
                 }

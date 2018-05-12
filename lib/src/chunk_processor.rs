@@ -1,15 +1,15 @@
-use super::{DataType, Repo};
 use super::aio;
+use super::{DataType, Repo};
 use compression::ArcCompression;
 use encryption::ArcEncrypter;
 use hashing::ArcHasher;
 use sgdata::SGData;
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
+use std::io;
 use std::sync::mpsc;
 use two_lock_queue;
 use {Digest, Generation};
-use std::io;
 
 pub(crate) struct Message {
     pub data: (u64, SGData),
@@ -58,8 +58,10 @@ impl ChunkProcessor {
             Level::Debug,
         );
 
-        let gen_strings: Vec<_> =
-            self.generations.iter().map(|gen| gen.to_string()).collect();
+        let gen_strings: Vec<_> = self.generations
+            .iter()
+            .map(|gen| gen.to_string())
+            .collect();
 
         let last_gen_str = gen_strings.last().unwrap().to_owned();
         loop {
@@ -91,7 +93,10 @@ impl ChunkProcessor {
                         digest.as_digest_ref(),
                         gen_str,
                     );
-                    match self.aio.read_metadata(chunk_path.clone()).wait() {
+                    match self.aio
+                        .read_metadata(chunk_path.clone())
+                        .wait()
+                    {
                         Ok(_metadata) => {
                             found = true;
                             if gen_str == &last_gen_str {
@@ -105,22 +110,26 @@ impl ChunkProcessor {
                                         gen_strings.last().unwrap(),
                                     );
                                 self.aio
-                                    .rename(chunk_path.clone(), dst_path.clone())
+                                    .rename(
+                                        chunk_path.clone(),
+                                        dst_path.clone(),
+                                    )
                                     .wait()
                                     .unwrap_or_else(|_e| {
-                                        // chunk might have been upated concurrently; check
+                                        // chunk might have been upated
+                                        // concurrently; check
                                         // if it's already in the destination
                                         if self.aio
                                             .read_metadata(dst_path.clone())
-                                                .wait()
-                                                .is_err()
-                                                {
-                                                    panic!(
-                                                        "rename failed {} -> {}",
-                                                        chunk_path.display(),
-                                                        dst_path.display()
-                                                        )
-                                                }
+                                            .wait()
+                                            .is_err()
+                                        {
+                                            panic!(
+                                                "rename failed {} -> {}",
+                                                chunk_path.display(),
+                                                dst_path.display()
+                                            )
+                                        }
                                     });
                             }
                             break;

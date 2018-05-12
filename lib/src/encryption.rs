@@ -1,15 +1,13 @@
-
-
-use {box_, pwhash, secretbox, as_base64, from_base64};
-use PassphraseFn;
-use pwhash::PWHash;
 use hex::ToHex;
+use pwhash::PWHash;
+use PassphraseFn;
+use {as_base64, box_, from_base64, pwhash, secretbox};
 
 use sgdata::SGData;
 
+use config;
 use std::io;
 use std::sync::Arc;
-use config;
 
 pub type ArcEncrypter = Arc<Encrypter + Send + Sync>;
 pub type ArcDecrypter = Arc<Decrypter + Send + Sync>;
@@ -59,7 +57,6 @@ impl Decrypter for NopDecrypter {
     }
 }
 
-
 /// Configuration of repository encryption
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Curve25519 {
@@ -103,7 +100,6 @@ impl Curve25519 {
     ) -> io::Result<box_::SecretKey> {
         let passphrase = passphrase_f()?;
 
-
         let derived_key = secretbox::Key::from_slice(
             &pwhash.derive_key(&passphrase)?[..32],
         ).unwrap();
@@ -116,19 +112,20 @@ impl Curve25519 {
                     )
                 })?;
 
-        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "plain secret key in a wrong format",
-            )
-        })?)
+        Ok(
+            box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "plain secret key in a wrong format",
+                )
+            })?,
+        )
     }
 
     fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {
         Ok(self.pub_key)
     }
 }
-
 
 impl EncryptionEngine for Curve25519 {
     fn change_passphrase(
@@ -181,9 +178,16 @@ impl Encrypter for Curve25519Encrypter {
             .expect("Nonce::from_slice failed");
 
         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-        let cipher =
-            box_::seal(&buf.to_linear(), &nonce, &self.pub_key, &ephemeral_sec);
-        Ok(SGData::from_many(vec![ephemeral_pub.0.to_vec(), cipher]))
+        let cipher = box_::seal(
+            &buf.to_linear(),
+            &nonce,
+            &self.pub_key,
+            &ephemeral_sec,
+        );
+        Ok(SGData::from_many(vec![
+            ephemeral_pub.0.to_vec(),
+            cipher,
+        ]))
     }
 }
 

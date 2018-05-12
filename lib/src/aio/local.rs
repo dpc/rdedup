@@ -5,10 +5,10 @@ use INGRESS_BUFFER_SIZE;
 
 use fs2::FileExt;
 use sgdata::SGData;
-use std::{fs, io, mem};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::{fs, io, mem};
 use walkdir::WalkDir;
 
 use super::{Backend, BackendThread};
@@ -87,7 +87,6 @@ impl BackendThread for LocalThread {
         }
     }
 
-
     fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
         let path = self.path.join(path);
         fs::remove_dir_all(&path)
@@ -125,7 +124,6 @@ impl BackendThread for LocalThread {
         Ok(())
     }
 
-
     fn read(&mut self, path: PathBuf) -> io::Result<SGData> {
         let path = self.path.join(path);
 
@@ -148,7 +146,6 @@ impl BackendThread for LocalThread {
         let path = self.path.join(path);
         fs::remove_file(&path)
     }
-
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
         let path = self.path.join(path);
@@ -177,7 +174,6 @@ impl BackendThread for LocalThread {
             Err(e) => Err(e),
         }
     }
-
 
     fn list_recursively(
         &mut self,
