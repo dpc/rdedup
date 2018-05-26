@@ -6,7 +6,7 @@
 - Compression: zstd, xz2, bzip2
 - Hashing: blake2
 - No-Encryption mode
-- Asynchonous IO architecture
+- Asynchronous IO architecture
 - Timings (`-t`, `-tt` ... flags)
 - Debugging and tracing (`-v`, `-vv`... flags)
 
