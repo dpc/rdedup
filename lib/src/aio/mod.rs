@@ -483,6 +483,8 @@ impl AsyncIOThread {
         if let Some(tx) = tx {
             self.time_reporter.start("write send response");
             tx.send(res).expect("send failed")
+        } else {
+            res.unwrap();
         }
     }
 
