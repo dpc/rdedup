@@ -487,11 +487,14 @@ impl Repo {
             || (),
         )?;
 
+        substitute_err_not_found(
         self.aio
-            .remove_dir_all(
-                PathBuf::from(gen.to_string()).join(config::DATA_SUBDIR),
-            )
-            .wait()?;
+            .remove_dir_all(PathBuf::from(gen.to_string())
+                            .join(config::DATA_SUBDIR))
+            .wait(),
+            || (),
+        )?;
+
         self.aio
             .remove_dir_all(PathBuf::from(gen.to_string()))
             .wait()?;
