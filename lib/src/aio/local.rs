@@ -1,5 +1,6 @@
 // {{{ use and mod
 use rand;
+use rand::distributions::Alphanumeric;
 use rand::Rng;
 use INGRESS_BUFFER_SIZE;
 
@@ -38,7 +39,7 @@ impl Backend for Local {
         Ok(Box::new(LocalThread {
             path: self.path.clone(),
             rand_ext: rand::thread_rng()
-                .gen_ascii_chars()
+                .sample_iter(&Alphanumeric)
                 .take(20)
                 .collect::<String>(),
         }))
@@ -70,11 +71,7 @@ impl Local {
 }
 
 impl BackendThread for LocalThread {
-    fn rename(
-        &mut self,
-        src_path: PathBuf,
-        dst_path: PathBuf,
-    ) -> io::Result<()> {
+    fn rename(&mut self, src_path: PathBuf, dst_path: PathBuf) -> io::Result<()> {
         let src_path = self.path.join(src_path);
         let dst_path = self.path.join(dst_path);
 
@@ -92,12 +89,7 @@ impl BackendThread for LocalThread {
         fs::remove_dir_all(&path)
     }
 
-    fn write(
-        &mut self,
-        path: PathBuf,
-        sg: SGData,
-        idempotent: bool,
-    ) -> io::Result<()> {
+    fn write(&mut self, path: PathBuf, sg: SGData, idempotent: bool) -> io::Result<()> {
         let path = self.path.join(path);
         // check if exists on disk
         // remove from `in_progress` if it does
@@ -175,11 +167,7 @@ impl BackendThread for LocalThread {
         }
     }
 
-    fn list_recursively(
-        &mut self,
-        path: PathBuf,
-        tx: mpsc::Sender<io::Result<Vec<PathBuf>>>,
-    ) {
+    fn list_recursively(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<Vec<PathBuf>>>) {
         let path = self.path.join(path);
 
         if !path.exists() {
