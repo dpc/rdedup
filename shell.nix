@@ -3,10 +3,10 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.stdenv.mkDerivation {
-  name = "grin";
+  name = "rdedup";
 
   buildInputs = with pkgs; [
-    ncurses cmake gcc openssl libsodium lzma libsodium
+    ncurses cmake gcc openssl libsodium lzma libsodium clang_39
   ];
 
   shellHook = ''
