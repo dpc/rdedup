@@ -2,8 +2,7 @@ use blake2;
 use SGData;
 use DIGEST_SIZE;
 
-use digest::FixedOutput;
-use digest::Input;
+use digest::{FixedOutput, Input};
 use sha2;
 use std::sync::Arc;
 

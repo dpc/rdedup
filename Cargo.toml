@@ -48,7 +48,7 @@ rdedup-lib = { version = "3.0.0-0.2.0", path = "lib"}
 log = "0.3.6"
 hex = "0.2"
 clap = "2"
-rpassword = "0.2.3"
+rpassword = "2"
 slog = { version = "2.0.10", features = ["max_level_trace", "release_max_level_trace"]}
 slog-term = "2"
 slog-async = "2"
