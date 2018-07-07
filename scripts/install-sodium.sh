@@ -1,8 +1,9 @@
 #!/bin/bash
 
-wget https://github.com/jedisct1/libsodium/releases/download/1.0.8/libsodium-1.0.8.tar.gz
-tar xvfz libsodium-1.0.8.tar.gz
-cd libsodium-1.0.8
+version=1.0.16
+wget https://github.com/jedisct1/libsodium/releases/download/$version/libsodium-$version.tar.gz
+tar xvfz libsodium-$version.tar.gz
+cd libsodium-$version
 ./configure --prefix=$HOME/installed_libsodium
 make
 make install
