@@ -5,6 +5,7 @@ extern crate blake2;
 extern crate bytevec;
 extern crate chrono;
 extern crate crossbeam;
+extern crate crossbeam_channel;
 extern crate dangerous_option;
 extern crate digest;
 extern crate fs2;
@@ -26,7 +27,6 @@ extern crate sha2;
 extern crate slog;
 extern crate slog_perf;
 extern crate sodiumoxide;
-extern crate two_lock_queue;
 extern crate url;
 extern crate walkdir;
 
@@ -289,7 +289,7 @@ impl Repo {
     fn chunk_and_write_data_thread<'a>(
         &'a self,
         input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
-        process_tx: two_lock_queue::Sender<chunk_processor::Message>,
+        process_tx: crossbeam_channel::Sender<chunk_processor::Message>,
         aio: aio::AsyncIO,
         data_type: DataType,
     ) -> io::Result<DataAddress> {
@@ -340,7 +340,6 @@ impl Repo {
                                 response_tx: digests_tx.clone(),
                                 data_type: data_type,
                             })
-                            .expect("process_tx.send(...)")
                     }
                     drop(digests_tx);
                 }
@@ -820,7 +819,7 @@ impl Repo {
         let stats = aio.stats();
 
         // mpmc queue used  as spmc fan-out
-        let (process_tx, process_rx) = two_lock_queue::channel(num_threads);
+        let (process_tx, process_rx) = crossbeam_channel::bounded(num_threads);
 
         let data_address = crossbeam::scope(|scope| {
             scope.spawn(move || self.input_reader_thread(reader, chunker_tx));

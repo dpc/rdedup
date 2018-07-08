@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
-use two_lock_queue;
+use crossbeam_channel;
 
 mod local;
 pub(crate) use self::local::Local;
@@ -91,7 +91,7 @@ pub struct AsyncIO {
     shared: Arc<AsyncIOShared>,
     /// tx endpoind of mpmc queue used to send jobs
     /// to the pool.
-    tx: AutoOption<two_lock_queue::Sender<Message>>,
+    tx: AutoOption<crossbeam_channel::Sender<Message>>,
 }
 
 impl AsyncIO {
@@ -100,7 +100,7 @@ impl AsyncIO {
         log: Logger,
     ) -> io::Result<Self> {
         let thread_num = 4 * num_cpus::get();
-        let (tx, rx) = two_lock_queue::channel(thread_num);
+        let (tx, rx) = crossbeam_channel::bounded(thread_num);
 
         let shared = AsyncIOThreadShared::new();
 
@@ -154,8 +154,7 @@ impl AsyncIO {
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::List(path, tx))
-            .expect("channel send failed");
+            .send(Message::List(path, tx));
         AsyncIOResult { rx: rx }
     }
 
@@ -167,8 +166,7 @@ impl AsyncIO {
     ) -> Box<Iterator<Item = io::Result<PathBuf>>> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::ListRecursively(path, tx))
-            .expect("channel send failed");
+            .send(Message::ListRecursively(path, tx));
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
             Ok(batch) => Box::new(batch.into_iter().map(Ok))
@@ -187,8 +185,7 @@ impl AsyncIO {
                 data: sg,
                 idempotent: false,
                 complete_tx: Some(tx),
-            }))
-            .expect("channel send failed");
+            }));
         AsyncIOResult { rx: rx }
     }
 
@@ -206,8 +203,7 @@ impl AsyncIO {
                 data: sg,
                 idempotent: true,
                 complete_tx: Some(tx),
-            }))
-            .expect("channel send failed");
+            }));
         AsyncIOResult { rx: rx }
     }
 
@@ -222,8 +218,7 @@ impl AsyncIO {
                 data: sg,
                 idempotent: false,
                 complete_tx: None,
-            }))
-            .expect("channel send failed");
+            }));
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
@@ -233,15 +228,13 @@ impl AsyncIO {
                 data: sg,
                 idempotent: true,
                 complete_tx: None,
-            }))
-            .expect("channel send failed");
+            }));
     }
 
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::Read(path, tx))
-            .expect("channel send failed");
+            .send(Message::Read(path, tx));
         AsyncIOResult { rx: rx }
     }
 
@@ -251,32 +244,28 @@ impl AsyncIO {
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::ReadMetadata(path, tx))
-            .expect("channel send failed");
+            .send(Message::ReadMetadata(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::Remove(path, tx))
-            .expect("channel send failed");
+            .send(Message::Remove(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::RemoveDirAll(path, tx))
-            .expect("channel send failed");
+            .send(Message::RemoveDirAll(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx
-            .send(Message::Rename(src, dst, tx))
-            .expect("channel send failed");
+            .send(Message::Rename(src, dst, tx));
         AsyncIOResult { rx: rx }
     }
 }
@@ -357,7 +346,7 @@ impl AsyncIOThreadShared {
 /// A single thread in the worker pool.
 struct AsyncIOThread {
     shared: AsyncIOThreadShared,
-    rx: two_lock_queue::Receiver<Message>,
+    rx: crossbeam_channel::Receiver<Message>,
     log: Logger,
     time_reporter: TimeReporter,
     backend: RefCell<Box<BackendThread>>,
@@ -376,7 +365,7 @@ impl<'a, 'b> Drop for PendingGuard<'a, 'b> {
 impl AsyncIOThread {
     fn new(
         shared: AsyncIOThreadShared,
-        rx: two_lock_queue::Receiver<Message>,
+        rx: crossbeam_channel::Receiver<Message>,
         backend: Box<BackendThread>,
         log: Logger,
     ) -> Self {
@@ -398,7 +387,7 @@ impl AsyncIOThread {
         loop {
             self.time_reporter.start("rx");
 
-            if let Ok(msg) = self.rx.recv() {
+            if let Some(msg) = self.rx.recv() {
                 match msg {
                     Message::Write(WriteArgs {
                         path,

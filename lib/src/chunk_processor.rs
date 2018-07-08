@@ -1,6 +1,7 @@
 use super::aio;
 use super::{DataType, Repo};
 use compression::ArcCompression;
+use crossbeam_channel;
 use encryption::ArcEncrypter;
 use hashing::ArcHasher;
 use sgdata::SGData;
@@ -8,7 +9,6 @@ use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use std::io;
 use std::sync::mpsc;
-use two_lock_queue;
 use {Digest, Generation};
 
 pub(crate) struct Message {
@@ -19,7 +19,7 @@ pub(crate) struct Message {
 
 pub(crate) struct ChunkProcessor {
     repo: Repo,
-    rx: two_lock_queue::Receiver<Message>,
+    rx: crossbeam_channel::Receiver<Message>,
     aio: aio::AsyncIO,
     log: Logger,
     encrypter: ArcEncrypter,
@@ -31,7 +31,7 @@ pub(crate) struct ChunkProcessor {
 impl ChunkProcessor {
     pub fn new(
         repo: Repo,
-        rx: two_lock_queue::Receiver<Message>,
+        rx: crossbeam_channel::Receiver<Message>,
         aio: aio::AsyncIO,
         encrypter: ArcEncrypter,
         compressor: ArcCompression,
@@ -52,22 +52,16 @@ impl ChunkProcessor {
     }
 
     pub fn run(&self) {
-        let mut timer = TimeReporter::new_with_level(
-            "chunk-processing",
-            self.log.clone(),
-            Level::Debug,
-        );
+        let mut timer =
+            TimeReporter::new_with_level("chunk-processing", self.log.clone(), Level::Debug);
 
-        let gen_strings: Vec<_> = self.generations
-            .iter()
-            .map(|gen| gen.to_string())
-            .collect();
+        let gen_strings: Vec<_> = self.generations.iter().map(|gen| gen.to_string()).collect();
 
         let last_gen_str = gen_strings.last().unwrap().to_owned();
         loop {
             timer.start("rx");
 
-            if let Ok(input) = self.rx.recv() {
+            if let Some(input) = self.rx.recv() {
                 timer.start("processing");
 
                 let Message {
@@ -89,14 +83,10 @@ impl ChunkProcessor {
                     .rev()
                     .chain([&last_gen_str].iter().cloned())
                 {
-                    let chunk_path = self.repo.chunk_rel_path_by_digest(
-                        digest.as_digest_ref(),
-                        gen_str,
-                    );
-                    match self.aio
-                        .read_metadata(chunk_path.clone())
-                        .wait()
-                    {
+                    let chunk_path = self
+                        .repo
+                        .chunk_rel_path_by_digest(digest.as_digest_ref(), gen_str);
+                    match self.aio.read_metadata(chunk_path.clone()).wait() {
                         Ok(_metadata) => {
                             found = true;
                             if gen_str == &last_gen_str {
@@ -104,25 +94,18 @@ impl ChunkProcessor {
                             } else {
                                 trace!(self.log, "already exists in previous generation";
                                        "path" => %chunk_path.display());
-                                let dst_path = self.repo
-                                    .chunk_rel_path_by_digest(
-                                        digest.as_digest_ref(),
-                                        gen_strings.last().unwrap(),
-                                    );
+                                let dst_path = self.repo.chunk_rel_path_by_digest(
+                                    digest.as_digest_ref(),
+                                    gen_strings.last().unwrap(),
+                                );
                                 self.aio
-                                    .rename(
-                                        chunk_path.clone(),
-                                        dst_path.clone(),
-                                    )
+                                    .rename(chunk_path.clone(), dst_path.clone())
                                     .wait()
                                     .unwrap_or_else(|_e| {
                                         // chunk might have been upated
                                         // concurrently; check
                                         // if it's already in the destination
-                                        if self.aio
-                                            .read_metadata(dst_path.clone())
-                                            .wait()
-                                            .is_err()
+                                        if self.aio.read_metadata(dst_path.clone()).wait().is_err()
                                         {
                                             panic!(
                                                 "rename failed {} -> {}",
@@ -166,10 +149,8 @@ impl ChunkProcessor {
 
                     timer.start("tx-writer");
                     self.aio.write_checked_idempotent(
-                        self.repo.chunk_rel_path_by_digest(
-                            digest.as_digest_ref(),
-                            &last_gen_str,
-                        ),
+                        self.repo
+                            .chunk_rel_path_by_digest(digest.as_digest_ref(), &last_gen_str),
                         sg,
                     );
                 }

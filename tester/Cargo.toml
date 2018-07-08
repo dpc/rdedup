@@ -17,6 +17,6 @@ path = "src/bin.rs"
 
 [dependencies]
 rand = "*"
-sha2 = "0.6"
-digest = "*"
+sha2 = "0.7"
+digest = "0.7"
 hex = "0.2"
