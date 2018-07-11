@@ -7,13 +7,13 @@ export RUST_BACKTRACE=1
 
 test_data_path=/tmp/rdedup-e2e-test.data
 chunking_list=$($RDEDUP_CMD init --chunking '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+  | sed 's/.*\[possible values: \(.*\)\].*/\1/' | tr -d ',') || echo
 encryptiton_list=$($RDEDUP_CMD init --encryption '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+  | sed 's/.*\[possible values: \(.*\)\].*/\1/' | tr -d ',') || echo
 compression_list=$($RDEDUP_CMD init --compression '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+  | sed 's/.*\[possible values: \(.*\)\].*/\1/' | tr -d ',') || echo
 hashing_list=$($RDEDUP_CMD init --hashing '?' 2>&1 | grep values \
-  | sed 's/.*\[values: \(.*\)\].*/\1/' | tr -d ',') || echo
+  | sed 's/.*\[possible values: \(.*\)\].*/\1/' | tr -d ',') || echo
 
 run_e2e_test() {
   args=""
