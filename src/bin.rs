@@ -53,7 +53,6 @@
 //!
 //! ```norust
 //! cargo install rdedup
-//! version
 //! ```
 //!
 //! If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -205,13 +204,16 @@ impl Options {
 
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
-            "bup" => self.settings
+            "bup" => self
+                .settings
                 .use_bup_chunking(chunk_size)
                 .expect("wrong chunking settings"),
-            "gear" => self.settings
+            "gear" => self
+                .settings
                 .use_gear_chunking(chunk_size)
                 .expect("wrong chunking settings"),
-            "fastcdc" => self.settings
+            "fastcdc" => self
+                .settings
                 .use_fastcdc_chunking(chunk_size)
                 .expect("wrong chunking settings"),
             _ => {
@@ -223,10 +225,12 @@ impl Options {
 
     fn set_hashing(&mut self, s: &str) {
         match s {
-            "sha256" => self.settings
+            "sha256" => self
+                .settings
                 .set_hashing(lib::settings::Hashing::Sha256)
                 .expect("wrong hashing settings"),
-            "blake2b" => self.settings
+            "blake2b" => self
+                .settings
                 .set_hashing(lib::settings::Hashing::Blake2b)
                 .expect("wrong hashing settings"),
             _ => {

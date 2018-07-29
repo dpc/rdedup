@@ -72,7 +72,6 @@ If you have `cargo` installed:
 
 ```norust
 cargo install rdedup
-version
 ```
 
 If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
