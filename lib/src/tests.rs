@@ -4,7 +4,7 @@ mod lib {
 
 use url::Url;
 
-use hex::ToHex;
+use hex;
 use iterators::StoredChunks;
 use rand::{self, Rng};
 use settings;
