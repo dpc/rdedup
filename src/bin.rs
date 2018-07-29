@@ -132,7 +132,6 @@ extern crate slog_term;
 extern crate url;
 
 use clap::{Arg, SubCommand};
-use hex::ToHex;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
@@ -207,13 +206,16 @@ impl Options {
 
     fn set_chunking(&mut self, s: &str, chunk_size: Option<u32>) {
         match s {
-            "bup" => self.settings
+            "bup" => self
+                .settings
                 .use_bup_chunking(chunk_size)
                 .expect("wrong chunking settings"),
-            "gear" => self.settings
+            "gear" => self
+                .settings
                 .use_gear_chunking(chunk_size)
                 .expect("wrong chunking settings"),
-            "fastcdc" => self.settings
+            "fastcdc" => self
+                .settings
                 .use_fastcdc_chunking(chunk_size)
                 .expect("wrong chunking settings"),
             _ => {
@@ -225,10 +227,12 @@ impl Options {
 
     fn set_hashing(&mut self, s: &str) {
         match s {
-            "sha256" => self.settings
+            "sha256" => self
+                .settings
                 .set_hashing(lib::settings::Hashing::Sha256)
                 .expect("wrong hashing settings"),
-            "blake2b" => self.settings
+            "blake2b" => self
+                .settings
                 .set_hashing(lib::settings::Hashing::Blake2b)
                 .expect("wrong hashing settings"),
             _ => {
@@ -239,9 +243,7 @@ impl Options {
     }
 
     fn set_nesting(&mut self, level: u8) {
-        self.settings
-            .set_nesting(level)
-            .expect("invalid nesting");
+        self.settings.set_nesting(level).expect("invalid nesting");
     }
 }
 
@@ -430,11 +432,9 @@ fn run() -> io::Result<()> {
                     .map(|u| u.trailing_zeros()),
             );
             options.set_encryption(matches.value_of("ENCRYPTION").unwrap());
-            options
-                .settings
-                .set_pwhash(settings::PWHash::from(
-                    matches.value_of("PWHASH").unwrap(),
-                ));
+            options.settings.set_pwhash(settings::PWHash::from(
+                matches.value_of("PWHASH").unwrap(),
+            ));
             options.set_compression(matches.value_of("COMPRESSION").unwrap());
             options.settings.set_compression_level(
                 i32::from_str(matches.value_of("COMPRESSION_LEVEL").unwrap())
@@ -452,9 +452,7 @@ fn run() -> io::Result<()> {
             )?;
         }
         ("store", Some(matches)) => {
-            let name = matches
-                .value_of("NAME")
-                .expect("name agument missing");
+            let name = matches.value_of("NAME").expect("name agument missing");
             let repo = Repo::open(&options.url, log)?;
             let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
             let stats = repo.write(name, &mut io::stdin(), &enc)?;
@@ -462,9 +460,7 @@ fn run() -> io::Result<()> {
             println!("{} new bytes", stats.new_bytes);
         }
         ("load", Some(matches)) => {
-            let name = matches
-                .value_of("NAME")
-                .expect("name agument missing");
+            let name = matches.value_of("NAME").expect("name agument missing");
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
             repo.read(name, &mut io::stdout(), &dec)?;
@@ -477,10 +473,7 @@ fn run() -> io::Result<()> {
         }
         ("remove", Some(matches)) => {
             let repo = Repo::open(&options.url, log)?;
-            for name in matches
-                .values_of("NAME")
-                .expect("names missing")
-            {
+            for name in matches.values_of("NAME").expect("names missing") {
                 repo.rm(name)?;
             }
         }
@@ -488,10 +481,7 @@ fn run() -> io::Result<()> {
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
 
-            for name in matches
-                .values_of("NAME")
-                .expect("names missing")
-            {
+            for name in matches.values_of("NAME").expect("names missing") {
                 let result = repo.du(name, &dec)?;
                 println!("{} chunks", result.chunks);
                 println!("{} bytes", result.bytes);
@@ -518,12 +508,9 @@ fn run() -> io::Result<()> {
             for name in matches.values_of("NAME").expect("values") {
                 let results = repo.verify(name, &dec)?;
                 println!("scanned {} chunk(s)", results.scanned);
-                println!(
-                    "found {} corrupted chunk(s)",
-                    results.errors.len()
-                );
+                println!("found {} corrupted chunk(s)", results.errors.len());
                 for err in results.errors {
-                    println!("chunk {} - {}", &err.0.to_hex(), err.1);
+                    println!("chunk {} - {}", hex::encode(&err.0), err.1);
                 }
             }
         }
