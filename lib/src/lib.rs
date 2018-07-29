@@ -855,6 +855,14 @@ impl Repo {
             chunk_and_write.join()
         });
 
+        let data_address = data_address.map_err(|e| {
+            if let Some(io_e) = e.downcast_ref::<io::Error>() {
+                io::Error::new(io_e.kind(), format!("{}", io_e))
+            } else {
+                io::Error::new(io::ErrorKind::Other, format!("{:?}", e))
+            }
+        })?;
+
         let name: Name = data_address?.into();
         name.write_as(name_str, *generations.last().unwrap(), &self.aio)?;
         Ok(stats.get_stats())
