@@ -20,7 +20,7 @@ See [wiki](https://github.com/dpc/rdedup/wiki) for current project status.
 `rdedup` is a data deduplication engine and a backup software.
 
 `rdedup` is generally similar to existing software like
- duplicacy, restic, attic, duplicity, zbackup, etc.
+ `duplicacy`, `restic`, `attic`, `duplicity`, `zbackup`, etc.
 
 `rdedup` is written in Rust and provides both command line tool
 and library API (`rdedup-lib`).
@@ -32,7 +32,8 @@ and library API (`rdedup-lib`).
    * public-key encryption mode (the only tool like that I'm aware of,
      and primary reason `rdedup` was created)
  * flat-file synchronization friendly (Dropbox/syncthing, rsync, rclone)
-   * cloud backends are WIP
+ * immutable data-conflict-free data store
+ * cloud backends are WIP
  * incremental, scalable garbage collection
  * variety of supported algorithms:
    * chunking: fastcdc, gear, bup
@@ -50,8 +51,7 @@ and library API (`rdedup-lib`).
 ### Strong parts
 
 It's written in Rust. It's a modern language, that is actually really nice
-to use.
-Rust makes it easy to have a very robust and fast software.
+to use. Rust makes it easy to have a very robust and fast software.
 
 The author is a nice person, welcomes contributions, and helps users. Or at
 least he's trying... :)
@@ -70,9 +70,9 @@ mostly implemented, but the actual backends are not.
 
 If you have `cargo` installed:
 
-```rust
-cargo install rdedup --vers '^2' # for 2.x stable version
-cargo install rdedup --vers '^3' # for 3.x experimental, and unstable version
+```norust
+cargo install rdedup
+version
 ```
 
 If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -81,7 +81,7 @@ but for Rust)
 If you're interested in running `rdedup` with maximum possible performance,
 try:
 
-```rust
+```norust
 RUSTFLAGS="-C target-cpu=native" cargo install rdedup --vers ...
 ```
 
@@ -115,7 +115,7 @@ Supported commands:
 In combination with [rdup][rdup] this can be used to store and restore your
 backup like this:
 
-```rust
+```norust
 rdup -x /dev/null "$HOME" | rdedup store home
 rdedup load home | rdup-up "$HOME.restored"
 ```

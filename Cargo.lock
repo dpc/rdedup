@@ -783,12 +783,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rdedup"
-version = "3.0.0-0.3.0"
+version = "3.0.1"
 dependencies = [
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "rdedup-lib 3.0.0-0.2.0",
+ "rdedup-lib 3.0.0",
  "rpassword 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog-async 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -803,7 +803,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rdedup-lib"
-version = "3.0.0-0.2.0"
+version = "3.0.0"
 dependencies = [
  "backblaze-b2 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
