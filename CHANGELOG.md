@@ -1,3 +1,11 @@
+
+# v3.0.0 - 2018-07-29
+### Changed
+
+- New, incompatible with v2, repo format
+- Generational, incremental GC
+- Internal improvements
+
 # v2.0.0 - 2017-09-11
 ## Added
 - End to End testing to make sure stored data is loaded correctly
