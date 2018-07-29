@@ -1,7 +1,7 @@
 use chrono;
 use chrono::prelude::*;
 use crypto::pwhash;
-use hex::{FromHex, FromHexError, ToHex};
+use hex::{self, FromHex, FromHexError};
 use serde::Deserialize;
 use std::io;
 use {base64, box_, secretbox, serde};
@@ -103,7 +103,7 @@ where
     T: AsRef<[u8]>,
     S: serde::Serializer,
 {
-    serializer.serialize_str(&key.to_hex())
+    serializer.serialize_str(&hex::encode(key))
 }
 
 pub fn from_rfc3339<'d, D>(

@@ -170,13 +170,13 @@ fn byte_size() {
     let tests = [0u8, 1, 13, 255];
     for &b in &tests {
         let data = vec![b];
-        let name = data.to_hex();
+        let name = hex::encode(&data);
         repo.write(&name, &mut io::Cursor::new(&data), &enc_handle)
             .unwrap();
     }
     for &b in &tests {
         let mut data = Vec::new();
-        let name = vec![b].to_hex();
+        let name = hex::encode(vec![b]);
         repo.read(&name, &mut data, &dec_handle).unwrap();
         assert_eq!(data, vec![b]);
     }

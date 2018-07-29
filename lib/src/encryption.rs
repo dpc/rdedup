@@ -1,4 +1,4 @@
-use hex::ToHex;
+use hex;
 use pwhash::PWHash;
 use PassphraseFn;
 use {as_base64, box_, from_base64, pwhash, secretbox};
@@ -206,7 +206,7 @@ impl Decrypter for Curve25519Decrypter {
                 io::ErrorKind::InvalidData,
                 format!(
                     "chunk {} too short to even contain a public key",
-                    digest.to_hex()
+                    hex::encode(digest)
                 ),
             ));
         }
@@ -218,7 +218,7 @@ impl Decrypter for Curve25519Decrypter {
                 io::ErrorKind::InvalidData,
                 format!(
                     "Can't read ephemeral public key from chunk: {}",
-                    digest.to_hex()
+                    hex::encode(digest)
                 ),
             )
         })?;
@@ -232,7 +232,7 @@ impl Decrypter for Curve25519Decrypter {
             ).map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("can't decrypt chunk: {}", digest.to_hex()),
+                    format!("can't decrypt chunk: {}", hex::encode(digest)),
                 )
             })?,
         ))

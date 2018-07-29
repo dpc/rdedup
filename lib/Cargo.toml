@@ -36,7 +36,7 @@ crossbeam = "0.3"
 crossbeam-channel = "0.2"
 slog = "2.0.10"
 slog-perf = "0.2"
-hex = "0.2"
+hex = "0.3"
 sgdata = { version = "0.1.0", path = "../sgdata" }
 rand = "0.5"
 dangerous_option = "0.2"

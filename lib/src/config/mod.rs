@@ -9,7 +9,7 @@ use pwhash;
 
 use hashing;
 
-use hex::ToHex;
+use hex;
 use settings;
 
 use std::io;
@@ -115,7 +115,7 @@ impl Nesting {
         digest: &[u8],
         gen_str: &str,
     ) -> PathBuf {
-        let hex_digest = &digest.to_hex();
+        let hex_digest = hex::encode(&digest);
         let mut dir = PathBuf::from(gen_str);
         dir.push(base);
         let levels = self.clone().0;
