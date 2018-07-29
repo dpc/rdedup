@@ -149,15 +149,11 @@ impl Backend for B2 {
     }
 
     fn lock_exclusive(&self) -> io::Result<Box<aio::Lock>> {
-        Ok(Box::new(Lock::new(PathBuf::from(
-            config::LOCK_FILE,
-        ))))
+        Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
     }
 
     fn lock_shared(&self) -> io::Result<Box<aio::Lock>> {
-        Ok(Box::new(Lock::new(PathBuf::from(
-            config::LOCK_FILE,
-        ))))
+        Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
     }
 }
 

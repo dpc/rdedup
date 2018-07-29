@@ -169,9 +169,8 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
-        let decrypter = self.config
-            .encryption
-            .decrypter(pass, &self.config.pwhash)?;
+        let decrypter =
+            self.config.encryption.decrypter(pass, &self.config.pwhash)?;
 
         Ok(DecryptHandle {
             decrypter: decrypter,
@@ -183,9 +182,8 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
-        let encrypter = self.config
-            .encryption
-            .encrypter(pass, &self.config.pwhash)?;
+        let encrypter =
+            self.config.encryption.encrypter(pass, &self.config.pwhash)?;
 
         Ok(EncryptHandle {
             encrypter: encrypter,
@@ -214,7 +212,8 @@ impl Repo {
     where
         L: Into<Option<Logger>>,
     {
-        let log = log.into()
+        let log = log
+            .into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
         let backend = aio::backend_from_url(url)?;
@@ -241,7 +240,8 @@ impl Repo {
     where
         L: Into<Option<Logger>>,
     {
-        let log = log.into()
+        let log = log
+            .into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
         let backend = aio::backend_from_url(url)?;
@@ -334,12 +334,11 @@ impl Repo {
                     {
                         timer.start("tx");
                         let (i, sg) = i_sg;
-                        process_tx
-                            .send(chunk_processor::Message {
-                                data: (i as u64, sg),
-                                response_tx: digests_tx.clone(),
-                                data_type: data_type,
-                            })
+                        process_tx.send(chunk_processor::Message {
+                            data: (i as u64, sg),
+                            response_tx: digests_tx.clone(),
+                            data_type: data_type,
+                        })
                     }
                     drop(digests_tx);
                 }
@@ -349,9 +348,8 @@ impl Repo {
             let mut digests_rx = SortingIterator::new(digests_rx.into_iter());
 
             timer.start("digest-rx");
-            let first_digest = digests_rx
-                .next()
-                .expect("At least one index digest");
+            let first_digest =
+                digests_rx.next().expect("At least one index digest");
 
             if let Some(second_digest) =
                 timer.start_with("digest-rx", || digests_rx.next())
@@ -615,10 +613,7 @@ impl Repo {
         let generations = self.read_generations()?;
 
         if generations.is_empty() {
-            info!(
-                self.log,
-                "Nothing in the repository yet, nothing to gc"
-            );
+            info!(self.log, "Nothing in the repository yet, nothing to gc");
             return Ok(());
         }
 
@@ -744,29 +739,31 @@ impl Repo {
     }
 
     fn read_generations(&self) -> io::Result<Vec<Generation>> {
-        let mut list: Vec<_> = self.aio
+        let mut list: Vec<_> = self
+            .aio
             .list(PathBuf::new())
             .wait()?
             .iter()
             .filter_map(|path| path.file_name().and_then(|file| file.to_str()))
             .filter(|&item| {
-                item != config::CONFIG_YML_FILE && item != config::LOCK_FILE
+                item != config::CONFIG_YML_FILE
+                    && item != config::LOCK_FILE
                     && !item.ends_with(".yml")
             })
             .filter_map(|item| match Generation::try_from(item) {
-                Ok(gen) => if self.aio
-                    .read_metadata(gen.config_path())
-                    .wait()
-                    .is_ok()
-                {
-                    Some(gen)
-                } else {
-                    warn!(
-                        self.log,
-                        "skipping dead generation: `{}` (config missing)", item,
-                    );
-                    None
-                },
+                Ok(gen) => {
+                    if self.aio.read_metadata(gen.config_path()).wait().is_ok()
+                    {
+                        Some(gen)
+                    } else {
+                        warn!(
+                            self.log,
+                            "skipping dead generation: `{}` (config missing)",
+                            item,
+                        );
+                        None
+                    }
+                }
                 Err(e) => {
                     warn!(
                         self.log,
@@ -859,11 +856,7 @@ impl Repo {
         });
 
         let name: Name = data_address?.into();
-        name.write_as(
-            name_str,
-            *generations.last().unwrap(),
-            &self.aio,
-        )?;
+        name.write_as(name_str, *generations.last().unwrap(), &self.aio)?;
         Ok(stats.get_stats())
     }
 }

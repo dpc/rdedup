@@ -168,9 +168,7 @@ impl Repo {
 
     pub fn use_bup_chunking(&mut self, bits: Option<u32>) -> super::Result<()> {
         let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
-        let chunking = config::Chunking::Bup {
-            chunk_bits: bits,
-        };
+        let chunking = config::Chunking::Bup { chunk_bits: bits };
 
         if !chunking.valid() {
             return Err(super::Error::new(
@@ -187,9 +185,7 @@ impl Repo {
         bits: Option<u32>,
     ) -> super::Result<()> {
         let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
-        let chunking = config::Chunking::FastCDC {
-            chunk_bits: bits,
-        };
+        let chunking = config::Chunking::FastCDC { chunk_bits: bits };
 
         if !chunking.valid() {
             return Err(super::Error::new(
@@ -206,9 +202,7 @@ impl Repo {
         bits: Option<u32>,
     ) -> super::Result<()> {
         let bits = bits.unwrap_or(config::DEFAULT_BUP_CHUNK_BITS);
-        let chunking = config::Chunking::Gear {
-            chunk_bits: bits,
-        };
+        let chunking = config::Chunking::Gear { chunk_bits: bits };
 
         if !chunking.valid() {
             return Err(super::Error::new(

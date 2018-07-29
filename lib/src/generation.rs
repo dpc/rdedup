@@ -17,7 +17,10 @@ pub const CONFIG_YML_FILE: &'static str = "config.yml";
 /// Generation config, serialized in a file
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Config {
-    #[serde(serialize_with = "as_rfc3339", deserialize_with = "from_rfc3339")]
+    #[serde(
+        serialize_with = "as_rfc3339",
+        deserialize_with = "from_rfc3339"
+    )]
     pub(crate) created: chrono::DateTime<Utc>,
 }
 
@@ -77,7 +80,10 @@ impl Generation {
             Err(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
-                    format!("`Generation`'s random part can't be parsed: {}", rand_s),
+                    format!(
+                        "`Generation`'s random part can't be parsed: {}",
+                        rand_s
+                    ),
                 ))
             }
         };
@@ -92,7 +98,10 @@ impl Generation {
             Err(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
-                    format!("`Generation`'s sequence part can't be parsed: {}", seq_s),
+                    format!(
+                        "`Generation`'s sequence part can't be parsed: {}",
+                        seq_s
+                    ),
                 ))
             }
         };
@@ -133,7 +142,8 @@ impl Generation {
     pub(crate) fn write(&self, aio: &aio::AsyncIO) -> io::Result<()> {
         let config = Config::new();
 
-        let config_str = serde_yaml::to_string(&config).expect("yaml serialization failed");
+        let config_str =
+            serde_yaml::to_string(&config).expect("yaml serialization failed");
 
         aio.write(
             self.config_path(),
@@ -149,12 +159,13 @@ impl Generation {
 
         let config_data = sg.to_linear_vec();
 
-        let config: Config = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("couldn't parse yaml: {}", e.to_string()),
-            )
-        })?;
+        let config: Config = serde_yaml::from_reader(config_data.as_slice())
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("couldn't parse yaml: {}", e.to_string()),
+                )
+            })?;
 
         Ok(config)
     }
@@ -165,7 +176,8 @@ fn generation_from_str() {
     assert!(Generation::try_from("0").is_err());
     assert!(Generation::try_from("-0").is_err());
     assert!(Generation::try_from("").is_err());
-    let gen = Generation::try_from("0123456701234567-1234123412341234").unwrap();
+    let gen =
+        Generation::try_from("0123456701234567-1234123412341234").unwrap();
     println!("{:x}", gen.seq);
     println!("{:x}", gen.rand);
     assert!(

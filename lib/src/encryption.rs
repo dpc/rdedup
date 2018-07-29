@@ -60,11 +60,20 @@ impl Decrypter for NopDecrypter {
 /// Configuration of repository encryption
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Curve25519 {
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    #[serde(
+        serialize_with = "as_base64",
+        deserialize_with = "from_base64"
+    )]
     pub sealed_sec_key: Vec<u8>,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    #[serde(
+        serialize_with = "as_base64",
+        deserialize_with = "from_base64"
+    )]
     pub pub_key: box_::PublicKey,
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    #[serde(
+        serialize_with = "as_base64",
+        deserialize_with = "from_base64"
+    )]
     pub nonce: secretbox::Nonce,
 }
 
@@ -112,14 +121,12 @@ impl Curve25519 {
                     )
                 })?;
 
-        Ok(
-            box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "plain secret key in a wrong format",
-                )
-            })?,
-        )
+        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "plain secret key in a wrong format",
+            )
+        })?)
     }
 
     fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {
@@ -178,16 +185,9 @@ impl Encrypter for Curve25519Encrypter {
             .expect("Nonce::from_slice failed");
 
         let (ephemeral_pub, ephemeral_sec) = box_::gen_keypair();
-        let cipher = box_::seal(
-            &buf.to_linear(),
-            &nonce,
-            &self.pub_key,
-            &ephemeral_sec,
-        );
-        Ok(SGData::from_many(vec![
-            ephemeral_pub.0.to_vec(),
-            cipher,
-        ]))
+        let cipher =
+            box_::seal(&buf.to_linear(), &nonce, &self.pub_key, &ephemeral_sec);
+        Ok(SGData::from_many(vec![ephemeral_pub.0.to_vec(), cipher]))
     }
 }
 
@@ -223,16 +223,18 @@ impl Decrypter for Curve25519Decrypter {
             )
         })?;
 
-        Ok(SGData::from_single(box_::open(
-            &buf[box_::PUBLICKEYBYTES..],
-            &nonce,
-            &ephemeral_pub,
-            &self.sec_key,
-        ).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("can't decrypt chunk: {}", digest.to_hex()),
-            )
-        })?))
+        Ok(SGData::from_single(
+            box_::open(
+                &buf[box_::PUBLICKEYBYTES..],
+                &nonce,
+                &ephemeral_pub,
+                &self.sec_key,
+            ).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("can't decrypt chunk: {}", digest.to_hex()),
+                )
+            })?,
+        ))
     }
 }

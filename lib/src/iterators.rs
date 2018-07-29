@@ -55,7 +55,8 @@ impl Iterator for StoredChunks {
                     Err(e) => return Some(Err(e)),
                 };
 
-                let name = name.file_name()
+                let name = name
+                    .file_name()
                     .expect("Path terminated with ..?")
                     .to_string_lossy();
                 let bytes = name.to_string().into_bytes();

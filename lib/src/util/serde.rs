@@ -61,10 +61,14 @@ where
 {
     use serde::de::Error;
     String::deserialize(deserializer)
-        .and_then(|string| base64::decode(&string).map_err(|err| Error::custom(err.to_string())))
+        .and_then(|string| {
+            base64::decode(&string)
+                .map_err(|err| Error::custom(err.to_string()))
+        })
         .and_then(|ref bytes| {
-            T::try_from(bytes)
-                .map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error)))
+            T::try_from(bytes).map_err(|err| {
+                Error::custom(format!("{}", &err as &::std::error::Error))
+            })
         })
 }
 
@@ -88,8 +92,9 @@ where
                 .map_err(|err: FromHexError| Error::custom(err.to_string()))
         })
         .and_then(|bytes: Vec<u8>| {
-            T::try_from(&bytes)
-                .map_err(|err| Error::custom(format!("{}", &err as &::std::error::Error)))
+            T::try_from(&bytes).map_err(|err| {
+                Error::custom(format!("{}", &err as &::std::error::Error))
+            })
         })
 }
 
@@ -101,7 +106,9 @@ where
     serializer.serialize_str(&key.to_hex())
 }
 
-pub fn from_rfc3339<'d, D>(deserializer: D) -> Result<chrono::DateTime<Utc>, D::Error>
+pub fn from_rfc3339<'d, D>(
+    deserializer: D,
+) -> Result<chrono::DateTime<Utc>, D::Error>
 where
     D: serde::Deserializer<'d>,
 {
@@ -114,7 +121,10 @@ where
         .map(|dt| dt.with_timezone(&Utc))
 }
 
-pub fn as_rfc3339<S>(key: &chrono::DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+pub fn as_rfc3339<S>(
+    key: &chrono::DateTime<Utc>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

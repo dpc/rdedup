@@ -66,8 +66,10 @@ impl Deflate {
 #[cfg(feature = "with-deflate")]
 impl Compression for Deflate {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
-        let mut compressor =
-            flate2::write::DeflateEncoder::new(Vec::with_capacity(buf.len()), self.level);
+        let mut compressor = flate2::write::DeflateEncoder::new(
+            Vec::with_capacity(buf.len()),
+            self.level,
+        );
 
         for sg_part in buf.as_parts() {
             compressor.write_all(sg_part).unwrap();
@@ -77,7 +79,8 @@ impl Compression for Deflate {
     }
 
     fn decompress(&self, buf: SGData) -> io::Result<SGData> {
-        let mut decompressor = flate2::write::DeflateDecoder::new(Vec::with_capacity(buf.len()));
+        let mut decompressor =
+            flate2::write::DeflateDecoder::new(Vec::with_capacity(buf.len()));
 
         for part in buf.as_parts() {
             decompressor.write_all(part)?;
@@ -107,8 +110,10 @@ impl Bzip2 {
 #[cfg(feature = "with-bzip2")]
 impl Compression for Bzip2 {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
-        let mut compressor =
-            bzip2::write::BzEncoder::new(Vec::with_capacity(buf.len()), self.level);
+        let mut compressor = bzip2::write::BzEncoder::new(
+            Vec::with_capacity(buf.len()),
+            self.level,
+        );
 
         for sg_part in buf.as_parts() {
             compressor.write_all(sg_part).unwrap();
@@ -118,7 +123,8 @@ impl Compression for Bzip2 {
     }
 
     fn decompress(&self, buf: SGData) -> io::Result<SGData> {
-        let mut decompressor = bzip2::write::BzDecoder::new(Vec::with_capacity(buf.len()));
+        let mut decompressor =
+            bzip2::write::BzDecoder::new(Vec::with_capacity(buf.len()));
 
         for sg_part in buf.as_parts() {
             decompressor.write_all(sg_part)?;
@@ -145,7 +151,8 @@ impl Compression for Xz2 {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
             let mut compressor =
-                lzma::LzmaWriter::new_compressor(&mut backing, self.level).unwrap();
+                lzma::LzmaWriter::new_compressor(&mut backing, self.level)
+                    .unwrap();
             for sg_part in buf.as_parts() {
                 // compressor.write can sometimes return zero, so we can't just
                 // use write_all; see
@@ -165,7 +172,8 @@ impl Compression for Xz2 {
     fn decompress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
-            let mut decompressor = lzma::LzmaWriter::new_decompressor(&mut backing).unwrap();
+            let mut decompressor =
+                lzma::LzmaWriter::new_decompressor(&mut backing).unwrap();
             for sg_part in buf.as_parts() {
                 // compressor.write can sometimes return zero, so we can't just
                 // use write_all; see
@@ -237,7 +245,8 @@ impl Compression for Zstd {
     fn compress(&self, buf: SGData) -> io::Result<SGData> {
         let mut backing: Vec<u8> = Vec::with_capacity(buf.len());
         {
-            let mut compressor = zstd::Encoder::new(&mut backing, self.level).unwrap();
+            let mut compressor =
+                zstd::Encoder::new(&mut backing, self.level).unwrap();
             for sg_part in buf.as_parts() {
                 compressor.write_all(sg_part).unwrap()
             }

@@ -96,7 +96,8 @@ impl Name {
             || vec![],
         )?;
 
-        Ok(list.iter()
+        Ok(list
+            .iter()
             .map(|e| {
                 e.file_stem()
                     .expect(&format!("malformed name: {:?}", e))
@@ -137,10 +138,8 @@ impl Name {
             ));
         }
 
-        aio.write(
-            path,
-            SGData::from_single(serialized_str.into_bytes()),
-        ).wait()?;
+        aio.write(path, SGData::from_single(serialized_str.into_bytes()))
+            .wait()?;
         Ok(())
     }
 
@@ -165,10 +164,7 @@ impl Name {
         if name.digest.len() != DIGEST_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "parsed digest has wrong size: {}",
-                    name.digest.len()
-                ),
+                format!("parsed digest has wrong size: {}", name.digest.len()),
             ));
         }
 

@@ -8,7 +8,10 @@ pub(crate) trait PWHash {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct SodiumOxide {
-    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+    #[serde(
+        serialize_with = "as_base64",
+        deserialize_with = "from_base64"
+    )]
     salt: pwhash::Salt,
     #[serde(rename = "mem_limit")]
     mem_limit: u64,

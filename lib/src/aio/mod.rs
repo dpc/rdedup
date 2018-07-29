@@ -4,6 +4,7 @@ use url;
 
 use dangerous_option::DangerousOption as AutoOption;
 
+use crossbeam_channel;
 use num_cpus;
 use sgdata::SGData;
 use slog;
@@ -16,7 +17,6 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
-use crossbeam_channel;
 
 mod local;
 pub(crate) use self::local::Local;
@@ -52,9 +52,7 @@ pub struct AsyncIOResult<T> {
 impl<T> AsyncIOResult<T> {
     /// Block until result arrives
     pub fn wait(self) -> io::Result<T> {
-        self.rx
-            .recv()
-            .expect("No `AsyncIO` thread response")
+        self.rx.recv().expect("No `AsyncIO` thread response")
     }
 }
 
@@ -153,8 +151,7 @@ impl AsyncIO {
 
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::List(path, tx));
+        self.tx.send(Message::List(path, tx));
         AsyncIOResult { rx: rx }
     }
 
@@ -165,8 +162,7 @@ impl AsyncIO {
         path: PathBuf,
     ) -> Box<Iterator<Item = io::Result<PathBuf>>> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::ListRecursively(path, tx));
+        self.tx.send(Message::ListRecursively(path, tx));
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
             Ok(batch) => Box::new(batch.into_iter().map(Ok))
@@ -179,13 +175,12 @@ impl AsyncIO {
 
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::Write(WriteArgs {
-                path: path,
-                data: sg,
-                idempotent: false,
-                complete_tx: Some(tx),
-            }));
+        self.tx.send(Message::Write(WriteArgs {
+            path: path,
+            data: sg,
+            idempotent: false,
+            complete_tx: Some(tx),
+        }));
         AsyncIOResult { rx: rx }
     }
 
@@ -197,13 +192,12 @@ impl AsyncIO {
         sg: SGData,
     ) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::Write(WriteArgs {
-                path: path,
-                data: sg,
-                idempotent: true,
-                complete_tx: Some(tx),
-            }));
+        self.tx.send(Message::Write(WriteArgs {
+            path: path,
+            data: sg,
+            idempotent: true,
+            complete_tx: Some(tx),
+        }));
         AsyncIOResult { rx: rx }
     }
 
@@ -212,29 +206,26 @@ impl AsyncIO {
     // TODO: No need for it anymore
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
-        self.tx
-            .send(Message::Write(WriteArgs {
-                path: path,
-                data: sg,
-                idempotent: false,
-                complete_tx: None,
-            }));
+        self.tx.send(Message::Write(WriteArgs {
+            path: path,
+            data: sg,
+            idempotent: false,
+            complete_tx: None,
+        }));
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
-        self.tx
-            .send(Message::Write(WriteArgs {
-                path: path,
-                data: sg,
-                idempotent: true,
-                complete_tx: None,
-            }));
+        self.tx.send(Message::Write(WriteArgs {
+            path: path,
+            data: sg,
+            idempotent: true,
+            complete_tx: None,
+        }));
     }
 
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::Read(path, tx));
+        self.tx.send(Message::Read(path, tx));
         AsyncIOResult { rx: rx }
     }
 
@@ -243,29 +234,25 @@ impl AsyncIO {
         path: PathBuf,
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::ReadMetadata(path, tx));
+        self.tx.send(Message::ReadMetadata(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::Remove(path, tx));
+        self.tx.send(Message::Remove(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::RemoveDirAll(path, tx));
+        self.tx.send(Message::RemoveDirAll(path, tx));
         AsyncIOResult { rx: rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx
-            .send(Message::Rename(src, dst, tx));
+        self.tx.send(Message::Rename(src, dst, tx));
         AsyncIOResult { rx: rx }
     }
 }
@@ -295,8 +282,7 @@ impl Drop for AsyncIOShared {
     fn drop(&mut self) {
         trace!(self.log, "Waiting for all threads to finish");
         for join in self.join.drain(..) {
-            join.join()
-                .expect("AsyncIO worker thread panicked")
+            join.join().expect("AsyncIO worker thread panicked")
         }
     }
 }
@@ -444,7 +430,8 @@ impl AsyncIOThread {
         }
 
         let len = sg.len();
-        let res = self.backend
+        let res = self
+            .backend
             .borrow_mut()
             .write(path.clone(), sg, idempotent);
         {
@@ -519,9 +506,7 @@ impl AsyncIOThread {
         self.time_reporter.start("read-metadata");
         let res = {
             let _guard = self.pending_wait_and_insert(&path);
-            self.backend
-                .borrow_mut()
-                .read_metadata(path.clone())
+            self.backend.borrow_mut().read_metadata(path.clone())
         };
 
         self.time_reporter.start("read send response");
@@ -549,9 +534,7 @@ impl AsyncIOThread {
         trace!(self.log, "list"; "path" => %path.display());
         self.time_reporter.start("list");
 
-        self.backend
-            .borrow_mut()
-            .list_recursively(path, tx)
+        self.backend.borrow_mut().list_recursively(path, tx)
     }
 
     fn remove(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<()>>) {

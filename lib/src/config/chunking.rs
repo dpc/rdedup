@@ -31,15 +31,11 @@ impl Default for Chunking {
 impl Chunking {
     pub fn valid(self) -> bool {
         match self {
-            Chunking::Bup {
-                chunk_bits: bits,
+            Chunking::Bup { chunk_bits: bits }
+            | Chunking::Gear { chunk_bits: bits }
+            | Chunking::FastCDC { chunk_bits: bits } => {
+                30 >= bits && bits >= 10
             }
-            | Chunking::Gear {
-                chunk_bits: bits,
-            }
-            | Chunking::FastCDC {
-                chunk_bits: bits,
-            } => 30 >= bits && bits >= 10,
         }
     }
 
