@@ -48,10 +48,7 @@ impl ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng()
-        .gen_iter()
-        .take(len)
-        .collect::<Vec<u8>>()
+    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
 }
 
 fn simple_digest(data: &[u8]) -> Vec<u8> {
@@ -79,28 +76,17 @@ fn run_rdedup_with(args: &[&str], input: Vec<u8>) -> std::process::Output {
 
     {
         // limited borrow of stdin
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("failed to get stdin");
-        stdin
-            .write_all(&input)
-            .expect("failed to write to stdin");
+        let stdin = child.stdin.as_mut().expect("failed to get stdin");
+        stdin.write_all(&input).expect("failed to write to stdin");
     }
 
-    let out = child
-        .wait_with_output()
-        .expect("failed to wait on child");
+    let out = child.wait_with_output().expect("failed to wait on child");
 
     if !out.status.success() {
         eprintln!("stdout:");
-        std::io::stderr()
-            .write_all(&out.stdout)
-            .unwrap();
+        std::io::stderr().write_all(&out.stdout).unwrap();
         eprintln!("stderr:");
-        std::io::stderr()
-            .write_all(&out.stderr)
-            .unwrap();
+        std::io::stderr().write_all(&out.stderr).unwrap();
     }
 
     assert!(out.status.success());
@@ -144,10 +130,7 @@ impl TestState {
             digest: simple_digest(&data).to_hex(),
             len: data.len(),
         };
-        eprintln!(
-            "Storing name: {} of size {}",
-            name.digest, name.len
-        );
+        eprintln!("Storing name: {} of size {}", name.digest, name.len);
         let _out = run_rdedup_with(&vec!["store", &name.digest], data);
         self.names.insert(name.digest.clone(), name);
 
@@ -204,10 +187,8 @@ impl TestState {
     fn gc(&mut self) -> io::Result<()> {
         eprintln!("GC");
         let grace = thread_rng().gen_range(0, 2000);
-        let _out = run_rdedup_with(
-            &vec!["gc", "--grace", &grace.to_string()],
-            vec![],
-        );
+        let _out =
+            run_rdedup_with(&vec!["gc", "--grace", &grace.to_string()], vec![]);
         Ok(())
     }
 }
