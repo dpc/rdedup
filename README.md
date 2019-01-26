@@ -127,7 +127,7 @@ or encrypted already.
 
 ## `RDEDUP_PASSPHRASE` environment variable
 
-While it's not advised, if `RDEDUP_PASSPHRASE` is defined, it will be used
+If `RDEDUP_PASSPHRASE` is defined, it will be used
 instead of interactively asking user for password.
 
 [bup]: https://github.com/bup/bup/
