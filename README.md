@@ -15,7 +15,7 @@
 
 # rdedup
 
-See [wiki](https://github.com/dpc/rdedup/wiki) for current project status and [original use case](https%3A//github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29).
+See [wiki](https://github.com/dpc/rdedup/wiki) for current project status and [original use case](https://github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29).
 
 `rdedup` is a data deduplication engine and a backup software.
 
