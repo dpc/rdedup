@@ -15,15 +15,20 @@
 
 # rdedup
 
-See [wiki](https://github.com/dpc/rdedup/wiki) for current project status and [original use case](https://github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29).
+
 
 `rdedup` is a data deduplication engine and a backup software.
+See [current project status](https://github.com/dpc/rdedup/wiki) for and [original use case description](https://github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29) wiki pages.
 
 `rdedup` is generally similar to existing software like
- `duplicacy`, `restic`, `attic`, `duplicity`, `zbackup`, etc.
+ `duplicacy`, `restic`, `attic`, `duplicity`, `zbackup`, etc., with a skew towards asymmetric
+ encryption and synchronization friendly data model.
+ [Thanks to Rust and solid architecture, rdedup is also exteremely performant](https://github.com/dpc/rdedup/wiki/Rust's-fearless-concurrency-in-rdedup)
+ and also very reliable (no data-loss bugs ever reported).
 
 `rdedup` is written in Rust and provides both command line tool
-and library API (`rdedup-lib`).
+and library API (`rdedup-lib`). The library can be used to embed the core engine into other applications,
+or building custom frontends and tools.
 
  ## Features
 
