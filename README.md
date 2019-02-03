@@ -18,7 +18,7 @@
 
 
 `rdedup` is a data deduplication engine and a backup software.
-See [current project status](https://github.com/dpc/rdedup/wiki) for and [original use case description](https://github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29) wiki pages.
+See [current project status](https://github.com/dpc/rdedup/wiki) and [original use case description](https://github.com/dpc/rdedup/wiki/My-original-use-case-%28old-README.md%29) wiki pages.
 
 `rdedup` is generally similar to existing software like
  `duplicacy`, `restic`, `attic`, `duplicity`, `zbackup`, etc., with a skew towards asymmetric
