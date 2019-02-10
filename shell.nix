@@ -7,16 +7,19 @@ pkgs.stdenv.mkDerivation {
 
   buildInputs = with pkgs; [
     ncurses cmake gcc openssl libsodium lzma libsodium clang_39
+    rustup
   ];
 
-  shellHook = ''
-      LD_LIBRARY_PATH=${pkgs.ncurses}/lib/:$LD_LIBRARY_PATH
-      LD_LIBRARY_PATH=${pkgs.openssl}/lib/:$LD_LIBRARY_PATH
-      LD_LIBRARY_PATH=${pkgs.libsodium}/lib/:$LD_LIBRARY_PATH
-      LD_LIBRARY_PATH=${pkgs.lzma}/lib/:$LD_LIBRARY_PATH
-      LIBRARY_PATH=${pkgs.zlib}/lib/:$LIBRARY_PATH
-      PKG_CONFIG_PATH=${pkgs.libsodium.dev}/lib/pkgconfig:$PKG_CONFIG_PATH
-      PKG_CONFIG_PATH=${pkgs.lzma.dev}/lib/pkgconfig:$PKG_CONFIG_PATH
-      LD_LIBRARY_PATH=${pkgs.llvmPackages.libclang}/lib/:$LD_LIBRARY_PATH
+  shellHook = with pkgs; ''
+      LD_LIBRARY_PATH=${ncurses}/lib/:$LD_LIBRARY_PATH
+      PKG_CONFIG_PATH=${openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH
+      LD_LIBRARY_PATH=${libsodium}/lib/:$LD_LIBRARY_PATH
+      LD_LIBRARY_PATH=${lzma}/lib/:$LD_LIBRARY_PATH
+      LIBRARY_PATH=${zlib}/lib/:$LIBRARY_PATH
+      PKG_CONFIG_PATH=${libsodium.dev}/lib/pkgconfig:$PKG_CONFIG_PATH
+      PKG_CONFIG_PATH=${lzma.dev}/lib/pkgconfig:$PKG_CONFIG_PATH
+      LD_LIBRARY_PATH=${llvmPackages.libclang}/lib/:$LD_LIBRARY_PATH
+
+      export PKG_CONFIG_PATH LD_LIBRARY_PATH
   '';
 }
