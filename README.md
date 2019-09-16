@@ -48,7 +48,7 @@ or building custom frontends and tools.
    * very easy to add new ones
    * check `rdedup init --help` output for up-to-date list
  * extreme performance and parallelism - see
-   [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
+   [Rust fearless concurrency in `rdedup`](https://dpc.pw/rusts-fearless-concurrency-in-rdedup)
  * reliability focus (eg. `rdedup` is using `fsync` + `rename`
    to avoid data corruption even in case of a hardware crash)
  * built-in time/performance profiler
