@@ -17,15 +17,15 @@ pub(crate) trait Backend: Send + Sync {
     ///
     /// Use to protect operations that are potentially destructive,
     /// like GC.
-    fn lock_exclusive(&self) -> io::Result<Box<Lock>>;
+    fn lock_exclusive(&self) -> io::Result<Box<dyn Lock>>;
     /// Lock the repository in shared mode
     ///
     /// This will only prevent anyone from grabing exclusive lock.
     /// Use to protect operations that only add new data, like `write`.
-    fn lock_shared(&self) -> io::Result<Box<Lock>>;
+    fn lock_shared(&self) -> io::Result<Box<dyn Lock>>;
 
     /// Spawn a new thread object of the backend.
-    fn new_thread(&self) -> io::Result<Box<BackendThread>>;
+    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>>;
 }
 
 pub(crate) trait BackendThread: Send {

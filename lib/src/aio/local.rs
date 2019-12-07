@@ -35,7 +35,7 @@ struct LocalThread {
 }
 
 impl Backend for Local {
-    fn new_thread(&self) -> io::Result<Box<BackendThread>> {
+    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
         Ok(Box::new(LocalThread {
             path: self.path.clone(),
             rand_ext: rand::thread_rng()
@@ -45,7 +45,7 @@ impl Backend for Local {
         }))
     }
 
-    fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
+    fn lock_exclusive(&self) -> io::Result<Box<dyn Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
@@ -54,7 +54,7 @@ impl Backend for Local {
         Ok(Box::new(file))
     }
 
-    fn lock_shared(&self) -> io::Result<Box<Lock>> {
+    fn lock_shared(&self) -> io::Result<Box<dyn Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;

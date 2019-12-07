@@ -6,7 +6,7 @@ use digest::{FixedOutput, Input};
 use sha2;
 use std::sync::Arc;
 
-pub type ArcHasher = Arc<Hasher + Send + Sync>;
+pub type ArcHasher = Arc<dyn Hasher + Send + Sync>;
 
 pub trait Hasher {
     fn calculate_digest(&self, sg: &SGData) -> Vec<u8>;

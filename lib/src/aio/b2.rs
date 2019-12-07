@@ -141,18 +141,18 @@ impl B2Thread {
 }
 
 impl Backend for B2 {
-    fn new_thread(&self) -> io::Result<Box<BackendThread>> {
+    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
         Ok(Box::new(B2Thread::new_from_cred(
             &self.cred,
             self.bucket.clone(),
         )?))
     }
 
-    fn lock_exclusive(&self) -> io::Result<Box<aio::Lock>> {
+    fn lock_exclusive(&self) -> io::Result<Box<dyn aio::Lock>> {
         Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
     }
 
-    fn lock_shared(&self) -> io::Result<Box<aio::Lock>> {
+    fn lock_shared(&self) -> io::Result<Box<dyn aio::Lock>> {
         Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
     }
 }

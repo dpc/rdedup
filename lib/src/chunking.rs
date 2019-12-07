@@ -83,17 +83,17 @@ pub(crate) struct Chunker<I> {
     pending: Option<ArcRef<Vec<u8>, [u8]>>,
 
     chunks_returned: usize,
-    chunking: Box<Chunking>,
+    chunking: Box<dyn Chunking>,
 }
 
 impl<I> Chunker<I> {
-    pub fn new(iter: I, chunking: Box<Chunking>) -> Self {
+    pub fn new(iter: I, chunking: Box<dyn Chunking>) -> Self {
         Chunker {
-            iter: iter,
+            iter,
             incomplete_chunk: SGData::empty(),
             pending: None,
             chunks_returned: 0,
-            chunking: chunking,
+            chunking,
         }
     }
 }

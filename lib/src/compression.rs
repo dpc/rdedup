@@ -27,7 +27,7 @@ use lzma;
 #[cfg(feature = "with-zstd")]
 use zstd;
 
-pub type ArcCompression = Arc<Compression + Send + Sync>;
+pub type ArcCompression = Arc<dyn Compression + Send + Sync>;
 
 pub trait Compression {
     fn compress(&self, buf: SGData) -> io::Result<SGData>;
