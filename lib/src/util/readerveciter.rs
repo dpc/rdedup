@@ -15,8 +15,8 @@ where
 {
     pub fn new(reader: R, buf_size: usize) -> Self {
         ReaderVecIter {
-            reader: reader,
-            buf_size: buf_size,
+            reader,
+            buf_size,
         }
     }
 }

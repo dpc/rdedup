@@ -107,8 +107,8 @@ impl Generation {
         };
 
         Ok(Generation {
-            seq: seq,
-            rand: rand,
+            seq,
+            rand,
         })
     }
 

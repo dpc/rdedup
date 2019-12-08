@@ -28,9 +28,9 @@ impl StoredChunks {
         let paths = aio.list_recursively(rel_path);
 
         Ok(StoredChunks {
-            paths: paths,
-            digest_size: digest_size,
-            log: log,
+            paths,
+            digest_size,
+            log,
         })
     }
 }

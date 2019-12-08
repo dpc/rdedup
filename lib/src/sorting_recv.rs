@@ -21,7 +21,7 @@ pub struct SortingIterator<T, I> {
 impl<T, I> SortingIterator<T, I> {
     pub fn new(iter: I) -> Self {
         SortingIterator {
-            iter: iter,
+            iter,
             early_items: Default::default(),
             next_i: 0,
         }

@@ -1,6 +1,6 @@
 <!-- README.md is auto-generated from README.tpl with `cargo readme` -->
 
-<p align="center">
+<p style="text-align:center;">
   <a href="https://travis-ci.org/dpc/{{crate}}">
       <img src="https://img.shields.io/travis/dpc/{{crate}}/master.svg?style=flat-square" alt="Travis CI Build Status">
   </a>

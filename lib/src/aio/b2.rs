@@ -34,7 +34,7 @@ struct Lock {
 
 impl Lock {
     fn new(path: PathBuf) -> Self {
-        Lock { path: path }
+        Lock { path }
     }
 }
 
@@ -129,9 +129,9 @@ impl B2Thread {
 
         let mut i = B2Thread {
             cred: cred.clone(),
-            client: client,
+            client,
             auth: RefCell::new(None),
-            bucket: bucket,
+            bucket,
         };
 
         i.reauth()?;
@@ -141,19 +141,19 @@ impl B2Thread {
 }
 
 impl Backend for B2 {
-    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
-        Ok(Box::new(B2Thread::new_from_cred(
-            &self.cred,
-            self.bucket.clone(),
-        )?))
-    }
-
     fn lock_exclusive(&self) -> io::Result<Box<dyn aio::Lock>> {
         Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
     }
 
     fn lock_shared(&self) -> io::Result<Box<dyn aio::Lock>> {
         Ok(Box::new(Lock::new(PathBuf::from(config::LOCK_FILE))))
+    }
+
+    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
+        Ok(Box::new(B2Thread::new_from_cred(
+            &self.cred,
+            self.bucket.clone(),
+        )?))
     }
 }
 
@@ -165,13 +165,17 @@ impl B2 {
         };
 
         B2 {
-            cred: cred,
+            cred,
             bucket: bucket.into(),
         }
     }
 }
 
 impl BackendThread for B2Thread {
+    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
+        fs::remove_dir_all(&path)
+    }
+
     fn rename(
         &mut self,
         src_path: PathBuf,
@@ -184,10 +188,6 @@ impl BackendThread for B2Thread {
                 fs::rename(&src_path, &dst_path)
             }
         }
-    }
-
-    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
-        fs::remove_dir_all(&path)
     }
 
     fn write(

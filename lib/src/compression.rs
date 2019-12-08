@@ -60,7 +60,7 @@ impl Deflate {
             flate2::Compression::default()
         };
 
-        Deflate { level: level }
+        Deflate { level }
     }
 }
 #[cfg(feature = "with-deflate")]
@@ -104,7 +104,7 @@ impl Bzip2 {
             bzip2::Compression::Default
         };
 
-        Bzip2 { level: level }
+        Bzip2 { level }
     }
 }
 #[cfg(feature = "with-bzip2")]
@@ -142,7 +142,7 @@ impl Xz2 {
     pub fn new(level: i32) -> Self {
         let level = cmp::min(cmp::max(level + 6, 0), 10) as u32;
 
-        Xz2 { level: level }
+        Xz2 { level }
     }
 }
 #[cfg(feature = "with-xz2")]
@@ -198,7 +198,7 @@ pub struct Zstd {
 #[cfg(feature = "with-zstd")]
 impl Zstd {
     pub fn new(level: i32) -> Self {
-        Zstd { level: level }
+        Zstd { level }
     }
 }
 

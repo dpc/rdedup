@@ -98,7 +98,7 @@ impl Curve25519 {
         Ok(Curve25519 {
             sealed_sec_key: sealed_sk,
             pub_key: pk,
-            nonce: nonce,
+            nonce,
         })
     }
 

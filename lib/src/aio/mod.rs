@@ -125,10 +125,10 @@ impl AsyncIO {
         }
 
         let shared = AsyncIOShared {
-            join: join,
+            join,
             log: log.clone(),
             stats: shared.clone(),
-            backend: backend,
+            backend,
         };
 
         Ok(AsyncIO {
@@ -152,7 +152,7 @@ impl AsyncIO {
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::List(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     // TODO: No need for it anymore?
@@ -176,12 +176,12 @@ impl AsyncIO {
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: false,
             complete_tx: Some(tx),
         }));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     // TODO: No need for it anymore
@@ -193,12 +193,12 @@ impl AsyncIO {
     ) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: true,
             complete_tx: Some(tx),
         }));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     /// Will panic the worker thread if fails, but does not require
@@ -207,7 +207,7 @@ impl AsyncIO {
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: false,
             complete_tx: None,
@@ -216,7 +216,7 @@ impl AsyncIO {
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: true,
             complete_tx: None,
@@ -226,7 +226,7 @@ impl AsyncIO {
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Read(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub(crate) fn read_metadata(
@@ -235,25 +235,25 @@ impl AsyncIO {
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::ReadMetadata(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Remove(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::RemoveDirAll(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Rename(src, dst, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 }
 
@@ -362,8 +362,8 @@ impl AsyncIOThread {
         );
         AsyncIOThread {
             log: log.new(o!("module" => "asyncio")),
-            shared: shared,
-            rx: rx,
+            shared,
+            rx,
             time_reporter: t,
             backend: RefCell::new(backend),
         }
