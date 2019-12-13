@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// digest sized elements as their name.  Invalid files with incorrect names
 /// will be ignored.
 pub struct StoredChunks {
-    paths: Box<Iterator<Item = io::Result<PathBuf>>>,
+    paths: Box<dyn Iterator<Item = io::Result<PathBuf>>>,
     digest_size: usize,
     log: Logger,
 }
@@ -28,9 +28,9 @@ impl StoredChunks {
         let paths = aio.list_recursively(rel_path);
 
         Ok(StoredChunks {
-            paths: paths,
-            digest_size: digest_size,
-            log: log,
+            paths,
+            digest_size,
+            log,
         })
     }
 }

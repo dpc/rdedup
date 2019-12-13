@@ -97,14 +97,14 @@ use self::misc::*;
 use std::error::Error as ErrorError;
 // }}}
 
-type ArcDecrypter = Arc<encryption::Decrypter + Send + Sync + 'static>;
-type ArcEncrypter = Arc<encryption::Encrypter + Send + Sync + 'static>;
+type ArcDecrypter = Arc<dyn encryption::Decrypter + Send + Sync + 'static>;
+type ArcEncrypter = Arc<dyn encryption::Encrypter + Send + Sync + 'static>;
 
 const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 const DIGEST_SIZE: usize = 32;
 
 /// Type of user provided closure that will ask user for a passphrase is needed
-type PassphraseFn<'a> = &'a Fn() -> io::Result<String>;
+type PassphraseFn<'a> = &'a dyn Fn() -> io::Result<String>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 /// Data type (index/data)
@@ -173,7 +173,7 @@ impl Repo {
             self.config.encryption.decrypter(pass, &self.config.pwhash)?;
 
         Ok(DecryptHandle {
-            decrypter: decrypter,
+            decrypter,
         })
     }
 
@@ -186,7 +186,7 @@ impl Repo {
             self.config.encryption.encrypter(pass, &self.config.pwhash)?;
 
         Ok(EncryptHandle {
-            encrypter: encrypter,
+            encrypter,
         })
     }
 
@@ -228,11 +228,11 @@ impl Repo {
 
         Ok(Repo {
             url: url.clone(),
-            config: config,
-            compression: compression,
-            hasher: hasher,
-            log: log,
-            aio: aio,
+            config,
+            compression,
+            hasher,
+            log,
+            aio,
         })
     }
 
@@ -253,11 +253,11 @@ impl Repo {
         let hasher = config.hashing.to_hasher();
         Ok(Repo {
             url: url.clone(),
-            config: config,
-            compression: compression,
-            hasher: hasher,
-            log: log,
-            aio: aio,
+            config,
+            compression,
+            hasher,
+            log,
+            aio,
         })
     }
 
@@ -288,7 +288,7 @@ impl Repo {
     /// Write a chunk of data to the repo.
     fn chunk_and_write_data_thread<'a>(
         &'a self,
-        input_data_iter: Box<Iterator<Item = Vec<u8>> + Send + 'a>,
+        input_data_iter: Box<dyn Iterator<Item = Vec<u8>> + Send + 'a>,
         process_tx: crossbeam_channel::Sender<chunk_processor::Message>,
         aio: aio::AsyncIO,
         data_type: DataType,
@@ -337,7 +337,7 @@ impl Repo {
                         process_tx.send(chunk_processor::Message {
                             data: (i as u64, sg),
                             response_tx: digests_tx.clone(),
-                            data_type: data_type,
+                            data_type,
                         })
                     }
                     drop(digests_tx);

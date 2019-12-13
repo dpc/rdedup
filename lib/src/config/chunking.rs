@@ -39,7 +39,7 @@ impl Chunking {
         }
     }
 
-    pub(crate) fn to_engine(&self) -> Box<chunking::Chunking> {
+    pub(crate) fn to_engine(&self) -> Box<dyn chunking::Chunking> {
         match *self {
             Chunking::Bup { chunk_bits } => {
                 Box::new(chunking::Bup::new(chunk_bits))

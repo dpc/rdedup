@@ -21,7 +21,7 @@ use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
 /// For every digest written to it, it will access the corresponding chunk and
 /// write it into `writer` that it wraps.
 struct IndexTranslator<'a, 'b> {
-    writer: Option<&'b mut Write>,
+    writer: Option<&'b mut dyn Write>,
     digest_buf: Digest,
     data_type: DataType,
     read_context: &'a ReadContext<'a>,
@@ -30,17 +30,17 @@ struct IndexTranslator<'a, 'b> {
 
 impl<'a, 'b> IndexTranslator<'a, 'b> {
     pub(crate) fn new(
-        writer: Option<&'b mut Write>,
+        writer: Option<&'b mut dyn Write>,
         data_type: DataType,
         read_context: &'a ReadContext<'a>,
         log: Logger,
     ) -> Self {
         IndexTranslator {
-            data_type: data_type,
+            data_type,
             digest_buf: Digest(Vec::with_capacity(DIGEST_SIZE)),
-            read_context: read_context,
-            writer: writer,
-            log: log,
+            read_context,
+            writer,
+            log,
         }
     }
 }
@@ -81,7 +81,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                         digest: DigestRef(digest),
                         index_level: 0,
                     },
-                    writer.as_mut().map(|w| w as &mut io::Write),
+                    writer.as_mut().map(|w| w as &mut dyn io::Write),
                     self.log.clone(),
                 ))?;
             } else {
@@ -95,7 +95,7 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                         digest: digest_buf.as_digest_ref(),
                         index_level: 0,
                     },
-                    writer.as_mut().map(|w| w as &mut io::Write),
+                    writer.as_mut().map(|w| w as &mut dyn io::Write),
                     self.log.clone(),
                 ));
                 digest_buf.0.clear();
@@ -122,7 +122,7 @@ impl<'a, 'b> Drop for IndexTranslator<'a, 'b> {
 pub(crate) struct ReadRequest<'a> {
     data_address: DataAddressRef<'a>,
     data_type: DataType,
-    writer: Option<&'a mut Write>,
+    writer: Option<&'a mut dyn Write>,
     log: Logger,
 }
 
@@ -130,14 +130,14 @@ impl<'a> ReadRequest<'a> {
     pub(crate) fn new(
         data_type: DataType,
         data_address: DataAddressRef<'a>,
-        writer: Option<&'a mut Write>,
+        writer: Option<&'a mut dyn Write>,
         log: Logger,
     ) -> Self {
         ReadRequest {
-            data_type: data_type,
-            data_address: data_address,
-            writer: writer,
-            log: log,
+            data_type,
+            data_address,
+            writer,
+            log,
         }
     }
 }
@@ -147,12 +147,12 @@ impl<'a> ReadRequest<'a> {
 /// Information about the `Repo` that is open for reaading
 pub(crate) struct ReadContext<'a> {
     /// Writer to write the data to; `None` will discard the data
-    accessor: &'a ChunkAccessor,
+    accessor: &'a dyn ChunkAccessor,
 }
 
 impl<'a> ReadContext<'a> {
-    pub(crate) fn new(accessor: &'a ChunkAccessor) -> Self {
-        ReadContext { accessor: accessor }
+    pub(crate) fn new(accessor: &'a dyn ChunkAccessor) -> Self {
+        ReadContext { accessor }
     }
 
     fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
@@ -217,7 +217,7 @@ pub(crate) trait ChunkAccessor {
         &self,
         digest: DigestRef,
         data_type: DataType,
-        writer: &mut Write,
+        writer: &mut dyn Write,
     ) -> io::Result<()>;
 
     fn touch(&self, _digest: DigestRef) -> io::Result<()>;
@@ -240,9 +240,9 @@ impl<'a> DefaultChunkAccessor<'a> {
         generations: Vec<Generation>,
     ) -> Self {
         DefaultChunkAccessor {
-            repo: repo,
-            decrypter: decrypter,
-            compression: compression,
+            repo,
+            decrypter,
+            compression,
             gen_strings: generations.iter().map(|g| g.to_string()).collect(),
         }
     }
@@ -257,7 +257,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         &self,
         digest: DigestRef,
         data_type: DataType,
-        writer: &mut Write,
+        writer: &mut dyn Write,
     ) -> io::Result<()> {
         let mut data = None;
         let cur_gen_str = self.gen_strings.last().unwrap();
@@ -384,19 +384,19 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         self.raw.repo()
     }
 
-    fn touch(&self, digest: DigestRef) -> io::Result<()> {
-        self.accessed.borrow_mut().insert(digest.0.into());
-        Ok(())
-    }
-
     fn read_chunk_into(
         &self,
         digest: DigestRef,
         data_type: DataType,
-        writer: &mut Write,
+        writer: &mut dyn Write,
     ) -> io::Result<()> {
         self.touch(digest)?;
         self.raw.read_chunk_into(digest, data_type, writer)
+    }
+
+    fn touch(&self, digest: DigestRef) -> io::Result<()> {
+        self.accessed.borrow_mut().insert(digest.0.into());
+        Ok(())
     }
 }
 
@@ -446,7 +446,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         &self,
         digest: DigestRef,
         data_type: DataType,
-        writer: &mut Write,
+        writer: &mut dyn Write,
     ) -> io::Result<()> {
         {
             let mut accessed = self.accessed.borrow_mut();
@@ -502,7 +502,7 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
         &self,
         digest: DigestRef,
         data_type: DataType,
-        writer: &mut Write,
+        writer: &mut dyn Write,
     ) -> io::Result<()> {
         self.raw.read_chunk_into(digest, data_type, writer)
     }

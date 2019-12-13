@@ -97,16 +97,16 @@ where
     }
 
     #[inline]
+    fn count(self) -> usize {
+        self.iter.count()
+    }
+
+    #[inline]
     fn nth(&mut self, n: usize) -> Option<(u64, I::Item)> {
         self.iter.nth(n).map(|a| {
             let i = self.count + n as u64;
             self.count = i + 1;
             (i, a)
         })
-    }
-
-    #[inline]
-    fn count(self) -> usize {
-        self.iter.count()
     }
 }

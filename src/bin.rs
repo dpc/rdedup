@@ -159,7 +159,7 @@ struct Options {
 impl Options {
     fn new(url: Url) -> Options {
         Options {
-            url: url,
+            url,
             debug_level: 0,
             settings: settings::Repo::new(),
         }
@@ -496,7 +496,7 @@ fn run() -> io::Result<()> {
         ("list", Some(_matches)) => {
             let repo = Repo::open(&options.url, log)?;
 
-            for name in try!(repo.list_names()) {
+            for name in repo.list_names()? {
                 println!("{}", name);
             }
         }

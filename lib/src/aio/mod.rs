@@ -94,7 +94,7 @@ pub struct AsyncIO {
 
 impl AsyncIO {
     pub(crate) fn new(
-        backend: Box<Backend + Send + Sync>,
+        backend: Box<dyn Backend + Send + Sync>,
         log: Logger,
     ) -> io::Result<Self> {
         let thread_num = 4 * num_cpus::get();
@@ -125,10 +125,10 @@ impl AsyncIO {
         }
 
         let shared = AsyncIOShared {
-            join: join,
+            join,
             log: log.clone(),
             stats: shared.clone(),
-            backend: backend,
+            backend,
         };
 
         Ok(AsyncIO {
@@ -137,11 +137,11 @@ impl AsyncIO {
         })
     }
 
-    pub(crate) fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
+    pub(crate) fn lock_exclusive(&self) -> io::Result<Box<dyn Lock>> {
         self.shared.backend.lock_exclusive()
     }
 
-    pub(crate) fn lock_shared(&self) -> io::Result<Box<Lock>> {
+    pub(crate) fn lock_shared(&self) -> io::Result<Box<dyn Lock>> {
         self.shared.backend.lock_shared()
     }
 
@@ -152,7 +152,7 @@ impl AsyncIO {
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::List(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     // TODO: No need for it anymore?
@@ -160,15 +160,15 @@ impl AsyncIO {
     pub fn list_recursively(
         &self,
         path: PathBuf,
-    ) -> Box<Iterator<Item = io::Result<PathBuf>>> {
+    ) -> Box<dyn Iterator<Item = io::Result<PathBuf>>> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::ListRecursively(path, tx));
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
             Ok(batch) => Box::new(batch.into_iter().map(Ok))
-                as Box<Iterator<Item = io::Result<PathBuf>>>,
+                as Box<dyn Iterator<Item = io::Result<PathBuf>>>,
             Err(e) => Box::new(Some(Err(e)).into_iter())
-                as Box<Iterator<Item = io::Result<PathBuf>>>,
+                as Box<dyn Iterator<Item = io::Result<PathBuf>>>,
         });
         Box::new(iter)
     }
@@ -176,12 +176,12 @@ impl AsyncIO {
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: false,
             complete_tx: Some(tx),
         }));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     // TODO: No need for it anymore
@@ -193,12 +193,12 @@ impl AsyncIO {
     ) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: true,
             complete_tx: Some(tx),
         }));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     /// Will panic the worker thread if fails, but does not require
@@ -207,7 +207,7 @@ impl AsyncIO {
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: false,
             complete_tx: None,
@@ -216,7 +216,7 @@ impl AsyncIO {
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
         self.tx.send(Message::Write(WriteArgs {
-            path: path,
+            path,
             data: sg,
             idempotent: true,
             complete_tx: None,
@@ -226,7 +226,7 @@ impl AsyncIO {
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Read(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub(crate) fn read_metadata(
@@ -235,25 +235,25 @@ impl AsyncIO {
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::ReadMetadata(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Remove(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::RemoveDirAll(path, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
         self.tx.send(Message::Rename(src, dst, tx));
-        AsyncIOResult { rx: rx }
+        AsyncIOResult { rx }
     }
 }
 
@@ -275,7 +275,7 @@ pub struct AsyncIOShared {
     join: Vec<thread::JoinHandle<()>>,
     log: slog::Logger,
     stats: AsyncIOThreadShared,
-    backend: Box<Backend + Send + Sync>,
+    backend: Box<dyn Backend + Send + Sync>,
 }
 
 impl Drop for AsyncIOShared {
@@ -335,7 +335,7 @@ struct AsyncIOThread {
     rx: crossbeam_channel::Receiver<Message>,
     log: Logger,
     time_reporter: TimeReporter,
-    backend: RefCell<Box<BackendThread>>,
+    backend: RefCell<Box<dyn BackendThread>>,
 }
 
 /// Guard that removes entry from the pending paths on drop
@@ -352,7 +352,7 @@ impl AsyncIOThread {
     fn new(
         shared: AsyncIOThreadShared,
         rx: crossbeam_channel::Receiver<Message>,
-        backend: Box<BackendThread>,
+        backend: Box<dyn BackendThread>,
         log: Logger,
     ) -> Self {
         let t = TimeReporter::new_with_level(
@@ -362,8 +362,8 @@ impl AsyncIOThread {
         );
         AsyncIOThread {
             log: log.new(o!("module" => "asyncio")),
-            shared: shared,
-            rx: rx,
+            shared,
+            rx,
             time_reporter: t,
             backend: RefCell::new(backend),
         }
@@ -593,7 +593,7 @@ impl AsyncIOThread {
 // ```
 pub(crate) fn backend_from_url(
     u: &Url,
-) -> io::Result<Box<Backend + Send + Sync>> {
+) -> io::Result<Box<dyn Backend + Send + Sync>> {
     if u.scheme() == "file" {
         return Ok(Box::new(Local::new(PathBuf::from(u.path()))));
     } else if u.scheme() == "b2" {

@@ -35,17 +35,7 @@ struct LocalThread {
 }
 
 impl Backend for Local {
-    fn new_thread(&self) -> io::Result<Box<BackendThread>> {
-        Ok(Box::new(LocalThread {
-            path: self.path.clone(),
-            rand_ext: rand::thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(20)
-                .collect::<String>(),
-        }))
-    }
-
-    fn lock_exclusive(&self) -> io::Result<Box<Lock>> {
+    fn lock_exclusive(&self) -> io::Result<Box<dyn Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
@@ -54,7 +44,7 @@ impl Backend for Local {
         Ok(Box::new(file))
     }
 
-    fn lock_shared(&self) -> io::Result<Box<Lock>> {
+    fn lock_shared(&self) -> io::Result<Box<dyn Lock>> {
         let lock_path = lock_file_path(&self.path);
 
         let file = fs::File::create(&lock_path)?;
@@ -62,15 +52,30 @@ impl Backend for Local {
 
         Ok(Box::new(file))
     }
+
+    fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
+        Ok(Box::new(LocalThread {
+            path: self.path.clone(),
+            rand_ext: rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(20)
+                .collect::<String>(),
+        }))
+    }
 }
 
 impl Local {
     pub(crate) fn new(path: PathBuf) -> Self {
-        Local { path: path }
+        Local { path }
     }
 }
 
 impl BackendThread for LocalThread {
+    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
+        let path = self.path.join(path);
+        fs::remove_dir_all(&path)
+    }
+
     fn rename(
         &mut self,
         src_path: PathBuf,
@@ -86,11 +91,6 @@ impl BackendThread for LocalThread {
                 fs::rename(&src_path, &dst_path)
             }
         }
-    }
-
-    fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()> {
-        let path = self.path.join(path);
-        fs::remove_dir_all(&path)
     }
 
     fn write(

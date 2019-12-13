@@ -41,13 +41,13 @@ impl ChunkProcessor {
         assert!(generations.len() >= 1);
         ChunkProcessor {
             log: repo.log.clone(),
-            repo: repo,
-            rx: rx,
-            aio: aio,
-            encrypter: encrypter,
-            compressor: compressor,
-            hasher: hasher,
-            generations: generations,
+            repo,
+            rx,
+            aio,
+            encrypter,
+            compressor,
+            hasher,
+            generations,
         }
     }
 

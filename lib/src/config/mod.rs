@@ -167,9 +167,9 @@ impl Repo {
 
         Ok(Repo {
             version: REPO_VERSION_CURRENT,
-            pwhash: pwhash,
+            pwhash,
             chunking: settings.chunking.0,
-            encryption: encryption,
+            encryption,
             compression: settings
                 .compression
                 .to_config(settings.compression_level),

@@ -9,8 +9,8 @@ use config;
 use std::io;
 use std::sync::Arc;
 
-pub type ArcEncrypter = Arc<Encrypter + Send + Sync>;
-pub type ArcDecrypter = Arc<Decrypter + Send + Sync>;
+pub type ArcEncrypter = Arc<dyn Encrypter + Send + Sync>;
+pub type ArcDecrypter = Arc<dyn Decrypter + Send + Sync>;
 
 pub(crate) trait EncryptionEngine {
     fn change_passphrase(
@@ -80,7 +80,7 @@ pub struct Curve25519 {
 impl Curve25519 {
     pub(crate) fn new(
         passphrase_f: PassphraseFn,
-        pwhash: &pwhash::PWHash,
+        pwhash: &dyn pwhash::PWHash,
     ) -> super::Result<Self> {
         let (pk, sk) = box_::gen_keypair();
         let passphrase = passphrase_f()?;
@@ -98,13 +98,13 @@ impl Curve25519 {
         Ok(Curve25519 {
             sealed_sec_key: sealed_sk,
             pub_key: pk,
-            nonce: nonce,
+            nonce,
         })
     }
 
     fn unseal_decrypt(
         &self,
-        passphrase_f: &Fn() -> io::Result<String>,
+        passphrase_f: &dyn Fn() -> io::Result<String>,
         pwhash: &config::PWHash,
     ) -> io::Result<box_::SecretKey> {
         let passphrase = passphrase_f()?;
@@ -167,7 +167,7 @@ impl EncryptionEngine for Curve25519 {
     }
     fn decrypter(
         &self,
-        pass: &Fn() -> io::Result<String>,
+        pass: &dyn Fn() -> io::Result<String>,
         pwhash: &config::PWHash,
     ) -> io::Result<ArcDecrypter> {
         let key = self.unseal_decrypt(pass, pwhash)?;

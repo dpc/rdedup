@@ -107,8 +107,8 @@ impl Generation {
         };
 
         Ok(Generation {
-            seq: seq,
-            rand: rand,
+            seq,
+            rand,
         })
     }
 
@@ -180,10 +180,8 @@ fn generation_from_str() {
         Generation::try_from("0123456701234567-1234123412341234").unwrap();
     println!("{:x}", gen.seq);
     println!("{:x}", gen.rand);
-    assert!(
-        gen == Generation {
-            seq: 0x0123456701234567,
-            rand: 0x1234123412341234,
-        }
-    )
+    assert_eq!(gen, Generation {
+        seq: 0x0123456701234567,
+        rand: 0x1234123412341234,
+    })
 }

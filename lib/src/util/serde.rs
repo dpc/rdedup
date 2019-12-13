@@ -8,7 +8,7 @@ use {base64, box_, secretbox, serde};
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;
-    fn try_from(&[u8]) -> Result<Self, Self::Err>;
+    fn try_from(_: &[u8]) -> Result<Self, Self::Err>;
 }
 
 impl MyTryFromBytes for box_::PublicKey {
@@ -67,7 +67,7 @@ where
         })
         .and_then(|ref bytes| {
             T::try_from(bytes).map_err(|err| {
-                Error::custom(format!("{}", &err as &::std::error::Error))
+                Error::custom(format!("{}", &err as &dyn(::std::error::Error)))
             })
         })
 }
@@ -93,7 +93,7 @@ where
         })
         .and_then(|bytes: Vec<u8>| {
             T::try_from(&bytes).map_err(|err| {
-                Error::custom(format!("{}", &err as &::std::error::Error))
+                Error::custom(format!("{}", &err as &dyn(::std::error::Error)))
             })
         })
 }
