@@ -48,7 +48,7 @@ impl ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    (0..len).map(|_| { rand::random::<u8>() }).collect::<Vec<u8>>()
 }
 
 fn simple_digest(data: &[u8]) -> Vec<u8> {
@@ -138,9 +138,9 @@ impl TestState {
     }
 
     fn select_random_name(&self) -> NameStats {
-        let random_name =
-            rand::sample(&mut thread_rng(), self.names.keys(), 1)[0];
-
+        let mut rng = thread_rng();
+        let random_key = rng.gen_range(0, self.names.keys().len());
+        let random_name = self.names.keys().nth(random_key).unwrap();
         self.names.get(random_name).unwrap().clone()
     }
 

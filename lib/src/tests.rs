@@ -107,7 +107,7 @@ impl io::Read for ExampleDataGen {
         }
         self.count -= 1;
 
-        let len = match rand::weak_rng().gen_range(0, 3) {
+        let len = match rand::thread_rng().gen_range(0, 3) {
             0 => copy_as_much_as_possible(buf, &self.a),
             1 => copy_as_much_as_possible(buf, &self.b),
             2 => copy_as_much_as_possible(buf, &self.c),
@@ -121,7 +121,7 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::weak_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::thread_rng().gen_iter().take(len).collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -194,7 +194,7 @@ fn random_sanity() {
 
     for i in 0..10 {
         let mut data =
-            ExampleDataGen::new(rand::weak_rng().gen_range(0, 10 * 1024));
+            ExampleDataGen::new(rand::thread_rng().gen_range(0, 10 * 1024));
         let name = format!("{:x}", i);
         repo.write(&name, &mut data, &enc_handle).unwrap();
         names.push((name, data.finish()));

@@ -55,7 +55,7 @@ pub struct Deflate {
 #[cfg(feature = "with-deflate")]
 impl Deflate {
     pub fn new(level: i32) -> Self {
-        Deflate { level: level }
+        Deflate { level }
     }
 }
 #[cfg(feature = "with-bzip2")]
@@ -67,7 +67,7 @@ pub struct Bzip2 {
 #[cfg(feature = "with-bzip2")]
 impl Bzip2 {
     pub fn new(level: i32) -> Self {
-        Bzip2 { level: level }
+        Bzip2 { level }
     }
 }
 
@@ -80,7 +80,7 @@ pub struct Zstd {
 #[cfg(feature = "with-zstd")]
 impl Zstd {
     pub fn new(level: i32) -> Self {
-        Zstd { level: level }
+        Zstd { level }
     }
 }
 
@@ -93,6 +93,6 @@ pub struct Xz2 {
 #[cfg(feature = "with-xz2")]
 impl Xz2 {
     pub fn new(level: i32) -> Self {
-        Xz2 { level: level }
+        Xz2 { level }
     }
 }
