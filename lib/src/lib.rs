@@ -315,7 +315,7 @@ impl Repo {
 
             scope.spawn({
                 let process_tx = process_tx.clone();
-                move || {
+                move |_| {
                     let mut timer = slog_perf::TimeReporter::new_with_level(
                         "chunker",
                         self.log.clone(),
@@ -338,7 +338,7 @@ impl Repo {
                             data: (i as u64, sg),
                             response_tx: digests_tx.clone(),
                             data_type,
-                        })
+                        }).expect("chunk process tx channel closed")
                     }
                     drop(digests_tx);
                 }
@@ -375,7 +375,7 @@ impl Repo {
                     digest: first_digest,
                 })
             }
-        })
+        }).expect("chunker thread failed")
     }
 
     /// Number of threads to use to parallelize CPU-intense part of
@@ -402,7 +402,7 @@ impl Repo {
 
         while let Some(buf) = time.start_with("input", || while_ok.next()) {
             time.start("tx");
-            chunker_tx.send(buf).unwrap()
+            chunker_tx.send(buf).expect("chunker tx channel closed")
         }
 
         if let Some(e) = while_ok.finish() {
@@ -819,7 +819,7 @@ impl Repo {
         let (process_tx, process_rx) = crossbeam_channel::bounded(num_threads);
 
         let data_address = crossbeam::scope(|scope| {
-            scope.spawn(move || self.input_reader_thread(reader, chunker_tx));
+            scope.spawn(move |_| self.input_reader_thread(reader, chunker_tx));
 
             for _ in 0..num_threads {
                 let process_rx = process_rx.clone();
@@ -828,7 +828,7 @@ impl Repo {
                 let compression = Arc::clone(&self.compression);
                 let hasher = Arc::clone(&self.hasher);
                 let generations = generations.clone();
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     let processor = ChunkProcessor::new(
                         self.clone(),
                         process_rx,
@@ -843,7 +843,7 @@ impl Repo {
             }
             drop(process_rx);
 
-            let chunk_and_write = scope.spawn(move || {
+            let chunk_and_write = scope.spawn(move |_| {
                 self.chunk_and_write_data_thread(
                     Box::new(chunker_rx.into_iter()),
                     process_tx,
@@ -853,7 +853,7 @@ impl Repo {
             });
 
             chunk_and_write.join()
-        });
+        }).expect("non-joined thread panicked (chunk processor?)");
 
         let data_address = data_address.map_err(|e| {
             if let Some(io_e) = e.downcast_ref::<io::Error>() {
