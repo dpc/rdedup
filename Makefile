@@ -11,7 +11,7 @@ default: $(DEFAULT_TARGET)
 ALL_TARGETS += build $(EXAMPLES) test doc
 ifneq ($(RELEASE),)
 $(info RELEASE BUILD: $(PKG_NAME))
-CARGO_FLAGS += --release --frozen
+CARGO_FLAGS += --release --locked
 ALL_TARGETS += bench
 else
 $(info DEBUG BUILD: $(PKG_NAME); use `RELEASE=true make [args]` for release build)
