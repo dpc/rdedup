@@ -6,18 +6,23 @@ rust:
   - beta
   - nightly
 
-before_install:
+install:
   - sudo apt-get install -y liblzma-dev
   - sudo apt-get install -y libbz2-dev
+# disabled until fmt stabilized: cargo install -f rustfmt
+# - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo install -f clippy; fi
+
+# NOTE: travis executes all script steps even if one fails, so we keep it in a single step to fail fast
 script:
-  - export PATH=$PATH:~/.cargo/bin
-# - disabled until fmt stabilized: ./scripts/check-fmt.sh
-# - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
-  - make all
-  - make travistest
-  - if [ ! -z "$RELEASE" ] ; then cd tester; cargo build --release; cd ..; rm -Rf /tmp/rdedup-tester/; ./target/release/tester 200; fi
-  - if [ ! -z "$RELEASE" ] ; then ./scripts/e2e-test.sh; fi
-  - if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
+  - |
+    set -o errexit
+    # disabled until fmt stabilized: ./scripts/check-fmt.sh
+    #if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo clippy && cd lib && cargo clippy; cd ..; fi
+    make all
+    make travistest
+    if [ ! -z "$RELEASE" ] ; then cd tester; cargo build --release; cd ..; rm -Rf /tmp/rdedup-tester/; ./target/release/tester 200; fi
+    if [ ! -z "$RELEASE" ] ; then ./scripts/e2e-test.sh; fi
+    if [ ! -z "$RELEASE" ] ; then cd lib && make travistest; fi
 
 env:
   global:
@@ -26,11 +31,6 @@ env:
   matrix:
     -
     - RELEASE=true
-
-install:
-# - disabled until fmt stabilized: cargo install -f rustfmt
-# - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then cargo install -f clippy; fi
-  - ls -ahl ~/.cargo/bin/
 
 notifications:
   webhooks:
