@@ -151,7 +151,7 @@ impl AsyncIO {
 
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::List(path, tx));
+        self.tx.send(Message::List(path, tx)).expect("aio tx closed: list");
         AsyncIOResult { rx }
     }
 
@@ -162,7 +162,7 @@ impl AsyncIO {
         path: PathBuf,
     ) -> Box<dyn Iterator<Item = io::Result<PathBuf>>> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::ListRecursively(path, tx));
+        self.tx.send(Message::ListRecursively(path, tx)).expect("aio tx closed: list_recursively");
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
             Ok(batch) => Box::new(batch.into_iter().map(Ok))
@@ -180,7 +180,7 @@ impl AsyncIO {
             data: sg,
             idempotent: false,
             complete_tx: Some(tx),
-        }));
+        })).expect("aio tx closed: write");
         AsyncIOResult { rx }
     }
 
@@ -197,7 +197,7 @@ impl AsyncIO {
             data: sg,
             idempotent: true,
             complete_tx: Some(tx),
-        }));
+        })).expect("aio tx closed: write_idempotent");
         AsyncIOResult { rx }
     }
 
@@ -211,7 +211,7 @@ impl AsyncIO {
             data: sg,
             idempotent: false,
             complete_tx: None,
-        }));
+        })).expect("aio tx closed: write_checked");
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
@@ -220,12 +220,12 @@ impl AsyncIO {
             data: sg,
             idempotent: true,
             complete_tx: None,
-        }));
+        })).expect("aio tx closed: write_checked_idempotent");
     }
 
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Read(path, tx));
+        self.tx.send(Message::Read(path, tx)).expect("aio tx closed: read");
         AsyncIOResult { rx }
     }
 
@@ -234,25 +234,25 @@ impl AsyncIO {
         path: PathBuf,
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::ReadMetadata(path, tx));
+        self.tx.send(Message::ReadMetadata(path, tx)).expect("aio tx closed: read_metadata");
         AsyncIOResult { rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Remove(path, tx));
+        self.tx.send(Message::Remove(path, tx)).expect("aio tx closed: remove");
         AsyncIOResult { rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::RemoveDirAll(path, tx));
+        self.tx.send(Message::RemoveDirAll(path, tx)).expect("aio tx closed: remove_dir_all");
         AsyncIOResult { rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Rename(src, dst, tx));
+        self.tx.send(Message::Rename(src, dst, tx)).expect("aio tx closed: rename");
         AsyncIOResult { rx }
     }
 }
@@ -373,7 +373,7 @@ impl AsyncIOThread {
         loop {
             self.time_reporter.start("rx");
 
-            if let Some(msg) = self.rx.recv() {
+            if let Ok(msg) = self.rx.recv() {
                 match msg {
                     Message::Write(WriteArgs {
                         path,

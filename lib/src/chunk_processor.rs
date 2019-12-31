@@ -65,7 +65,7 @@ impl ChunkProcessor {
         loop {
             timer.start("rx");
 
-            if let Some(input) = self.rx.recv() {
+            if let Ok(input) = self.rx.recv() {
                 timer.start("processing");
 
                 let Message {
