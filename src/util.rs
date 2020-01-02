@@ -59,23 +59,20 @@ fn test_parse_size() {
     }
 }
 
-fn read_passphrase_env() -> Option<String> {
+fn read_passphrase_env() -> io::Result<Option<String>> {
     if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
         eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
-        return Some(pass);
+        return Ok(Some(pass));
     }
     if let Ok(file_path) = env::var("RDEDUP_PASSPHRASE_FILE") {
         eprint!("Using passphrase from file set in RDEDUP_PASSPHRASE_FILE\n");
-        match fs::read_to_string(file_path) {
-            Ok(pass) => return Some(pass.trim().to_string()),
-            Err(e) => eprint!("Error while reading file set in RDEDUP_PASSPHRASE_FILE: {:?}\n", e),
-        }
+        return Ok(Some(fs::read_to_string(file_path)?.trim().to_string()));
     }
-    None
+    Ok(None)
 }
 
 pub fn read_passphrase() -> io::Result<String> {
-    if let Some(pass) = read_passphrase_env() {
+    if let Some(pass) = read_passphrase_env()? {
         return Ok(pass);
     }
     eprint!("Enter passphrase to unlock: ");
@@ -83,7 +80,7 @@ pub fn read_passphrase() -> io::Result<String> {
 }
 
 pub fn read_new_passphrase() -> io::Result<String> {
-    if let Some(pass) = read_passphrase_env() {
+    if let Some(pass) = read_passphrase_env()? {
         return Ok(pass);
     }
     loop {
