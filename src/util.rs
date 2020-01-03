@@ -1,6 +1,6 @@
 use rpassword;
 use std::str::FromStr;
-use std::{env, io};
+use std::{fs, env, io};
 
 /// Parse human-readable size string
 ///
@@ -59,9 +59,20 @@ fn test_parse_size() {
     }
 }
 
-pub fn read_passphrase() -> io::Result<String> {
+fn read_passphrase_env() -> io::Result<Option<String>> {
     if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
         eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        return Ok(Some(pass));
+    }
+    if let Ok(file_path) = env::var("RDEDUP_PASSPHRASE_FILE") {
+        eprint!("Using passphrase from file set in RDEDUP_PASSPHRASE_FILE\n");
+        return Ok(Some(fs::read_to_string(file_path)?.trim().to_string()));
+    }
+    Ok(None)
+}
+
+pub fn read_passphrase() -> io::Result<String> {
+    if let Some(pass) = read_passphrase_env()? {
         return Ok(pass);
     }
     eprint!("Enter passphrase to unlock: ");
@@ -69,8 +80,7 @@ pub fn read_passphrase() -> io::Result<String> {
 }
 
 pub fn read_new_passphrase() -> io::Result<String> {
-    if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
-        eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+    if let Some(pass) = read_passphrase_env()? {
         return Ok(pass);
     }
     loop {
