@@ -595,7 +595,7 @@ pub(crate) fn backend_from_url(
     u: &Url,
 ) -> io::Result<Box<dyn Backend + Send + Sync>> {
     if u.scheme() == "file" {
-        return Ok(Box::new(Local::new(PathBuf::from(u.path()))));
+        return Ok(Box::new(Local::new(u.to_file_path().unwrap())));
     } else if u.scheme() == "b2" {
         let id = u.path();
         let bucket = u.fragment().ok_or_else(|| {
