@@ -48,9 +48,9 @@ members = [ "tester" ]
 rdedup-lib = { version = "3.1.0", path = "lib", default-features = false }
 log = "0.3.6"
 hex = "0.3"
-clap = "2"
 rpassword = "4.0"
 slog = { version = "2.0.10", features = ["max_level_trace", "release_max_level_trace"]}
 slog-term = "2"
 slog-async = "2"
 url = "1"
+structopt = "0.3.15"
