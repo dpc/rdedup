@@ -322,43 +322,42 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
 #[derive(Debug, StructOpt)]
 #[structopt(author, about = "Data deduplication toolkit")]
 struct CliOpts {
-    #[structopt(short = "d", long = "dir", name = "REPO_DIR")]
+    #[structopt(short = "d", long = "dir", value_name = "PATH")]
     /// Path to rdedup repository. Override `RDEDUP_DIR` environment variable
     repo_dir: Option<std::ffi::OsString>,
 
-    #[structopt(short = "u", long = "repo", conflicts_with = "repo_dir")]
+    #[structopt(
+        short = "u",
+        long = "repo",
+        conflicts_with = "repo_dir",
+        value_name = "URI"
+    )]
     /// Rdedup repository URI. Override the `RDEDUP_URI` environment variable
     repo_uri: Option<std::ffi::OsString>,
 
-    #[structopt(short = "v")]
+    #[structopt(short = "v", parse(from_occurrences))]
     /// Increase debugging level for general messages
-    verbose: Vec<bool>,
+    verbose: u8,
 
-    #[structopt(short = "t")]
+    #[structopt(short = "t", parse(from_occurrences))]
     /// Increase debugging level for timings
-    verbose_timings: Vec<bool>,
+    verbose_timings: u8,
 
     #[structopt(subcommand)]
     command: Command,
 }
 
 #[derive(Debug, StructOpt)]
+#[structopt(setting = structopt::clap::AppSettings::DeriveDisplayOrder)]
 enum Command {
-    #[structopt(display_order = 0)]
+    #[structopt(setting = structopt::clap::AppSettings::DeriveDisplayOrder)]
     /// Create a new repository
     Init {
         #[structopt(
             long,
-            possible_values = &["strong", "interactive", "weak"],
-            default_value = "strong"
-        )]
-        /// Set pwhash strength
-        pwhash: String,
-
-        #[structopt(
-            long,
             possible_values = &["bup", "gear", "fastcdc"],
-            default_value = "fastcdc"
+            default_value = "fastcdc",
+            value_name = "SCHEME",
         )]
         /// Set chunking scheme
         chunking: String,
@@ -366,96 +365,109 @@ enum Command {
         #[structopt(
             long,
             validator = validate_chunk_size,
-            default_value = "128K"
+            default_value = "128K",
+            value_name = "N",
         )]
         /// Set average chunk size
         chunk_size: String,
 
         #[structopt(
             long,
+            possible_values = &["deflate", "xz2", "zstd", "bzip2", "none"],
+            default_value = "zstd",
+            value_name = "SCHEME",
+        )]
+        /// Set compression scheme
+        compression: String,
+
+        #[structopt(long, default_value = "0", value_name = "N")]
+        /// Set compression level where negative numbers mean "faster" and positive ones "smaller"
+        compression_level: i32,
+
+        #[structopt(
+            long,
             possible_values = &["curve25519", "none"],
-            default_value = "curve25519"
+            default_value = "curve25519",
+            value_name = "SCHEME",
         )]
         /// Set encryptiopn scheme
         encryption: String,
 
         #[structopt(
             long,
-            possible_values = &["deflate", "xz2", "zstd", "bzip2", "none"],
-            default_value = "zstd"
+            possible_values = &["sha256", "blake2b"],
+            default_value = "blake2b",
+            value_name = "SCHEME",
         )]
-        /// Set compression scheme
-        compression: String,
+        /// Set hashing scheme
+        hashing: String,
 
-        #[structopt(long, default_value = "0")]
-        /// Set compression level where negative numbers mean "faster" and positive ones "smaller"
-        compression_level: i32,
-
-        #[structopt(long, validator = validate_nesting, default_value = "2")]
+        #[structopt(long, validator = validate_nesting, default_value = "2", value_name = "N")]
         /// Set level of folder nesting
         nesting: u8,
 
         #[structopt(
             long,
-            possible_values = &["sha256", "blake2b"],
-            default_value = "blake2b"
+            possible_values = &["strong", "interactive", "weak"],
+            default_value = "strong",
+            value_name = "STRENGTH",
         )]
-        /// Set hashing scheme
-        hashing: String,
+        /// Set pwhash strength
+        pwhash: String,
     },
 
-    #[structopt(display_order = 1)]
     /// Store data to repository
     Store {
+        #[structopt(name = "NAME")]
         /// Name to store to
         name: String,
     },
 
-    #[structopt(display_order = 2)]
     /// Load data from repository
     Load {
+        #[structopt(name = "NAME")]
         /// Name to load from
         name: String,
     },
 
-    #[structopt(display_order = 3, visible_alias = "ls")]
+    #[structopt(visible_alias = "ls")]
     /// List names stored in the repository
     List,
 
-    #[structopt(display_order = 4, visible_alias = "rm")]
-    /// Remove name(s) stored in the repository
+    #[structopt(visible_alias = "rm")]
+    /// Remove names stored in the repository
     Remove {
+        #[structopt(name = "NAME", required = true)]
         /// Names to remove
         names: Vec<String>,
     },
 
-    #[structopt(
-        display_order = 5,
-        name = "change_passphrase",
-        visible_alias = "chpasswd"
-    )]
+    #[structopt(name = "change_passphrase", visible_alias = "chpasswd")]
     /// Change the passphrase protecting the encryption key (if any)
     ChangePassphrase,
 
-    #[structopt(display_order = 6)]
+    /// Calculate disk usage due to the data stored for a set of names
+    Du {
+        #[structopt(name = "NAME", required = true)]
+        /// Names to check
+        names: Vec<String>,
+    },
+
     /// Garbage collect unreferenced chunks
     Gc {
-        #[structopt(long = "grace", default_value = "86400")]
+        #[structopt(
+            long = "grace",
+            default_value = "86400",
+            value_name = "SECONDS"
+        )]
         /// Set grace time in seconds
         grace_time: u64,
     },
 
-    #[structopt(display_order = 7)]
     /// Verify integrity of data stored in the repository
     Verify {
-        /// Name(s) to verify
-        names: Vec<String>,
-    },
-
-    #[structopt(display_order = 8)]
-    /// Calculate disk usage due to the data stored for a set of names
-    Du {
-        /// Name(s) to check
+        #[structopt(name = "NAME", required = true)]
+        /// Names to verify
         names: Vec<String>,
     },
 }
@@ -507,10 +519,8 @@ fn run() -> io::Result<()> {
 
     let mut options = Options::new(url);
 
-    let log = create_logger(
-        cli_opts.verbose.len() as u32,
-        cli_opts.verbose_timings.len() as u32,
-    );
+    let log =
+        create_logger(cli_opts.verbose as u32, cli_opts.verbose_timings as u32);
 
     match cli_opts.command {
         Command::Init {
