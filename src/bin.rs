@@ -132,7 +132,6 @@ extern crate url;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
-use std::error::Error;
 use std::{env, io, process};
 use structopt::StructOpt;
 use url::Url;
@@ -144,7 +143,7 @@ fn parse_url(s: &str) -> io::Result<Url> {
     Url::parse(s).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("URI parsing error : {}", e.description()),
+            format!("URI parsing error : {}", e.to_string()),
         )
     })
 }
