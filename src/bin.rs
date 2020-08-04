@@ -124,16 +124,16 @@ extern crate rdedup_lib as lib;
 extern crate rpassword;
 #[macro_use]
 extern crate slog;
+extern crate clap;
 extern crate slog_async;
 extern crate slog_term;
-extern crate structopt;
 extern crate url;
 
+use clap::Clap;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
 use std::{env, io, process};
-use structopt::StructOpt;
 use url::Url;
 
 use std::str::FromStr;
@@ -248,16 +248,16 @@ mod util;
 use util::{read_new_passphrase, read_passphrase};
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-fn validate_chunk_size(s: String) -> Result<(), String> {
+fn validate_chunk_size(s: &str) -> Result<(), String> {
     util::parse_size(&s)
         .map(|_| ())
         .ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-fn validate_nesting(s: String) -> Result<(), String> {
+fn validate_nesting(s: &str) -> Result<(), String> {
     let msg = "nesting must be an integer between 0 and 31";
-    let levels = match u8::from_str(s.as_str()) {
+    let levels = match u8::from_str(s) {
         Ok(l) => l,
         Err(_) => return Err(msg.into()),
     };
@@ -318,14 +318,14 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
     }
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(author, about = "Data deduplication toolkit")]
+#[derive(Debug, Clap)]
+#[clap(author, about = "Data deduplication toolkit")]
 struct CliOpts {
-    #[structopt(short = "d", long = "dir", value_name = "PATH")]
+    #[clap(short = "d", long = "dir", value_name = "PATH")]
     /// Path to rdedup repository. Override `RDEDUP_DIR` environment variable
     repo_dir: Option<std::ffi::OsString>,
 
-    #[structopt(
+    #[clap(
         short = "u",
         long = "repo",
         conflicts_with = "repo_dir",
@@ -334,25 +334,25 @@ struct CliOpts {
     /// Rdedup repository URI. Override the `RDEDUP_URI` environment variable
     repo_uri: Option<std::ffi::OsString>,
 
-    #[structopt(short = "v", parse(from_occurrences))]
+    #[clap(short = "v", parse(from_occurrences))]
     /// Increase debugging level for general messages
     verbose: u8,
 
-    #[structopt(short = "t", parse(from_occurrences))]
+    #[clap(short = "t", parse(from_occurrences))]
     /// Increase debugging level for timings
     verbose_timings: u8,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     command: Command,
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(setting = structopt::clap::AppSettings::DeriveDisplayOrder)]
+#[derive(Debug, Clap)]
+#[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
 enum Command {
-    #[structopt(setting = structopt::clap::AppSettings::DeriveDisplayOrder)]
+    #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
     /// Create a new repository
     Init {
-        #[structopt(
+        #[clap(
             long,
             possible_values = &["bup", "gear", "fastcdc"],
             default_value = "fastcdc",
@@ -361,7 +361,7 @@ enum Command {
         /// Set chunking scheme
         chunking: String,
 
-        #[structopt(
+        #[clap(
             long,
             validator = validate_chunk_size,
             default_value = "128K",
@@ -370,7 +370,7 @@ enum Command {
         /// Set average chunk size
         chunk_size: String,
 
-        #[structopt(
+        #[clap(
             long,
             possible_values = &["deflate", "xz2", "zstd", "bzip2", "none"],
             default_value = "zstd",
@@ -379,11 +379,11 @@ enum Command {
         /// Set compression scheme
         compression: String,
 
-        #[structopt(long, default_value = "0", value_name = "N")]
+        #[clap(long, default_value = "0", value_name = "N")]
         /// Set compression level where negative numbers mean "faster" and positive ones "smaller"
         compression_level: i32,
 
-        #[structopt(
+        #[clap(
             long,
             possible_values = &["curve25519", "none"],
             default_value = "curve25519",
@@ -392,7 +392,7 @@ enum Command {
         /// Set encryptiopn scheme
         encryption: String,
 
-        #[structopt(
+        #[clap(
             long,
             possible_values = &["sha256", "blake2b"],
             default_value = "blake2b",
@@ -401,11 +401,11 @@ enum Command {
         /// Set hashing scheme
         hashing: String,
 
-        #[structopt(long, validator = validate_nesting, default_value = "2", value_name = "N")]
+        #[clap(long, validator = validate_nesting, default_value = "2", value_name = "N")]
         /// Set level of folder nesting
         nesting: u8,
 
-        #[structopt(
+        #[clap(
             long,
             possible_values = &["strong", "interactive", "weak"],
             default_value = "strong",
@@ -417,44 +417,44 @@ enum Command {
 
     /// Store data to repository
     Store {
-        #[structopt(name = "NAME")]
+        #[clap(name = "NAME")]
         /// Name to store to
         name: String,
     },
 
     /// Load data from repository
     Load {
-        #[structopt(name = "NAME")]
+        #[clap(name = "NAME")]
         /// Name to load from
         name: String,
     },
 
-    #[structopt(visible_alias = "ls")]
+    #[clap(visible_alias = "ls")]
     /// List names stored in the repository
     List,
 
-    #[structopt(visible_alias = "rm")]
+    #[clap(visible_alias = "rm")]
     /// Remove names stored in the repository
     Remove {
-        #[structopt(name = "NAME", required = true)]
+        #[clap(name = "NAME", required = true)]
         /// Names to remove
         names: Vec<String>,
     },
 
-    #[structopt(name = "change_passphrase", visible_alias = "chpasswd")]
+    #[clap(name = "change_passphrase", visible_alias = "chpasswd")]
     /// Change the passphrase protecting the encryption key (if any)
     ChangePassphrase,
 
     /// Calculate disk usage due to the data stored for a set of names
     Du {
-        #[structopt(name = "NAME", required = true)]
+        #[clap(name = "NAME", required = true)]
         /// Names to check
         names: Vec<String>,
     },
 
     /// Garbage collect unreferenced chunks
     Gc {
-        #[structopt(
+        #[clap(
             long = "grace",
             default_value = "86400",
             value_name = "SECONDS"
@@ -465,14 +465,14 @@ enum Command {
 
     /// Verify integrity of data stored in the repository
     Verify {
-        #[structopt(name = "NAME", required = true)]
+        #[clap(name = "NAME", required = true)]
         /// Names to verify
         names: Vec<String>,
     },
 }
 
 fn run() -> io::Result<()> {
-    let cli_opts = CliOpts::from_args();
+    let cli_opts = CliOpts::parse();
 
     let url: Url = if let Some(loc) = cli_opts.repo_uri {
         let s = loc.into_string().map_err(|_| {
