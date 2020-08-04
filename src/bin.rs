@@ -321,14 +321,14 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
 #[derive(Debug, Clap)]
 #[clap(author, about = "Data deduplication toolkit")]
 struct CliOpts {
-    #[clap(short = "d", long = "dir", value_name = "PATH")]
+    #[clap(name = "dir", short = "d", long, value_name = "PATH")]
     /// Path to rdedup repository. Override `RDEDUP_DIR` environment variable
     repo_dir: Option<std::ffi::OsString>,
 
     #[clap(
         short = "u",
         long = "repo",
-        conflicts_with = "repo_dir",
+        conflicts_with = "dir",
         value_name = "URI"
     )]
     /// Rdedup repository URI. Override the `RDEDUP_URI` environment variable
