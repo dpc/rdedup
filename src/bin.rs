@@ -483,7 +483,7 @@ fn run() -> io::Result<()> {
         })?;
         parse_url(&s)?
     } else if let Some(dir) = cli_opts.repo_dir {
-        Url::from_file_path(&dir).map_err(|_| {
+        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("URI parsing error: {}", dir.to_string_lossy()),
