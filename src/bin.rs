@@ -119,21 +119,20 @@
 //! [ddar]: https://github.com/basak/ddar/
 //! [ddar-issue]: https://github.com/basak/ddar/issues/10
 
-extern crate clap;
 extern crate hex;
 extern crate rdedup_lib as lib;
 extern crate rpassword;
 #[macro_use]
 extern crate slog;
+extern crate clap;
 extern crate slog_async;
 extern crate slog_term;
 extern crate url;
 
-use clap::{Arg, SubCommand};
+use clap::Clap;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
-use std::error::Error;
 use std::{env, io, process};
 use url::Url;
 
@@ -144,7 +143,7 @@ fn parse_url(s: &str) -> io::Result<Url> {
     Url::parse(s).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("URI parsing error : {}", e.description()),
+            format!("URI parsing error : {}", e.to_string()),
         )
     })
 }
@@ -249,16 +248,16 @@ mod util;
 use util::{read_new_passphrase, read_passphrase};
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-fn validate_chunk_size(s: String) -> Result<(), String> {
+fn validate_chunk_size(s: &str) -> Result<(), String> {
     util::parse_size(&s)
         .map(|_| ())
         .ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-fn validate_nesting(s: String) -> Result<(), String> {
+fn validate_nesting(s: &str) -> Result<(), String> {
     let msg = "nesting must be an integer between 0 and 31";
-    let levels = match u8::from_str(s.as_str()) {
+    let levels = match u8::from_str(s) {
         Ok(l) => l,
         Err(_) => return Err(msg.into()),
     };
@@ -319,73 +318,177 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
     }
 }
 
-fn run() -> io::Result<()> {
-    let matches = clap::App::new("rdedup")
-        .version(env!("CARGO_PKG_VERSION"))
-        .author("Dawid Ciężarkiewicz <dpc@dpc.pw>")
-        .about("Data deduplication toolkit")
-        .arg(Arg::with_name("REPO_DIR").short("d").long("dir").takes_value(true).value_name("PATH")
-             .help("Path to rdedup repository. Override `RDEDUP_DIR` environment variable"))
-        .arg(Arg::with_name("REPO_URI").short("u").long("repo").takes_value(true).value_name("URI").conflicts_with("REPO_DIR")
-             .help("Rdedup repository URI. Overrides the `RDEDUP_URI` environment variable"))
-        .arg(Arg::with_name("VERBOSE").short("v").multiple(true).help("Increase debugging level for general messages"))
-        .arg(Arg::with_name("VERBOSE_TIMINGS").short("t").multiple(true).help("Increase debugging level for timings"))
-        .subcommand(SubCommand::with_name("init").display_order(0)
-                    .about("Create a new repository")
-                    .arg(Arg::with_name("PWHASH").long("pwhash").takes_value(true).value_name("STRENGTH").possible_values(&["strong", "interactive", "weak"])
-                         .default_value("strong").help("Set pwhash strength"))
-                    .arg(Arg::with_name("CHUNKING").long("chunking").takes_value(true).value_name("SCHEME").possible_values(&["bup", "gear", "fastcdc"])
-                         .default_value("fastcdc").help("Set chunking scheme"))
-                    .arg(Arg::with_name("CHUNK_SIZE").long("chunk-size").takes_value(true).value_name("N").validator(validate_chunk_size)
-                         .default_value("128K").help("Set average chunk size"))
-                    .arg(Arg::with_name("ENCRYPTION").long("encryption").takes_value(true).value_name("SCHEME").possible_values(&["curve25519", "none"])
-                         .default_value("curve25519").help("Set encryption scheme"))
-                    .arg(Arg::with_name("COMPRESSION").long("compression").takes_value(true).value_name("SCHEME")
-                         .possible_values(&["deflate", "xz2", "zstd", "bzip2", "none"])
-                         .default_value("zstd").help("Set compression scheme"))
-                    .arg(Arg::with_name("COMPRESSION_LEVEL").long("compression-level").takes_value(true).value_name("N")
-                         .default_value("0").help("Set compression level where negative numbers mean \"faster\" and positive ones \
-                                                   \"smaller\""))
-                    .arg(Arg::with_name("NESTING").long("nesting").takes_value(true).value_name("N").validator(validate_nesting)
-                         .default_value("2").help("Set level of folder nesting"))
-                    .arg(Arg::with_name("HASHING").long("hashing").takes_value(true).value_name("SCHEME").possible_values(&["sha256", "blake2b"])
-                         .default_value("blake2b").help("Set hashing scheme")))
-        .subcommand(SubCommand::with_name("store").about("Store data to repository").display_order(1)
-                    .arg(Arg::with_name("NAME").required(true).help("Name to store to")))
-        .subcommand(SubCommand::with_name("load").about("Load data from repository").display_order(2)
-                    .arg(Arg::with_name("NAME").required(true).help("Name to load from")))
-        .subcommand(SubCommand::with_name("list").visible_alias("ls").about("List names stored in the repository").display_order(3))
-        .subcommand(SubCommand::with_name("remove").visible_alias("rm").about("Remove name(s) stored in the repository").display_order(4)
-                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to remove")))
-        .subcommand(SubCommand::with_name("change_passphrase").visible_alias("chpasswd")
-                    .about("Change the passphrase protecting the encryption key (if any)"))
-        .subcommand(SubCommand::with_name("gc").about("Garbage collect unreferenced chunks")
-                    .arg(Arg::with_name("GRACE_TIME").long("grace").takes_value(true).value_name("SECONDS").default_value("86400")
-                         .help("Set grace time in seconds")))
-        .subcommand(SubCommand::with_name("verify").about("Verify integrity of data stored in the repository")
-                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to verify")))
-        .subcommand(SubCommand::with_name("du").about("Calculate disk usage due to the data stored for a set of names")
-                    .arg(Arg::with_name("NAME").required(true).multiple(true).help("Names to check")))
-        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
-        .get_matches();
+#[derive(Debug, Clap)]
+#[clap(author, about = "Data deduplication toolkit")]
+struct CliOpts {
+    #[clap(name = "dir", short = "d", long, value_name = "PATH")]
+    /// Path to rdedup repository. Override `RDEDUP_DIR` environment variable
+    repo_dir: Option<std::ffi::OsString>,
 
-    let url: Url = if let Some(loc) = matches.value_of_os("REPO_URI") {
-        let s = loc.to_os_string().into_string().map_err(|_| {
+    #[clap(
+        short = "u",
+        long = "repo",
+        conflicts_with = "dir",
+        value_name = "URI"
+    )]
+    /// Rdedup repository URI. Override the `RDEDUP_URI` environment variable
+    repo_uri: Option<std::ffi::OsString>,
+
+    #[clap(short = "v", parse(from_occurrences))]
+    /// Increase debugging level for general messages
+    verbose: u8,
+
+    #[clap(short = "t", parse(from_occurrences))]
+    /// Increase debugging level for timings
+    verbose_timings: u8,
+
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Clap)]
+#[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
+enum Command {
+    #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
+    /// Create a new repository
+    Init {
+        #[clap(
+            long,
+            possible_values = &["bup", "gear", "fastcdc"],
+            default_value = "fastcdc",
+            value_name = "SCHEME",
+        )]
+        /// Set chunking scheme
+        chunking: String,
+
+        #[clap(
+            long,
+            validator = validate_chunk_size,
+            default_value = "128K",
+            value_name = "N",
+        )]
+        /// Set average chunk size
+        chunk_size: String,
+
+        #[clap(
+            long,
+            possible_values = &["deflate", "xz2", "zstd", "bzip2", "none"],
+            default_value = "zstd",
+            value_name = "SCHEME",
+        )]
+        /// Set compression scheme
+        compression: String,
+
+        #[clap(long, default_value = "0", value_name = "N")]
+        /// Set compression level where negative numbers mean "faster" and positive ones "smaller"
+        compression_level: i32,
+
+        #[clap(
+            long,
+            possible_values = &["curve25519", "none"],
+            default_value = "curve25519",
+            value_name = "SCHEME",
+        )]
+        /// Set encryptiopn scheme
+        encryption: String,
+
+        #[clap(
+            long,
+            possible_values = &["sha256", "blake2b"],
+            default_value = "blake2b",
+            value_name = "SCHEME",
+        )]
+        /// Set hashing scheme
+        hashing: String,
+
+        #[clap(long, validator = validate_nesting, default_value = "2", value_name = "N")]
+        /// Set level of folder nesting
+        nesting: u8,
+
+        #[clap(
+            long,
+            possible_values = &["strong", "interactive", "weak"],
+            default_value = "strong",
+            value_name = "STRENGTH",
+        )]
+        /// Set pwhash strength
+        pwhash: String,
+    },
+
+    /// Store data to repository
+    Store {
+        #[clap(name = "NAME")]
+        /// Name to store to
+        name: String,
+    },
+
+    /// Load data from repository
+    Load {
+        #[clap(name = "NAME")]
+        /// Name to load from
+        name: String,
+    },
+
+    #[clap(visible_alias = "ls")]
+    /// List names stored in the repository
+    List,
+
+    #[clap(visible_alias = "rm")]
+    /// Remove names stored in the repository
+    Remove {
+        #[clap(name = "NAME", required = true)]
+        /// Names to remove
+        names: Vec<String>,
+    },
+
+    #[clap(name = "change_passphrase", visible_alias = "chpasswd")]
+    /// Change the passphrase protecting the encryption key (if any)
+    ChangePassphrase,
+
+    /// Calculate disk usage due to the data stored for a set of names
+    Du {
+        #[clap(name = "NAME", required = true)]
+        /// Names to check
+        names: Vec<String>,
+    },
+
+    /// Garbage collect unreferenced chunks
+    Gc {
+        #[clap(
+            long = "grace",
+            default_value = "86400",
+            value_name = "SECONDS"
+        )]
+        /// Set grace time in seconds
+        grace_time: u64,
+    },
+
+    /// Verify integrity of data stored in the repository
+    Verify {
+        #[clap(name = "NAME", required = true)]
+        /// Names to verify
+        names: Vec<String>,
+    },
+}
+
+fn run() -> io::Result<()> {
+    let cli_opts = CliOpts::parse();
+
+    let url: Url = if let Some(loc) = cli_opts.repo_uri {
+        let s = loc.into_string().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("URI not valid UTF-8 string"),
             )
         })?;
         parse_url(&s)?
-    } else if let Some(dir) = matches.value_of_os("REPO_DIR") {
-        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(
-            |_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("URI parsing error: {}", dir.to_string_lossy()),
-                )
-            },
-        )?
+    } else if let Some(dir) = cli_opts.repo_dir {
+        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("URI parsing error: {}", dir.to_string_lossy()),
+            )
+        })?
     } else if let Some(loc) = env::var_os("RDEDUP_URI") {
         if env::var_os("RDEDUP_DIR").is_some() {
             eprintln!(
@@ -415,35 +518,34 @@ fn run() -> io::Result<()> {
 
     let mut options = Options::new(url);
 
-    let log = create_logger(
-        matches.occurrences_of("VERBOSE") as u32,
-        matches.occurrences_of("VERBOSE_TIMINGS") as u32,
-    );
+    let log =
+        create_logger(cli_opts.verbose as u32, cli_opts.verbose_timings as u32);
 
-    match matches.subcommand() {
-        ("init", Some(matches)) => {
-            options.set_chunking(
-                matches.value_of("CHUNKING").unwrap(),
-                matches
-                    .value_of("CHUNK_SIZE")
-                    .map(|s| {
-                        util::parse_size(s).expect("Invalid chunk size option")
-                    })
-                    .map(|u| u.trailing_zeros()),
+    match cli_opts.command {
+        Command::Init {
+            chunking,
+            chunk_size,
+            encryption,
+            pwhash,
+            compression,
+            compression_level,
+            nesting,
+            hashing,
+        } => {
+            let chunk_size = Some(
+                util::parse_size(&chunk_size)
+                    .expect("Invalid chunk size option")
+                    .trailing_zeros(),
             );
-            options.set_encryption(matches.value_of("ENCRYPTION").unwrap());
-            options.settings.set_pwhash(settings::PWHash::from(
-                matches.value_of("PWHASH").unwrap(),
-            ));
-            options.set_compression(matches.value_of("COMPRESSION").unwrap());
-            options.settings.set_compression_level(
-                i32::from_str(matches.value_of("COMPRESSION_LEVEL").unwrap())
-                    .expect("invalid compression level"),
-            );
-            options.set_nesting(
-                u8::from_str(matches.value_of("NESTING").unwrap()).unwrap(),
-            );
-            options.set_hashing(matches.value_of("HASHING").unwrap());
+            options.set_chunking(&chunking, chunk_size);
+            options.set_encryption(&encryption);
+            options
+                .settings
+                .set_pwhash(settings::PWHash::from(pwhash.as_str()));
+            options.set_compression(&compression);
+            options.settings.set_compression_level(compression_level);
+            options.set_nesting(nesting);
+            options.set_hashing(&hashing);
             let _ = Repo::init(
                 &options.url,
                 &|| util::read_new_passphrase(),
@@ -451,62 +553,57 @@ fn run() -> io::Result<()> {
                 log,
             )?;
         }
-        ("store", Some(matches)) => {
-            let name = matches.value_of("NAME").expect("name agument missing");
+        Command::Store { name } => {
             let repo = Repo::open(&options.url, log)?;
             let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
-            let stats = repo.write(name, &mut io::stdin(), &enc)?;
+            let stats = repo.write(&name, &mut io::stdin(), &enc)?;
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
         }
-        ("load", Some(matches)) => {
-            let name = matches.value_of("NAME").expect("name agument missing");
+        Command::Load { name } => {
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
-            repo.read(name, &mut io::stdout(), &dec)?;
+            repo.read(&name, &mut io::stdout(), &dec)?;
         }
-        ("change_passphrase", Some(_matches)) => {
+        Command::ChangePassphrase => {
             let mut repo = Repo::open(&options.url, log)?;
             repo.change_passphrase(&|| read_passphrase(), &|| {
                 read_new_passphrase()
             })?;
         }
-        ("remove", Some(matches)) => {
+        Command::Remove { names } => {
             let repo = Repo::open(&options.url, log)?;
-            for name in matches.values_of("NAME").expect("names missing") {
-                repo.rm(name)?;
+            for name in names {
+                repo.rm(&name)?;
             }
         }
-        ("du", Some(matches)) => {
+        Command::Du { names } => {
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
 
-            for name in matches.values_of("NAME").expect("names missing") {
-                let result = repo.du(name, &dec)?;
+            for name in names {
+                let result = repo.du(&name, &dec)?;
                 println!("{} chunks", result.chunks);
                 println!("{} bytes", result.bytes);
             }
         }
-        ("gc", Some(matches)) => {
-            let grace_secs = u64::from_str(
-                matches.value_of("GRACE_TIME").unwrap(),
-            ).expect("invalid grace time");
+        Command::Gc { grace_time } => {
             let repo = Repo::open(&options.url, log)?;
 
-            repo.gc(grace_secs)?;
+            repo.gc(grace_time)?;
         }
-        ("list", Some(_matches)) => {
+        Command::List => {
             let repo = Repo::open(&options.url, log)?;
 
             for name in repo.list_names()? {
                 println!("{}", name);
             }
         }
-        ("verify", Some(matches)) => {
+        Command::Verify { names } => {
             let repo = Repo::open(&options.url, log)?;
             let dec = repo.unlock_decrypt(&|| read_passphrase())?;
-            for name in matches.values_of("NAME").expect("values") {
-                let results = repo.verify(name, &dec)?;
+            for name in names {
+                let results = repo.verify(&name, &dec)?;
                 println!("scanned {} chunk(s)", results.scanned);
                 println!("found {} corrupted chunk(s)", results.errors.len());
                 for err in results.errors {
@@ -514,7 +611,6 @@ fn run() -> io::Result<()> {
                 }
             }
         }
-        _ => panic!("Unrecognized subcommand"),
     }
 
     Ok(())

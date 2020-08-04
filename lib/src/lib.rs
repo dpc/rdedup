@@ -93,8 +93,6 @@ use self::name::*;
 
 mod misc;
 use self::misc::*;
-
-use std::error::Error as ErrorError;
 // }}}
 
 type ArcDecrypter = Arc<dyn encryption::Decrypter + Send + Sync + 'static>;
@@ -169,12 +167,12 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
-        let decrypter =
-            self.config.encryption.decrypter(pass, &self.config.pwhash)?;
+        let decrypter = self
+            .config
+            .encryption
+            .decrypter(pass, &self.config.pwhash)?;
 
-        Ok(DecryptHandle {
-            decrypter,
-        })
+        Ok(DecryptHandle { decrypter })
     }
 
     pub fn unlock_encrypt(
@@ -182,12 +180,12 @@ impl Repo {
         pass: PassphraseFn,
     ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
-        let encrypter =
-            self.config.encryption.encrypter(pass, &self.config.pwhash)?;
+        let encrypter = self
+            .config
+            .encryption
+            .encrypter(pass, &self.config.pwhash)?;
 
-        Ok(EncryptHandle {
-            encrypter,
-        })
+        Ok(EncryptHandle { encrypter })
     }
 
     fn ensure_repo_empty_or_new(aio: &AsyncIO) -> Result<()> {
@@ -334,11 +332,13 @@ impl Repo {
                     {
                         timer.start("tx");
                         let (i, sg) = i_sg;
-                        process_tx.send(chunk_processor::Message {
-                            data: (i as u64, sg),
-                            response_tx: digests_tx.clone(),
-                            data_type,
-                        }).expect("chunk process tx channel closed")
+                        process_tx
+                            .send(chunk_processor::Message {
+                                data: (i as u64, sg),
+                                response_tx: digests_tx.clone(),
+                                data_type,
+                            })
+                            .expect("chunk process tx channel closed")
                     }
                     drop(digests_tx);
                 }
@@ -375,7 +375,8 @@ impl Repo {
                     digest: first_digest,
                 })
             }
-        }).expect("chunker thread failed")
+        })
+        .expect("chunker thread failed")
     }
 
     /// Number of threads to use to parallelize CPU-intense part of
@@ -444,9 +445,9 @@ impl Repo {
             Ok(c) => c,
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                 info!(
-                    self.log,
-                    "Generation config file not found. Rerun GC later to finish";
-                    );
+                self.log,
+                "Generation config file not found. Rerun GC later to finish";
+                );
 
                 return Ok(());
             }
@@ -466,10 +467,10 @@ impl Repo {
             return Ok(());
         }
         info!(
-            self.log,
-            "Reclaiming old generation finished. Deleting...";
-            "gen" => FnValue(|_| gen.to_string()),
-            );
+        self.log,
+        "Reclaiming old generation finished. Deleting...";
+        "gen" => FnValue(|_| gen.to_string()),
+        );
 
         // Make sure chunks are successfully removed before
         // attempting to delete the generation dir itself
@@ -576,7 +577,7 @@ impl Repo {
                 }
                 Err(e) => {
                     info!(self.log, "skipped"; "name" => name_str, "error" =>
-                          e.description());
+                          e.to_string());
                 }
             }
         }
@@ -640,9 +641,9 @@ impl Repo {
             let names = Name::list(gen_oldest, &self.aio)?;
 
             info!(self.log, "Names left in the generation to be GCed";
-                  "count" => names.len(),
-                  "gen" => FnValue(|_| gen_oldest.to_string())
-                  );
+            "count" => names.len(),
+            "gen" => FnValue(|_| gen_oldest.to_string())
+            );
             if names.is_empty() {
                 self.wipe_generation_maybe(gen_oldest, min_age_secs)?;
                 return Ok(());
@@ -853,7 +854,8 @@ impl Repo {
             });
 
             chunk_and_write.join()
-        }).expect("non-joined thread panicked (chunk processor?)");
+        })
+        .expect("non-joined thread panicked (chunk processor?)");
 
         let data_address = data_address.map_err(|e| {
             if let Some(io_e) = e.downcast_ref::<io::Error>() {
