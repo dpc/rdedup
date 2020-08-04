@@ -378,12 +378,14 @@ fn run() -> io::Result<()> {
         })?;
         parse_url(&s)?
     } else if let Some(dir) = matches.value_of_os("REPO_DIR") {
-        Url::from_file_path(dir).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("URI parsing error: {}", dir.to_string_lossy()),
-            )
-        })?
+        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(
+            |_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("URI parsing error: {}", dir.to_string_lossy()),
+                )
+            },
+        )?
     } else if let Some(loc) = env::var_os("RDEDUP_URI") {
         if env::var_os("RDEDUP_DIR").is_some() {
             eprintln!(
