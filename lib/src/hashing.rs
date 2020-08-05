@@ -1,4 +1,4 @@
-use blake2;
+use blake2::{self, Digest};
 use SGData;
 use DIGEST_SIZE;
 
@@ -48,11 +48,11 @@ impl Hasher for Blake2b {
         let mut blake2 = blake2::Blake2b::default();
 
         for sg_part in sg.as_parts() {
-            blake2.process(sg_part);
+            blake2.update(sg_part);
         }
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&blake2.fixed_result()[..DIGEST_SIZE]);
+        vec_result.copy_from_slice(&blake2.finalize()[..DIGEST_SIZE]);
 
         vec_result
     }
@@ -60,10 +60,10 @@ impl Hasher for Blake2b {
     fn calculate_digest_simple(&self, data: &[u8]) -> Vec<u8> {
         let mut blake2 = blake2::Blake2b::default();
 
-        blake2.process(data);
+        blake2.update(data);
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&blake2.fixed_result()[..DIGEST_SIZE]);
+        vec_result.copy_from_slice(&blake2.finalize()[..DIGEST_SIZE]);
 
         vec_result
     }

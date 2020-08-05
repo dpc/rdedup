@@ -42,7 +42,7 @@ rand = "0.5"
 dangerous_option = "0.2"
 walkdir = "2"
 sha2 = "0.7"
-blake2 = "0.7"
+blake2 = "0.9.0"
 digest = "0.7"
 bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
