@@ -89,7 +89,7 @@ impl ExampleDataGen {
 
     fn finish(self) -> Vec<u8> {
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&self.sha.result());
+        vec_result.copy_from_slice(&self.sha.finalize());
         vec_result
     }
 }
@@ -114,7 +114,7 @@ impl io::Read for ExampleDataGen {
             _ => panic!(),
         };
 
-        self.sha.input(&buf[..len]);
+        self.sha.update(&buf[..len]);
 
         Ok(len)
     }
@@ -210,9 +210,9 @@ fn random_sanity() {
         repo.read(&name, &mut data, &dec_handle).unwrap();
 
         let mut sha = Sha256::default();
-        sha.input(&data);
+        sha.update(&data);
         let mut read_digest = vec![0u8; DIGEST_SIZE];
-        read_digest.copy_from_slice(&sha.result());
+        read_digest.copy_from_slice(&sha.finalize());
         assert_eq!(digest, &read_digest);
     }
 
@@ -224,9 +224,9 @@ fn random_sanity() {
             repo.read(&name, &mut data, &dec_handle).unwrap();
 
             let mut sha = Sha256::default();
-            sha.input(&data);
+            sha.update(&data);
             let mut read_digest = vec![0u8; DIGEST_SIZE];
-            read_digest.copy_from_slice(&sha.result());
+            read_digest.copy_from_slice(&sha.finalize());
             assert_eq!(&digest, &read_digest);
         }
 
