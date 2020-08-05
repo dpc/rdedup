@@ -133,7 +133,7 @@ use clap::Clap;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
-use std::{env, io, process};
+use std::{env, io, path::PathBuf, process};
 use url::Url;
 
 use std::str::FromStr;
@@ -483,7 +483,7 @@ fn run() -> io::Result<()> {
         })?;
         parse_url(&s)?
     } else if let Some(dir) = cli_opts.repo_dir {
-        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(
+        Url::from_file_path(PathBuf::from(&dir).canonicalize()?).map_err(
             |_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
