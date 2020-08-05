@@ -26,7 +26,7 @@ const DIGEST_SIZE: usize = 32;
 fn rand_tmp_dir() -> path::PathBuf {
     std::env::temp_dir().join("rdedup-tests").join(
         rand::thread_rng()
-            .gen_ascii_chars()
+            .sample_iter(&rand::distributions::Alphanumeric)
             .take(20)
             .collect::<String>(),
     )
@@ -121,7 +121,10 @@ impl io::Read for ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::thread_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::thread_rng()
+        .sample_iter(&rand::distributions::Standard)
+        .take(len)
+        .collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
