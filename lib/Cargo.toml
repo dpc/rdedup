@@ -28,7 +28,7 @@ sodiumoxide = { version = "0.2", features = ["serde"] }
 fs2 = "0.4"
 serde = "1"
 serde_derive = "1"
-serde_yaml = "0.7"
+serde_yaml = "0.8.13"
 base64 = "0.12.3"
 owning_ref = "0.4.1"
 num_cpus = "1.2.1"
