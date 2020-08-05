@@ -38,7 +38,7 @@ slog = "2.0.10"
 slog-perf = "0.2"
 hex = "0.4.2"
 sgdata = { version = "0.1.0", path = "../sgdata" }
-rand = "0.5"
+rand = "0.7.3"
 dangerous_option = "0.2"
 walkdir = "2"
 sha2 = "0.9.1"
