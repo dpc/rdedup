@@ -111,7 +111,7 @@ impl SGData {
             0 => vec![],
             1 => {
                 let e = self.0.pop().unwrap();
-                Arc::try_unwrap(e.into_inner())
+                Arc::try_unwrap(e.into_owner())
                     .unwrap_or_else(|a| a.as_ref().clone())
             }
             _ => {
