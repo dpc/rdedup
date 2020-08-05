@@ -95,9 +95,9 @@ impl Bzip2 {
     pub fn new(level: i32) -> Self {
         use std::cmp::Ordering::*;
         let level = match level.cmp(&0) {
-            Less => bzip2::Compression::Fastest,
-            Equal => bzip2::Compression::Default,
-            Greater => bzip2::Compression::Best,
+            Less => bzip2::Compression::fast(),
+            Equal => bzip2::Compression::default(),
+            Greater => bzip2::Compression::best(),
         };
 
         Bzip2 { level }

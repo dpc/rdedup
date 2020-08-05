@@ -52,7 +52,7 @@ hyper = "0.10"
 hyper-native-tls = "0.3"
 serde_json = "1"
 
-bzip2 = { version = "0.3.2", optional = true }
+bzip2 = { version = "0.4.1", optional = true }
 flate2 = { version = "1", optional = true }
 rust-lzma = { version = "0.2", optional = true }
 zstd = { version = "0.4.14", optional = true}
