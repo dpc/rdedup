@@ -191,7 +191,7 @@ impl Repo {
     fn ensure_repo_empty_or_new(aio: &AsyncIO) -> Result<()> {
         let list = aio.list(PathBuf::from(".")).wait();
 
-        if !list.is_err() && !list.unwrap().is_empty() {
+        if list.is_ok() && !list.unwrap().is_empty() {
             return Err(Error::new(
                 io::ErrorKind::AlreadyExists,
                 "repo dir must not exist or be empty to be used",
@@ -321,7 +321,7 @@ impl Repo {
                     );
 
                     let chunker = chunking::Chunker::new(
-                        input_data_iter.into_iter(),
+                        input_data_iter,
                         self.config.chunking.to_engine(),
                     );
 

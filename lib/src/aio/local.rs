@@ -85,7 +85,7 @@ impl BackendThread for LocalThread {
         let dst_path = self.path.join(dst_path);
 
         match fs::rename(&src_path, &dst_path) {
-            Ok(file) => Ok(file),
+            Ok(_) => Ok(()),
             Err(_e) => {
                 fs::create_dir_all(dst_path.parent().unwrap())?;
                 fs::rename(&src_path, &dst_path)

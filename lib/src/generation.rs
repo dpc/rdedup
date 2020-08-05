@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use util::{as_rfc3339, from_rfc3339};
 use SGData;
 
-pub const CONFIG_YML_FILE: &'static str = "config.yml";
+pub const CONFIG_YML_FILE: &str = "config.yml";
 
 /// Generation config, serialized in a file
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -106,15 +106,6 @@ impl Generation {
         Ok(Generation { seq, rand })
     }
 
-    pub(crate) fn to_string(&self) -> String {
-        format!(
-            "{seq:0width$x}-{rand:0width$x}",
-            seq = self.seq,
-            rand = self.rand,
-            width = 16,
-        )
-    }
-
     pub(crate) fn gen_next(&self) -> Self {
         Generation {
             seq: self.seq + 1,
@@ -163,6 +154,18 @@ impl Generation {
             })?;
 
         Ok(config)
+    }
+}
+
+impl std::fmt::Display for Generation {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{seq:0width$x}-{rand:0width$x}",
+            seq = self.seq,
+            rand = self.rand,
+            width = 16,
+        )
     }
 }
 

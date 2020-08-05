@@ -38,7 +38,7 @@ impl ChunkProcessor {
         hasher: ArcHasher,
         generations: Vec<Generation>,
     ) -> Self {
-        assert!(generations.len() >= 1);
+        assert!(!generations.is_empty());
         ChunkProcessor {
             log: repo.log.clone(),
             repo,

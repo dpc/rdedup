@@ -127,7 +127,7 @@ impl AsyncIO {
         let shared = AsyncIOShared {
             join,
             log: log.clone(),
-            stats: shared.clone(),
+            stats: shared,
             backend,
         };
 
@@ -650,10 +650,10 @@ pub(crate) fn backend_from_url(
         return Ok(Box::new(B2::new(id, bucket, &key)));
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::InvalidData,
         format!("Unsupported scheme: {}", u.scheme()),
-    ));
+    ))
 }
 
 // vim: foldmethod=marker foldmarker={{{,}}}
