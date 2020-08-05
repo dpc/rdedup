@@ -3,7 +3,7 @@ extern crate hex;
 extern crate rand;
 extern crate sha2;
 
-use digest::{FixedOutput, Input};
+use digest::Digest;
 use hex::ToHex;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
@@ -54,10 +54,10 @@ fn rand_data(len: usize) -> Vec<u8> {
 fn simple_digest(data: &[u8]) -> Vec<u8> {
     let mut sha256 = sha2::Sha256::default();
 
-    sha256.process(data);
+    sha256.update(data);
 
     let mut vec_result = vec![0u8; 32];
-    vec_result.copy_from_slice(&sha256.fixed_result());
+    vec_result.copy_from_slice(&sha256.finalize());
 
     vec_result
 }
@@ -127,7 +127,7 @@ impl TestState {
         let data = self.data_gen.gen(16 * 1024);
 
         let name = NameStats {
-            digest: simple_digest(&data).to_hex(),
+            digest: simple_digest(&data).encode_hex(),
             len: data.len(),
         };
         eprintln!("Storing name: {} of size {}", name.digest, name.len);
@@ -153,7 +153,7 @@ impl TestState {
         eprintln!("Read name: {}", name.digest);
         let out = run_rdedup_with(&vec!["load", &name.digest], vec![]);
         assert_eq!(out.stdout.len(), name.len);
-        let digest = simple_digest(&out.stdout).to_hex();
+        let digest = simple_digest(&out.stdout).encode_hex::<String>();
         assert_eq!(digest, name.digest);
 
         Ok(())
