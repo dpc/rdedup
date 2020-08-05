@@ -264,7 +264,8 @@ fn change_passphrase() {
             &|| Ok(prev_passphrase.into()),
             settings,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let enc_handle =
             repo.unlock_encrypt(&|| Ok(prev_passphrase.into())).unwrap();
@@ -280,7 +281,8 @@ fn change_passphrase() {
         repo.change_passphrase(
             &|| Ok(prev_passphrase.into()),
             &|| Ok(p.into()),
-        ).unwrap();
+        )
+        .unwrap();
         prev_passphrase = p;
     }
 
@@ -419,12 +421,14 @@ fn test_custom_chunking_size() {
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
 
             let repo = lib::Repo::open(
                 &Url::from_directory_path(dir_path).unwrap(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
             assert_eq!(settings.chunking.0, repo.config.chunking);
             wipe(&repo);
         }
@@ -457,7 +461,8 @@ fn test_custom_nesting() {
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
 
             let repo =
                 lib::Repo::open(&Url::from_file_path(dir_path).unwrap(), None)

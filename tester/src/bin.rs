@@ -48,7 +48,7 @@ impl ExampleDataGen {
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    (0..len).map(|_| { rand::random::<u8>() }).collect::<Vec<u8>>()
+    (0..len).map(|_| rand::random::<u8>()).collect::<Vec<u8>>()
 }
 
 fn simple_digest(data: &[u8]) -> Vec<u8> {

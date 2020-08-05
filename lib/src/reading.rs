@@ -56,8 +56,8 @@ impl<'a, 'b> Write for IndexTranslator<'a, 'b> {
                 self.digest_buf.0.extend_from_slice(bytes);
 
                 trace!(self.log, "left with a buffer";
-                       "digest" => FnValue(|_| hex::encode(&self.digest_buf.0)),
-                       );
+                "digest" => FnValue(|_| hex::encode(&self.digest_buf.0)),
+                );
                 return Ok(total_len);
             }
 
@@ -157,8 +157,8 @@ impl<'a> ReadContext<'a> {
 
     fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Traversing index";
-               "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
-               );
+        "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
+        );
 
         let mut translator = IndexTranslator::new(
             req.writer.take(),
@@ -182,8 +182,8 @@ impl<'a> ReadContext<'a> {
 
     fn on_data(&self, mut req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Traversing data";
-               "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
-               );
+        "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
+        );
         if let Some(writer) = req.writer.take() {
             self.accessor.read_chunk_into(
                 req.data_address.digest,
@@ -197,8 +197,8 @@ impl<'a> ReadContext<'a> {
 
     pub(crate) fn read_recursively(&self, req: ReadRequest) -> io::Result<()> {
         trace!(req.log, "Reading recursively";
-               "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
-               );
+        "digest" => FnValue(|_| hex::encode(req.data_address.digest.0)),
+        );
 
         if req.data_address.index_level == 0 {
             self.on_data(req)

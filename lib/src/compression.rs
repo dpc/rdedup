@@ -7,14 +7,12 @@ use std::io;
 use std::cmp;
 #[cfg(feature = "with-zstd")]
 use std::io::Read;
-#[cfg(
-    any(
-        feature = "with-bzip2",
-        feature = "with-deflate",
-        feature = "with-xz2",
-        feature = "with-zstd"
-    )
-)]
+#[cfg(any(
+    feature = "with-bzip2",
+    feature = "with-deflate",
+    feature = "with-xz2",
+    feature = "with-zstd"
+))]
 use std::io::Write;
 use std::sync::Arc;
 

@@ -17,10 +17,7 @@ pub const CONFIG_YML_FILE: &'static str = "config.yml";
 /// Generation config, serialized in a file
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Config {
-    #[serde(
-        serialize_with = "as_rfc3339",
-        deserialize_with = "from_rfc3339"
-    )]
+    #[serde(serialize_with = "as_rfc3339", deserialize_with = "from_rfc3339")]
     pub(crate) created: chrono::DateTime<Utc>,
 }
 
@@ -106,10 +103,7 @@ impl Generation {
             }
         };
 
-        Ok(Generation {
-            seq,
-            rand,
-        })
+        Ok(Generation { seq, rand })
     }
 
     pub(crate) fn to_string(&self) -> String {
@@ -148,7 +142,8 @@ impl Generation {
         aio.write(
             self.config_path(),
             SGData::from_single(config_str.into_bytes()),
-        ).wait()?;
+        )
+        .wait()?;
 
         Ok(())
     }
@@ -180,8 +175,11 @@ fn generation_from_str() {
         Generation::try_from("0123456701234567-1234123412341234").unwrap();
     println!("{:x}", gen.seq);
     println!("{:x}", gen.rand);
-    assert_eq!(gen, Generation {
-        seq: 0x0123456701234567,
-        rand: 0x1234123412341234,
-    })
+    assert_eq!(
+        gen,
+        Generation {
+            seq: 0x0123456701234567,
+            rand: 0x1234123412341234,
+        }
+    )
 }

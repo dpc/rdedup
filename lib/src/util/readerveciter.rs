@@ -14,10 +14,7 @@ where
     R: io::Read,
 {
     pub fn new(reader: R, buf_size: usize) -> Self {
-        ReaderVecIter {
-            reader,
-            buf_size,
-        }
+        ReaderVecIter { reader, buf_size }
     }
 }
 

@@ -106,7 +106,8 @@ impl B2Thread {
     fn reauth(&self) -> io::Result<()> {
         let auth = retry(None, || {
             let auth = self.cred.authorize(&self.client)?;
-            let upload_auth = auth.get_upload_url(&self.bucket, &self.client)?;
+            let upload_auth =
+                auth.get_upload_url(&self.bucket, &self.client)?;
             Ok((auth, upload_auth))
         })?;
         *self.auth.borrow_mut() = Some(Auth {

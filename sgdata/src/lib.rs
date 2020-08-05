@@ -58,9 +58,7 @@ impl SGData {
 
     /// Total len of all parts
     pub fn len(&self) -> usize {
-        self.0
-            .iter()
-            .fold(0, |sum, part| sum + part.len())
+        self.0.iter().fold(0, |sum, part| sum + part.len())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -80,8 +78,7 @@ impl SGData {
     }
 
     pub fn push_vec(&mut self, v: Vec<u8>) {
-        self.0
-            .push(ArcRef::new(Arc::new(v)).map(|v| &v[..]))
+        self.0.push(ArcRef::new(Arc::new(v)).map(|v| &v[..]))
     }
 
     pub fn push_arcref(&mut self, arcref: ArcRef<Vec<u8>, [u8]>) {

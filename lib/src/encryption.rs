@@ -60,20 +60,11 @@ impl Decrypter for NopDecrypter {
 /// Configuration of repository encryption
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Curve25519 {
-    #[serde(
-        serialize_with = "as_base64",
-        deserialize_with = "from_base64"
-    )]
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub sealed_sec_key: Vec<u8>,
-    #[serde(
-        serialize_with = "as_base64",
-        deserialize_with = "from_base64"
-    )]
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub pub_key: box_::PublicKey,
-    #[serde(
-        serialize_with = "as_base64",
-        deserialize_with = "from_base64"
-    )]
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     pub nonce: secretbox::Nonce,
 }
 
@@ -90,7 +81,8 @@ impl Curve25519 {
         let sealed_sk = {
             let derived_key = secretbox::Key::from_slice(
                 &pwhash.derive_key(&passphrase)?[..32],
-            ).unwrap();
+            )
+            .unwrap();
 
             secretbox::seal(&sk.0, &nonce, &derived_key)
         };
@@ -109,9 +101,9 @@ impl Curve25519 {
     ) -> io::Result<box_::SecretKey> {
         let passphrase = passphrase_f()?;
 
-        let derived_key = secretbox::Key::from_slice(
-            &pwhash.derive_key(&passphrase)?[..32],
-        ).unwrap();
+        let derived_key =
+            secretbox::Key::from_slice(&pwhash.derive_key(&passphrase)?[..32])
+                .unwrap();
         let plain_seckey =
             secretbox::open(&self.sealed_sec_key, &self.nonce, &derived_key)
                 .map_err(|_| {
@@ -148,7 +140,8 @@ impl EncryptionEngine for Curve25519 {
         let sealed_sk = {
             let derived_key = secretbox::Key::from_slice(
                 &pwhash.derive_key(&new_passphrase)?[..32],
-            ).unwrap();
+            )
+            .unwrap();
             secretbox::seal(&sec_key.0, &self.nonce, &derived_key)
         };
 
@@ -211,17 +204,17 @@ impl Decrypter for Curve25519Decrypter {
             ));
         }
 
-        let ephemeral_pub = box_::PublicKey::from_slice(
-            &buf[..box_::PUBLICKEYBYTES],
-        ).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Can't read ephemeral public key from chunk: {}",
-                    hex::encode(digest)
-                ),
-            )
-        })?;
+        let ephemeral_pub =
+            box_::PublicKey::from_slice(&buf[..box_::PUBLICKEYBYTES])
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Can't read ephemeral public key from chunk: {}",
+                            hex::encode(digest)
+                        ),
+                    )
+                })?;
 
         Ok(SGData::from_single(
             box_::open(
@@ -229,7 +222,8 @@ impl Decrypter for Curve25519Decrypter {
                 &nonce,
                 &ephemeral_pub,
                 &self.sec_key,
-            ).map_err(|_| {
+            )
+            .map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("can't decrypt chunk: {}", hex::encode(digest)),

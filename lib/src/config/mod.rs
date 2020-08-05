@@ -185,7 +185,8 @@ impl Repo {
         aio.write(
             CONFIG_YML_FILE.into(),
             SGData::from_single(config_str.into_bytes()),
-        ).wait()?;
+        )
+        .wait()?;
 
         Ok(())
     }
