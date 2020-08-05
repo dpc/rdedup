@@ -591,8 +591,12 @@ impl AsyncIOThread {
         dst_path: PathBuf,
         tx: mpsc::Sender<io::Result<()>>,
     ) {
-        trace!(self.log, "rename"; "src-path" => %src_path.display(), "dst-path"
-               => %dst_path.display());
+        trace!(
+            self.log,
+            "rename";
+            "src-path" => %src_path.display(),
+            "dst-path" => %dst_path.display()
+        );
 
         self.time_reporter.start("rename");
         let res = {
