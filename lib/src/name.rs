@@ -180,14 +180,12 @@ impl Name {
         let NameLegacyV3 {
             digest,
             index_level,
-        } = dbg!(serde_yaml::from_reader(config_data.as_slice())).map_err(
-            |e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("couldn't parse yaml: {}", e.to_string()),
-                )
-            },
-        )?;
+        } = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("couldn't parse yaml: {}", e.to_string()),
+            )
+        })?;
 
         let created = aio.read_metadata(path.clone()).wait()?.created;
 
@@ -198,7 +196,10 @@ impl Name {
         };
 
         // re-write the `Name` configuration to include the `created` field.
-        if let Err(_) = name.write_as(name_str, gen, aio) {
+        if let Err(_) = serde_yaml::to_string(&name).map(|serialized_str| {
+            aio.write(path, SGData::from_single(serialized_str.into_bytes()))
+                .wait()
+        }) {
             // FIXME: log the write error?
         }
         Ok(name)
