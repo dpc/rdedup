@@ -12,15 +12,12 @@ use std::path::PathBuf;
 use util::{as_rfc3339, from_rfc3339};
 use SGData;
 
-pub const CONFIG_YML_FILE: &'static str = "config.yml";
+pub const CONFIG_YML_FILE: &str = "config.yml";
 
 /// Generation config, serialized in a file
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Config {
-    #[serde(
-        serialize_with = "as_rfc3339",
-        deserialize_with = "from_rfc3339"
-    )]
+    #[serde(serialize_with = "as_rfc3339", deserialize_with = "from_rfc3339")]
     pub(crate) created: chrono::DateTime<Utc>,
 }
 
@@ -106,19 +103,7 @@ impl Generation {
             }
         };
 
-        Ok(Generation {
-            seq,
-            rand,
-        })
-    }
-
-    pub(crate) fn to_string(&self) -> String {
-        format!(
-            "{seq:0width$x}-{rand:0width$x}",
-            seq = self.seq,
-            rand = self.rand,
-            width = 16,
-        )
+        Ok(Generation { seq, rand })
     }
 
     pub(crate) fn gen_next(&self) -> Self {
@@ -148,7 +133,8 @@ impl Generation {
         aio.write(
             self.config_path(),
             SGData::from_single(config_str.into_bytes()),
-        ).wait()?;
+        )
+        .wait()?;
 
         Ok(())
     }
@@ -171,6 +157,18 @@ impl Generation {
     }
 }
 
+impl std::fmt::Display for Generation {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{seq:0width$x}-{rand:0width$x}",
+            seq = self.seq,
+            rand = self.rand,
+            width = 16,
+        )
+    }
+}
+
 #[test]
 fn generation_from_str() {
     assert!(Generation::try_from("0").is_err());
@@ -180,8 +178,11 @@ fn generation_from_str() {
         Generation::try_from("0123456701234567-1234123412341234").unwrap();
     println!("{:x}", gen.seq);
     println!("{:x}", gen.rand);
-    assert_eq!(gen, Generation {
-        seq: 0x0123456701234567,
-        rand: 0x1234123412341234,
-    })
+    assert_eq!(
+        gen,
+        Generation {
+            seq: 0x0123456701234567,
+            rand: 0x1234123412341234,
+        }
+    )
 }

@@ -1,9 +1,9 @@
 use blake2;
+use digest::Digest;
+use sha2;
 use SGData;
 use DIGEST_SIZE;
 
-use digest::{FixedOutput, Input};
-use sha2;
 use std::sync::Arc;
 
 pub type ArcHasher = Arc<dyn Hasher + Send + Sync>;
@@ -20,11 +20,11 @@ impl Hasher for Sha256 {
         let mut sha256 = sha2::Sha256::default();
 
         for sg_part in sg.as_parts() {
-            sha256.process(sg_part);
+            sha256.update(sg_part);
         }
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&sha256.fixed_result());
+        vec_result.copy_from_slice(&sha256.finalize());
 
         vec_result
     }
@@ -32,10 +32,10 @@ impl Hasher for Sha256 {
     fn calculate_digest_simple(&self, data: &[u8]) -> Vec<u8> {
         let mut sha256 = sha2::Sha256::default();
 
-        sha256.process(data);
+        sha256.update(data);
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&sha256.fixed_result());
+        vec_result.copy_from_slice(&sha256.finalize());
 
         vec_result
     }
@@ -48,11 +48,11 @@ impl Hasher for Blake2b {
         let mut blake2 = blake2::Blake2b::default();
 
         for sg_part in sg.as_parts() {
-            blake2.process(sg_part);
+            blake2.update(sg_part);
         }
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&blake2.fixed_result()[..DIGEST_SIZE]);
+        vec_result.copy_from_slice(&blake2.finalize()[..DIGEST_SIZE]);
 
         vec_result
     }
@@ -60,10 +60,10 @@ impl Hasher for Blake2b {
     fn calculate_digest_simple(&self, data: &[u8]) -> Vec<u8> {
         let mut blake2 = blake2::Blake2b::default();
 
-        blake2.process(data);
+        blake2.update(data);
 
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&blake2.fixed_result()[..DIGEST_SIZE]);
+        vec_result.copy_from_slice(&blake2.finalize()[..DIGEST_SIZE]);
 
         vec_result
     }

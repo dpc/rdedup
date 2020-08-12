@@ -26,7 +26,7 @@ const DIGEST_SIZE: usize = 32;
 fn rand_tmp_dir() -> path::PathBuf {
     std::env::temp_dir().join("rdedup-tests").join(
         rand::thread_rng()
-            .gen_ascii_chars()
+            .sample_iter(&rand::distributions::Alphanumeric)
             .take(20)
             .collect::<String>(),
     )
@@ -89,7 +89,7 @@ impl ExampleDataGen {
 
     fn finish(self) -> Vec<u8> {
         let mut vec_result = vec![0u8; DIGEST_SIZE];
-        vec_result.copy_from_slice(&self.sha.result());
+        vec_result.copy_from_slice(&self.sha.finalize());
         vec_result
     }
 }
@@ -114,14 +114,17 @@ impl io::Read for ExampleDataGen {
             _ => panic!(),
         };
 
-        self.sha.input(&buf[..len]);
+        self.sha.update(&buf[..len]);
 
         Ok(len)
     }
 }
 
 fn rand_data(len: usize) -> Vec<u8> {
-    rand::thread_rng().gen_iter().take(len).collect::<Vec<u8>>()
+    rand::thread_rng()
+        .sample_iter(&rand::distributions::Standard)
+        .take(len)
+        .collect::<Vec<u8>>()
 }
 
 fn wipe(repo: &lib::Repo) {
@@ -207,9 +210,9 @@ fn random_sanity() {
         repo.read(&name, &mut data, &dec_handle).unwrap();
 
         let mut sha = Sha256::default();
-        sha.input(&data);
+        sha.update(&data);
         let mut read_digest = vec![0u8; DIGEST_SIZE];
-        read_digest.copy_from_slice(&sha.result());
+        read_digest.copy_from_slice(&sha.finalize());
         assert_eq!(digest, &read_digest);
     }
 
@@ -221,9 +224,9 @@ fn random_sanity() {
             repo.read(&name, &mut data, &dec_handle).unwrap();
 
             let mut sha = Sha256::default();
-            sha.input(&data);
+            sha.update(&data);
             let mut read_digest = vec![0u8; DIGEST_SIZE];
-            read_digest.copy_from_slice(&sha.result());
+            read_digest.copy_from_slice(&sha.finalize());
             assert_eq!(&digest, &read_digest);
         }
 
@@ -264,7 +267,8 @@ fn change_passphrase() {
             &|| Ok(prev_passphrase.into()),
             settings,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let enc_handle =
             repo.unlock_encrypt(&|| Ok(prev_passphrase.into())).unwrap();
@@ -280,7 +284,8 @@ fn change_passphrase() {
         repo.change_passphrase(
             &|| Ok(prev_passphrase.into()),
             &|| Ok(p.into()),
-        ).unwrap();
+        )
+        .unwrap();
         prev_passphrase = p;
     }
 
@@ -419,12 +424,14 @@ fn test_custom_chunking_size() {
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
 
             let repo = lib::Repo::open(
                 &Url::from_directory_path(dir_path).unwrap(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
             assert_eq!(settings.chunking.0, repo.config.chunking);
             wipe(&repo);
         }
@@ -457,7 +464,8 @@ fn test_custom_nesting() {
                 &|| Ok(PASS.into()),
                 settings.clone(),
                 None,
-            ).unwrap();
+            )
+            .unwrap();
 
             let repo =
                 lib::Repo::open(&Url::from_file_path(dir_path).unwrap(), None)

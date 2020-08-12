@@ -8,10 +8,7 @@ pub(crate) trait PWHash {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct SodiumOxide {
-    #[serde(
-        serialize_with = "as_base64",
-        deserialize_with = "from_base64"
-    )]
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     salt: pwhash::Salt,
     #[serde(rename = "mem_limit")]
     mem_limit: u64,
@@ -66,7 +63,8 @@ impl PWHash for SodiumOxide {
             &self.salt,
             pwhash::OpsLimit(self.ops_limit as usize),
             pwhash::MemLimit(self.mem_limit as usize),
-        ).map_err(|_| {
+        )
+        .map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "can't derive encryption key from passphrase",

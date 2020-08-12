@@ -87,7 +87,7 @@ where
 
                 if e.should_back_off() {
                     std::thread::sleep(std::time::Duration::from_secs(backoff));
-                    backoff = backoff * 2;
+                    backoff *= 2;
                 } else {
                     backoff = 1;
                 }
@@ -106,7 +106,8 @@ impl B2Thread {
     fn reauth(&self) -> io::Result<()> {
         let auth = retry(None, || {
             let auth = self.cred.authorize(&self.client)?;
-            let upload_auth = auth.get_upload_url(&self.bucket, &self.client)?;
+            let upload_auth =
+                auth.get_upload_url(&self.bucket, &self.client)?;
             Ok((auth, upload_auth))
         })?;
         *self.auth.borrow_mut() = Some(Auth {
@@ -182,7 +183,7 @@ impl BackendThread for B2Thread {
         dst_path: PathBuf,
     ) -> io::Result<()> {
         match fs::rename(&src_path, &dst_path) {
-            Ok(file) => Ok(file),
+            Ok(_) => Ok(()),
             Err(_e) => {
                 fs::create_dir_all(dst_path.parent().unwrap())?;
                 fs::rename(&src_path, &dst_path)
@@ -238,7 +239,7 @@ impl BackendThread for B2Thread {
             .drain(..)
             .map(|i| i.file_name)
             .chain(files.drain(..).map(|i| i.file_name))
-            .map(|s| PathBuf::from(s))
+            .map(PathBuf::from)
             .collect();
         Ok(v)
     }

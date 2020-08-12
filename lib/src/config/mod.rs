@@ -28,9 +28,9 @@ pub(crate) use self::encryption::*;
 pub const REPO_VERSION_LOWEST: u32 = 3;
 pub const REPO_VERSION_CURRENT: u32 = 3;
 
-pub const DATA_SUBDIR: &'static str = "chunk";
-pub const LOCK_FILE: &'static str = ".lock";
-pub const CONFIG_YML_FILE: &'static str = "config.yml";
+pub const DATA_SUBDIR: &str = "chunk";
+pub const LOCK_FILE: &str = ".lock";
+pub const CONFIG_YML_FILE: &str = "config.yml";
 
 // {{{ PWHash
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -185,7 +185,8 @@ impl Repo {
         aio.write(
             CONFIG_YML_FILE.into(),
             SGData::from_single(config_str.into_bytes()),
-        ).wait()?;
+        )
+        .wait()?;
 
         Ok(())
     }

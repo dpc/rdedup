@@ -191,7 +191,7 @@ impl Repo {
     fn ensure_repo_empty_or_new(aio: &AsyncIO) -> Result<()> {
         let list = aio.list(PathBuf::from(".")).wait();
 
-        if !list.is_err() && !list.unwrap().is_empty() {
+        if list.is_ok() && !list.unwrap().is_empty() {
             return Err(Error::new(
                 io::ErrorKind::AlreadyExists,
                 "repo dir must not exist or be empty to be used",
@@ -321,7 +321,7 @@ impl Repo {
                     );
 
                     let chunker = chunking::Chunker::new(
-                        input_data_iter.into_iter(),
+                        input_data_iter,
                         self.config.chunking.to_engine(),
                     );
 
@@ -445,8 +445,8 @@ impl Repo {
             Ok(c) => c,
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                 info!(
-                self.log,
-                "Generation config file not found. Rerun GC later to finish";
+                    self.log,
+                    "Generation config file not found. Rerun GC later to finish";
                 );
 
                 return Ok(());
@@ -467,9 +467,9 @@ impl Repo {
             return Ok(());
         }
         info!(
-        self.log,
-        "Reclaiming old generation finished. Deleting...";
-        "gen" => FnValue(|_| gen.to_string()),
+            self.log,
+            "Reclaiming old generation finished. Deleting...";
+            "gen" => FnValue(|_| gen.to_string()),
         );
 
         // Make sure chunks are successfully removed before
@@ -509,9 +509,12 @@ impl Repo {
     ) -> io::Result<()> {
         // traverse all the chunks (both index and data)
         // and move all the chunks to the newest gen
-        info!(self.log, "Updating name to current generation";
-              "name" => name_str,
-              "gen" => FnValue(|_| cur_gen.to_string()));
+        info!(
+            self.log,
+            "Updating name to current generation";
+            "name" => name_str,
+            "gen" => FnValue(|_| cur_gen.to_string())
+        );
         let name = Name::load_from_any(name_str, generations, &self.aio)?;
         let data_address: DataAddress = name.into();
 
@@ -576,8 +579,11 @@ impl Repo {
                     )?;
                 }
                 Err(e) => {
-                    info!(self.log, "skipped"; "name" => name_str, "error" =>
-                          e.to_string());
+                    info!(
+                        self.log,
+                        "skipped";
+                        "name" => name_str, "error" => e.to_string()
+                    );
                 }
             }
         }
@@ -623,16 +629,22 @@ impl Repo {
             info!(self.log, "Creating new generation"; "gen" => FnValue(|_| new_gen.to_string()));
             new_gen.write(&self.aio)?;
         } else {
-            info!(self.log, "Restarting previous GC operation";
-                  "gen" => FnValue(|_| generations.last().unwrap().to_string()));
+            info!(
+                self.log,
+                "Restarting previous GC operation";
+                "gen" => FnValue(|_| generations.last().unwrap().to_string())
+            );
         }
 
         loop {
             let generations = self.read_generations()?;
             assert!(!generations.is_empty());
             if generations.len() == 1 {
-                info!(self.log, "One generation left - GC cycle complete";
-                      "gen" => FnValue(|_| generations[0].to_string()));
+                info!(
+                    self.log,
+                    "One generation left - GC cycle complete";
+                    "gen" => FnValue(|_| generations[0].to_string())
+                );
                 return Ok(());
             }
             let gen_oldest = generations[0];
@@ -640,9 +652,11 @@ impl Repo {
 
             let names = Name::list(gen_oldest, &self.aio)?;
 
-            info!(self.log, "Names left in the generation to be GCed";
-            "count" => names.len(),
-            "gen" => FnValue(|_| gen_oldest.to_string())
+            info!(
+                self.log,
+                "Names left in the generation to be GCed";
+                "count" => names.len(),
+                "gen" => FnValue(|_| gen_oldest.to_string())
             );
             if names.is_empty() {
                 self.wipe_generation_maybe(gen_oldest, min_age_secs)?;

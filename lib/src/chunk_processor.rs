@@ -38,7 +38,7 @@ impl ChunkProcessor {
         hasher: ArcHasher,
         generations: Vec<Generation>,
     ) -> Self {
-        assert!(generations.len() >= 1);
+        assert!(!generations.is_empty());
         ChunkProcessor {
             log: repo.log.clone(),
             repo,
@@ -97,8 +97,11 @@ impl ChunkProcessor {
                             if gen_str == &last_gen_str {
                                 trace!(self.log, "already exists"; "path" => %chunk_path.display());
                             } else {
-                                trace!(self.log, "already exists in previous generation";
-                                       "path" => %chunk_path.display());
+                                trace!(
+                                    self.log,
+                                    "already exists in previous generation";
+                                    "path" => %chunk_path.display()
+                                );
                                 let dst_path =
                                     self.repo.chunk_rel_path_by_digest(
                                         digest.as_digest_ref(),

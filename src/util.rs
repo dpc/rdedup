@@ -1,6 +1,6 @@
 use rpassword;
 use std::str::FromStr;
-use std::{fs, env, io};
+use std::{env, fs, io};
 
 /// Parse human-readable size string
 ///

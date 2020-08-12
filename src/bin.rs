@@ -133,7 +133,7 @@ use clap::Clap;
 use lib::settings;
 use lib::Repo;
 use slog::Drain;
-use std::{env, io, process};
+use std::{env, io, path::PathBuf, process};
 use url::Url;
 
 use std::str::FromStr;
@@ -247,14 +247,12 @@ impl Options {
 mod util;
 use util::{read_new_passphrase, read_passphrase};
 
-#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn validate_chunk_size(s: &str) -> Result<(), String> {
     util::parse_size(&s)
         .map(|_| ())
         .ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn validate_nesting(s: &str) -> Result<(), String> {
     let msg = "nesting must be an integer between 0 and 31";
     let levels = match u8::from_str(s) {
@@ -478,29 +476,31 @@ fn run() -> io::Result<()> {
         let s = loc.into_string().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("URI not valid UTF-8 string"),
+                "URI not valid UTF-8 string".to_string(),
             )
         })?;
         parse_url(&s)?
     } else if let Some(dir) = cli_opts.repo_dir {
-        Url::from_file_path(PathBuf::from(dir).canonicalize()?).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("URI parsing error: {}", dir.to_string_lossy()),
-            )
-        })?
+        Url::from_file_path(PathBuf::from(&dir).canonicalize()?).map_err(
+            |_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("URI parsing error: {}", dir.to_string_lossy()),
+                )
+            },
+        )?
     } else if let Some(loc) = env::var_os("RDEDUP_URI") {
         if env::var_os("RDEDUP_DIR").is_some() {
             eprintln!(
-                "Can't use both RDEDUP_REPOSITORY and RDEDUP_DIR  at the same time"
+                "Can't use both RDEDUP_REPOSITORY and RDEDUP_DIR at the same time"
             );
             process::exit(-1);
         }
 
-        let s = loc.to_os_string().into_string().map_err(|_e| {
+        let s = loc.into_string().map_err(|_e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("URI not valid UTF-8 string"),
+                "URI not valid UTF-8 string".to_string(),
             )
         })?;
         parse_url(&s)?

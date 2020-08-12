@@ -19,7 +19,7 @@ where
     {
         WhileOk {
             e: None,
-            i: into_iter.into_iter(),
+            i: into_iter,
         }
     }
 

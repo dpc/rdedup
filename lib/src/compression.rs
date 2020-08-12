@@ -7,14 +7,12 @@ use std::io;
 use std::cmp;
 #[cfg(feature = "with-zstd")]
 use std::io::Read;
-#[cfg(
-    any(
-        feature = "with-bzip2",
-        feature = "with-deflate",
-        feature = "with-xz2",
-        feature = "with-zstd"
-    )
-)]
+#[cfg(any(
+    feature = "with-bzip2",
+    feature = "with-deflate",
+    feature = "with-xz2",
+    feature = "with-zstd"
+))]
 use std::io::Write;
 use std::sync::Arc;
 
@@ -52,12 +50,11 @@ pub struct Deflate {
 #[cfg(feature = "with-deflate")]
 impl Deflate {
     pub fn new(level: i32) -> Self {
-        let level = if level < 0 {
-            flate2::Compression::fast()
-        } else if level > 0 {
-            flate2::Compression::best()
-        } else {
-            flate2::Compression::default()
+        use std::cmp::Ordering::*;
+        let level = match level.cmp(&0) {
+            Less => flate2::Compression::fast(),
+            Equal => flate2::Compression::default(),
+            Greater => flate2::Compression::best(),
         };
 
         Deflate { level }
@@ -96,12 +93,11 @@ pub struct Bzip2 {
 #[cfg(feature = "with-bzip2")]
 impl Bzip2 {
     pub fn new(level: i32) -> Self {
-        let level = if level < 0 {
-            bzip2::Compression::Fastest
-        } else if level > 0 {
-            bzip2::Compression::Best
-        } else {
-            bzip2::Compression::Default
+        use std::cmp::Ordering::*;
+        let level = match level.cmp(&0) {
+            Less => bzip2::Compression::fast(),
+            Equal => bzip2::Compression::default(),
+            Greater => bzip2::Compression::best(),
         };
 
         Bzip2 { level }

@@ -7,7 +7,7 @@ use SGData;
 use DIGEST_SIZE;
 use {DataAddress, DataAddressRef, Generation};
 
-pub(crate) const NAME_SUBDIR: &'static str = "name";
+pub(crate) const NAME_SUBDIR: &str = "name";
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Name {
@@ -93,14 +93,14 @@ impl Name {
         let list = substitute_err_not_found(
             aio.list(PathBuf::from(gen.to_string()).join(NAME_SUBDIR))
                 .wait(),
-            || vec![],
+            Vec::new,
         )?;
 
         Ok(list
             .iter()
             .map(|e| {
                 e.file_stem()
-                    .expect(&format!("malformed name: {:?}", e))
+                    .unwrap_or_else(|| panic!("malformed name: {:?}", e))
                     .to_string_lossy()
                     .to_string()
             })

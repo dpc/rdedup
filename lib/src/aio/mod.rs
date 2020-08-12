@@ -127,7 +127,7 @@ impl AsyncIO {
         let shared = AsyncIOShared {
             join,
             log: log.clone(),
-            stats: shared.clone(),
+            stats: shared,
             backend,
         };
 
@@ -151,7 +151,9 @@ impl AsyncIO {
 
     pub fn list(&self, path: PathBuf) -> AsyncIOResult<Vec<PathBuf>> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::List(path, tx)).expect("aio tx closed: list");
+        self.tx
+            .send(Message::List(path, tx))
+            .expect("aio tx closed: list");
         AsyncIOResult { rx }
     }
 
@@ -162,7 +164,9 @@ impl AsyncIO {
         path: PathBuf,
     ) -> Box<dyn Iterator<Item = io::Result<PathBuf>>> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::ListRecursively(path, tx)).expect("aio tx closed: list_recursively");
+        self.tx
+            .send(Message::ListRecursively(path, tx))
+            .expect("aio tx closed: list_recursively");
 
         let iter = rx.into_iter().flat_map(|batch| match batch {
             Ok(batch) => Box::new(batch.into_iter().map(Ok))
@@ -175,12 +179,14 @@ impl AsyncIO {
 
     pub fn write(&self, path: PathBuf, sg: SGData) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Write(WriteArgs {
-            path,
-            data: sg,
-            idempotent: false,
-            complete_tx: Some(tx),
-        })).expect("aio tx closed: write");
+        self.tx
+            .send(Message::Write(WriteArgs {
+                path,
+                data: sg,
+                idempotent: false,
+                complete_tx: Some(tx),
+            }))
+            .expect("aio tx closed: write");
         AsyncIOResult { rx }
     }
 
@@ -192,12 +198,14 @@ impl AsyncIO {
         sg: SGData,
     ) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Write(WriteArgs {
-            path,
-            data: sg,
-            idempotent: true,
-            complete_tx: Some(tx),
-        })).expect("aio tx closed: write_idempotent");
+        self.tx
+            .send(Message::Write(WriteArgs {
+                path,
+                data: sg,
+                idempotent: true,
+                complete_tx: Some(tx),
+            }))
+            .expect("aio tx closed: write_idempotent");
         AsyncIOResult { rx }
     }
 
@@ -206,26 +214,32 @@ impl AsyncIO {
     // TODO: No need for it anymore
     #[allow(dead_code)]
     pub fn write_checked(&self, path: PathBuf, sg: SGData) {
-        self.tx.send(Message::Write(WriteArgs {
-            path,
-            data: sg,
-            idempotent: false,
-            complete_tx: None,
-        })).expect("aio tx closed: write_checked");
+        self.tx
+            .send(Message::Write(WriteArgs {
+                path,
+                data: sg,
+                idempotent: false,
+                complete_tx: None,
+            }))
+            .expect("aio tx closed: write_checked");
     }
 
     pub fn write_checked_idempotent(&self, path: PathBuf, sg: SGData) {
-        self.tx.send(Message::Write(WriteArgs {
-            path,
-            data: sg,
-            idempotent: true,
-            complete_tx: None,
-        })).expect("aio tx closed: write_checked_idempotent");
+        self.tx
+            .send(Message::Write(WriteArgs {
+                path,
+                data: sg,
+                idempotent: true,
+                complete_tx: None,
+            }))
+            .expect("aio tx closed: write_checked_idempotent");
     }
 
     pub fn read(&self, path: PathBuf) -> AsyncIOResult<SGData> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Read(path, tx)).expect("aio tx closed: read");
+        self.tx
+            .send(Message::Read(path, tx))
+            .expect("aio tx closed: read");
         AsyncIOResult { rx }
     }
 
@@ -234,25 +248,33 @@ impl AsyncIO {
         path: PathBuf,
     ) -> AsyncIOResult<Metadata> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::ReadMetadata(path, tx)).expect("aio tx closed: read_metadata");
+        self.tx
+            .send(Message::ReadMetadata(path, tx))
+            .expect("aio tx closed: read_metadata");
         AsyncIOResult { rx }
     }
 
     pub fn remove(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Remove(path, tx)).expect("aio tx closed: remove");
+        self.tx
+            .send(Message::Remove(path, tx))
+            .expect("aio tx closed: remove");
         AsyncIOResult { rx }
     }
 
     pub fn remove_dir_all(&self, path: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::RemoveDirAll(path, tx)).expect("aio tx closed: remove_dir_all");
+        self.tx
+            .send(Message::RemoveDirAll(path, tx))
+            .expect("aio tx closed: remove_dir_all");
         AsyncIOResult { rx }
     }
 
     pub fn rename(&self, src: PathBuf, dst: PathBuf) -> AsyncIOResult<()> {
         let (tx, rx) = mpsc::channel();
-        self.tx.send(Message::Rename(src, dst, tx)).expect("aio tx closed: rename");
+        self.tx
+            .send(Message::Rename(src, dst, tx))
+            .expect("aio tx closed: rename");
         AsyncIOResult { rx }
     }
 }
@@ -569,8 +591,12 @@ impl AsyncIOThread {
         dst_path: PathBuf,
         tx: mpsc::Sender<io::Result<()>>,
     ) {
-        trace!(self.log, "rename"; "src-path" => %src_path.display(), "dst-path"
-               => %dst_path.display());
+        trace!(
+            self.log,
+            "rename";
+            "src-path" => %src_path.display(),
+            "dst-path" => %dst_path.display()
+        );
 
         self.time_reporter.start("rename");
         let res = {
@@ -624,10 +650,10 @@ pub(crate) fn backend_from_url(
         return Ok(Box::new(B2::new(id, bucket, &key)));
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::InvalidData,
         format!("Unsupported scheme: {}", u.scheme()),
-    ));
+    ))
 }
 
 // vim: foldmethod=marker foldmarker={{{,}}}
