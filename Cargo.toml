@@ -10,6 +10,7 @@ homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
 exclude = ["lib/**/*", "tester/**"]
+edition = "2018"
 
 [features]
 default = ["with-bzip2","with-deflate","with-xz2","with-zstd"]
