@@ -9,6 +9,7 @@ documentation = "https://docs.rs/rdedup-lib/"
 homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
+edition = "2018"
 
 [lib]
 name = "rdedup_lib"
