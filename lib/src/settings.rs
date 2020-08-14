@@ -1,7 +1,7 @@
 //! Settings: options that user can pick
-
-use config;
 use std::io;
+
+use crate::config;
 
 #[derive(Clone)]
 pub enum Compression {

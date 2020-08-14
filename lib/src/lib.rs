@@ -1,79 +1,40 @@
-// {{{ extern crate ...
-extern crate backblaze_b2;
-extern crate base64;
-extern crate blake2;
-extern crate bytevec;
-extern crate chrono;
-extern crate crossbeam;
-extern crate crossbeam_channel;
-extern crate dangerous_option;
-extern crate digest;
-extern crate fs2;
-extern crate hex;
-extern crate hyper;
-extern crate hyper_native_tls;
-extern crate num_cpus;
-extern crate owning_ref;
-extern crate rand;
-extern crate rdedup_cdc as rollsum;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate serde_yaml;
-extern crate sgdata;
-extern crate sha2;
-#[macro_use]
-extern crate slog;
-extern crate slog_perf;
-extern crate sodiumoxide;
-extern crate url;
-extern crate walkdir;
-
-#[cfg(feature = "with-bzip2")]
-extern crate bzip2;
-#[cfg(feature = "with-deflate")]
-extern crate flate2;
-#[cfg(feature = "with-xz2")]
-extern crate lzma;
-#[cfg(feature = "with-zstd")]
-extern crate zstd;
-// }}}
-
 // {{{ use and mod
-use sgdata::SGData;
-use slog::{FnValue, Level, Logger};
-use slog_perf::TimeReporter;
-use sodiumoxide::crypto::{self, box_, secretbox};
 use std::collections::HashSet;
 use std::io;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
+
+use sgdata::SGData;
+use slog::{info, o, warn, FnValue, Level, Logger};
+use slog_perf::TimeReporter;
+use sodiumoxide::crypto::{self, box_, secretbox};
 use url::Url;
+
+use rdedup_cdc as rollsum;
 
 mod iterators;
 
 mod config;
 
 mod aio;
-use aio::*;
+use crate::aio::*;
 
 mod chunking;
 mod hashing;
 
 mod chunk_processor;
-use chunk_processor::*;
+use crate::chunk_processor::*;
 
 mod sorting_recv;
-use sorting_recv::SortingIterator;
+use crate::sorting_recv::SortingIterator;
 
 mod encryption;
-use encryption::EncryptionEngine;
+use crate::encryption::EncryptionEngine;
 
 mod compression;
-use compression::ArcCompression;
+use crate::compression::ArcCompression;
 
 mod pwhash;
 
@@ -164,7 +125,7 @@ pub struct Repo {
 impl Repo {
     pub fn unlock_decrypt(
         &self,
-        pass: PassphraseFn,
+        pass: PassphraseFn<'_>,
     ) -> io::Result<DecryptHandle> {
         info!(self.log, "Opening read handle");
         let decrypter = self
@@ -177,7 +138,7 @@ impl Repo {
 
     pub fn unlock_encrypt(
         &self,
-        pass: PassphraseFn,
+        pass: PassphraseFn<'_>,
     ) -> io::Result<EncryptHandle> {
         info!(self.log, "Opening write handle");
         let encrypter = self
@@ -203,7 +164,7 @@ impl Repo {
     /// Create new rdedup repository
     pub fn init<L>(
         url: &Url,
-        passphrase: PassphraseFn,
+        passphrase: PassphraseFn<'_>,
         settings: settings::Repo,
         log: L,
     ) -> Result<Repo>
@@ -262,8 +223,8 @@ impl Repo {
     /// Change the passphrase
     pub fn change_passphrase(
         &mut self,
-        old_p: PassphraseFn,
-        new_p: PassphraseFn,
+        old_p: PassphraseFn<'_>,
+        new_p: PassphraseFn<'_>,
     ) -> Result<()> {
         let _lock = self.aio.lock_exclusive();
 
@@ -416,7 +377,7 @@ impl Repo {
         decrypter: Option<ArcDecrypter>,
         compression: ArcCompression,
         generations: Vec<Generation>,
-    ) -> DefaultChunkAccessor {
+    ) -> DefaultChunkAccessor<'_> {
         DefaultChunkAccessor::new(self, decrypter, compression, generations)
     }
 
@@ -540,7 +501,7 @@ impl Repo {
 
     fn reachable_recursively_insert(
         &self,
-        da: DataAddressRef,
+        da: DataAddressRef<'_>,
         reachable_digests: &mut HashSet<Vec<u8>>,
         generations: Vec<Generation>,
     ) -> Result<()> {
@@ -593,7 +554,7 @@ impl Repo {
 
     fn chunk_rel_path_by_digest(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         gen_str: &str,
     ) -> PathBuf {
         self.config.nesting.get_path(

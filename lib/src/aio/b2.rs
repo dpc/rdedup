@@ -1,20 +1,10 @@
 #![allow(unused)]
-
-use serde_json;
-
-use sgdata::SGData;
-use std;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::{fs, io};
-
-use aio;
-
-use super::Metadata;
-use super::{Backend, BackendThread};
 
 use backblaze_b2::raw::authorize::{B2Authorization, B2Credentials};
 use backblaze_b2::raw::files::FileNameListing;
@@ -23,8 +13,12 @@ use backblaze_b2::B2Error;
 use hyper::net::HttpsConnector;
 use hyper::Client;
 use hyper_native_tls::NativeTlsClient;
+use sgdata::SGData;
 
-use config;
+use super::Metadata;
+use super::{Backend, BackendThread};
+use crate::aio;
+use crate::config;
 
 // TODO: make a thread, that keeps updating
 // a timestamp file on the backend

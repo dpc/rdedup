@@ -1,11 +1,13 @@
-use aio;
-use serde_yaml;
 use std::io;
 use std::path::PathBuf;
-use util::*;
-use SGData;
-use DIGEST_SIZE;
-use {DataAddress, DataAddressRef, Generation};
+
+use serde::{Deserialize, Serialize};
+
+use crate::aio;
+use crate::util::*;
+use crate::SGData;
+use crate::DIGEST_SIZE;
+use crate::{DataAddress, DataAddressRef, Generation};
 
 pub(crate) const NAME_SUBDIR: &str = "name";
 
@@ -191,7 +193,7 @@ impl Name {
 }
 
 impl<'a> From<DataAddressRef<'a>> for Name {
-    fn from(da: DataAddressRef) -> Self {
+    fn from(da: DataAddressRef<'_>) -> Self {
         Name {
             digest: da.digest.0.into(),
             index_level: da.index_level,

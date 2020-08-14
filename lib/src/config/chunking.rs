@@ -1,4 +1,6 @@
-use chunking;
+use serde::{Deserialize, Serialize};
+
+use crate::chunking;
 
 pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
 

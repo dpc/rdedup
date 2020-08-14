@@ -119,24 +119,17 @@
 //! [ddar]: https://github.com/basak/ddar/
 //! [ddar-issue]: https://github.com/basak/ddar/issues/10
 
-extern crate hex;
-extern crate rdedup_lib as lib;
-extern crate rpassword;
-#[macro_use]
-extern crate slog;
-extern crate clap;
-extern crate slog_async;
-extern crate slog_term;
-extern crate url;
+use std::str::FromStr;
+use std::{env, io, path::PathBuf, process};
 
 use clap::Clap;
-use lib::settings;
-use lib::Repo;
-use slog::Drain;
-use std::{env, io, path::PathBuf, process};
+use slog::{info, o, Drain};
 use url::Url;
 
-use std::str::FromStr;
+use rdedup_lib as lib;
+
+use crate::lib::settings;
+use crate::lib::Repo;
 
 // Url parse with `io::Result` shortcut
 fn parse_url(s: &str) -> io::Result<Url> {
@@ -245,7 +238,7 @@ impl Options {
 }
 
 mod util;
-use util::{read_new_passphrase, read_passphrase};
+use crate::util::{read_new_passphrase, read_passphrase};
 
 fn validate_chunk_size(s: &str) -> Result<(), String> {
     util::parse_size(&s)
@@ -286,14 +279,16 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
                 // at level 4, use synchronous logger so not to loose any
                 // logging messages
                 let drain = std::sync::Mutex::new(drain);
-                let drain =
-                    slog::Filter::new(drain, move |record: &slog::Record| {
+                let drain = slog::Filter::new(
+                    drain,
+                    move |record: &slog::Record<'_>| {
                         if record.tag() == "slog_perf" {
                             record.level() >= tv
                         } else {
                             record.level() >= v
                         }
-                    });
+                    },
+                );
                 let log = slog::Logger::root(drain.fuse(), o!());
                 info!(
                     log,
@@ -302,14 +297,16 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
                 log
             } else {
                 let drain = slog_async::Async::default(drain.fuse());
-                let drain =
-                    slog::Filter::new(drain, move |record: &slog::Record| {
+                let drain = slog::Filter::new(
+                    drain,
+                    move |record: &slog::Record<'_>| {
                         if record.tag() == "slog_perf" {
                             record.level().is_at_least(tv)
                         } else {
                             record.level().is_at_least(v)
                         }
-                    });
+                    },
+                );
                 slog::Logger::root(drain.fuse(), o!())
             }
         }

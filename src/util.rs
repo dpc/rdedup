@@ -1,4 +1,3 @@
-use rpassword;
 use std::str::FromStr;
 use std::{env, fs, io};
 

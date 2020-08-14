@@ -1,17 +1,13 @@
-extern crate digest;
-extern crate hex;
-extern crate rand;
-extern crate sha2;
-
-use digest::Digest;
-use hex::ToHex;
-use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::default::Default;
 use std::io;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+
+use digest::Digest;
+use hex::ToHex;
+use rand::{thread_rng, Rng};
 
 /// Generate data that has plenty of redundancy
 struct ExampleDataGen {
@@ -116,7 +112,7 @@ impl TestState {
     fn init(&mut self) -> io::Result<()> {
         eprintln!("Creating new repo");
         let _out = run_rdedup_with(
-            &vec!["init", "--pwhash", "weak", "--chunk-size", "2K"],
+            &["init", "--pwhash", "weak", "--chunk-size", "2K"],
             vec![],
         );
 
@@ -131,7 +127,7 @@ impl TestState {
             len: data.len(),
         };
         eprintln!("Storing name: {} of size {}", name.digest, name.len);
-        let _out = run_rdedup_with(&vec!["store", &name.digest], data);
+        let _out = run_rdedup_with(&["store", &name.digest], data);
         self.names.insert(name.digest.clone(), name);
 
         Ok(())
@@ -151,7 +147,7 @@ impl TestState {
         let name = self.select_random_name();
 
         eprintln!("Read name: {}", name.digest);
-        let out = run_rdedup_with(&vec!["load", &name.digest], vec![]);
+        let out = run_rdedup_with(&["load", &name.digest], vec![]);
         assert_eq!(out.stdout.len(), name.len);
         let digest = simple_digest(&out.stdout).encode_hex::<String>();
         assert_eq!(digest, name.digest);
@@ -166,7 +162,7 @@ impl TestState {
         let name = self.select_random_name();
 
         eprintln!("Verify name: {}", name.digest);
-        let _out = run_rdedup_with(&vec!["verify", &name.digest], vec![]);
+        let _out = run_rdedup_with(&["verify", &name.digest], vec![]);
 
         Ok(())
     }
@@ -178,7 +174,7 @@ impl TestState {
         let name = self.select_random_name();
 
         eprintln!("Remove name: {}", name.digest);
-        let _out = run_rdedup_with(&vec!["rm", &name.digest], vec![]);
+        let _out = run_rdedup_with(&["rm", &name.digest], vec![]);
 
         self.names.remove(&name.digest);
         Ok(())
@@ -188,7 +184,7 @@ impl TestState {
         eprintln!("GC");
         let grace = thread_rng().gen_range(0, 2000);
         let _out =
-            run_rdedup_with(&vec!["gc", "--grace", &grace.to_string()], vec![]);
+            run_rdedup_with(&["gc", "--grace", &grace.to_string()], vec![]);
         Ok(())
     }
 }
@@ -198,7 +194,7 @@ fn main() {
     test.init().unwrap();
     let mut args = std::env::args();
     let _self_path = args.next();
-    let bound = args.next().unwrap_or("999999999".into());
+    let bound = args.next().unwrap_or_else(|| "999999999".into());
     let bound = u64::from_str(&bound).unwrap();
     eprintln!("Will loop {} times. Ctrl+C to stop", bound);
     for i in 0..bound {

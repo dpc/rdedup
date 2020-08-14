@@ -1,24 +1,22 @@
-mod lib {
-    pub use super::super::*;
-}
-
-use url::Url;
-
-use hex;
-use iterators::StoredChunks;
-use rand::{self, Rng};
-use settings;
-use sha2::{Digest, Sha256};
-use util::{ReaderVecIter, WhileOk};
-
-use std::{cmp, io};
-
 use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{Result, Write};
 use std::path;
 use std::path::PathBuf;
 use std::{self, fs};
+use std::{cmp, io};
+
+use crate::iterators::StoredChunks;
+use crate::settings;
+use crate::util::{ReaderVecIter, WhileOk};
+use hex;
+use rand::{self, Rng};
+use sha2::{Digest, Sha256};
+use url::Url;
+
+mod lib {
+    pub use super::super::*;
+}
 
 const PASS: &'static str = "FOO";
 const DIGEST_SIZE: usize = 32;

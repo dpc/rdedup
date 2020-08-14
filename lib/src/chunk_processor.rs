@@ -1,15 +1,16 @@
-use super::aio;
-use super::{DataType, Repo};
-use compression::ArcCompression;
-use crossbeam_channel;
-use encryption::ArcEncrypter;
-use hashing::ArcHasher;
-use sgdata::SGData;
-use slog::{Level, Logger};
-use slog_perf::TimeReporter;
 use std::io;
 use std::sync::mpsc;
-use {Digest, Generation};
+
+use sgdata::SGData;
+use slog::{trace, Level, Logger};
+use slog_perf::TimeReporter;
+
+use super::aio;
+use super::{DataType, Repo};
+use crate::compression::ArcCompression;
+use crate::encryption::ArcEncrypter;
+use crate::hashing::ArcHasher;
+use crate::{Digest, Generation};
 
 pub(crate) struct Message {
     pub data: (u64, SGData),

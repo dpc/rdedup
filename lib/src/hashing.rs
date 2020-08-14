@@ -1,10 +1,9 @@
-use blake2;
-use digest::Digest;
-use sha2;
-use SGData;
-use DIGEST_SIZE;
-
 use std::sync::Arc;
+
+use digest::Digest;
+
+use crate::SGData;
+use crate::DIGEST_SIZE;
 
 pub type ArcHasher = Arc<dyn Hasher + Send + Sync>;
 
