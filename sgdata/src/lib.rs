@@ -1,15 +1,11 @@
-//! Scattered, gathered, immutable, arc-ed data
-//!
-//! Allows zero-copy processing of streamed data, read into fixed-size buffers.
-//! Especially useful for high-performance, parallel data processing.
-
-extern crate owning_ref;
-
 use owning_ref::ArcRef;
 use std::io::Write;
 use std::sync::Arc;
 
 /// Scattered, gathered, immutable, arc-ed data
+///
+/// Allows zero-copy processing of streamed data, read into fixed-size buffers.
+/// Especially useful for high-performance, parallel data processing.
 ///
 /// A piece of data potentially scattered between multiple parts, which
 /// themselves might be slices of shared-ownership underlying data.
