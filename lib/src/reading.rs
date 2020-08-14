@@ -7,10 +7,10 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::io;
 use std::io::Write;
-use Generation;
-use VerifyResults;
-use {ArcCompression, ArcDecrypter};
-use {DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
+use crate::Generation;
+use crate::VerifyResults;
+use crate::{ArcCompression, ArcDecrypter};
+use crate::{DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
 // }}}
 
 /// Translates index stream into data stream

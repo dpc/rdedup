@@ -1,10 +1,10 @@
 use chrono;
 use chrono::prelude::*;
-use crypto::pwhash;
+use crate::crypto::pwhash;
 use hex::{self, FromHex, FromHexError};
 use serde::Deserialize;
 use std::io;
-use {base64, box_, secretbox, serde};
+use crate::{base64, box_, secretbox, serde};
 
 pub trait MyTryFromBytes: Sized {
     type Err: 'static + Sized + ::std::error::Error;

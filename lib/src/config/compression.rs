@@ -1,4 +1,4 @@
-use compression;
+use crate::compression;
 use std::sync::Arc;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]

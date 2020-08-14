@@ -2,15 +2,15 @@
 //! from `settings`.
 
 // {{{ use and mod
-use {serde_yaml, PassphraseFn, SGData};
+use crate::{serde_yaml, PassphraseFn, SGData};
 
-use aio;
-use pwhash;
+use crate::aio;
+use crate::pwhash;
 
-use hashing;
+use crate::hashing;
 
 use hex;
-use settings;
+use crate::settings;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -160,7 +160,7 @@ impl Repo {
         let pwhash = PWHash::from_settings(settings.pwhash);
         let encryption = match settings.encryption {
             settings::Encryption::Curve25519 => Encryption::Curve25519(
-                ::encryption::Curve25519::new(pass, &pwhash)?,
+                crate::encryption::Curve25519::new(pass, &pwhash)?,
             ),
             settings::Encryption::None => Encryption::None,
         };

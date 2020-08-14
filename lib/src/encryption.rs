@@ -1,11 +1,11 @@
 use hex;
-use pwhash::PWHash;
-use PassphraseFn;
-use {as_base64, box_, from_base64, pwhash, secretbox};
+use crate::pwhash::PWHash;
+use crate::PassphraseFn;
+use crate::{as_base64, box_, from_base64, pwhash, secretbox};
 
 use sgdata::SGData;
 
-use config;
+use crate::config;
 use std::io;
 use std::sync::Arc;
 

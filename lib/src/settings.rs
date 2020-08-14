@@ -1,6 +1,6 @@
 //! Settings: options that user can pick
 
-use config;
+use crate::config;
 use std::io;
 
 #[derive(Clone)]

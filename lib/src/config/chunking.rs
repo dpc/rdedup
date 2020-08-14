@@ -1,4 +1,4 @@
-use chunking;
+use crate::chunking;
 
 pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
 

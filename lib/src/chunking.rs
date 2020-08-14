@@ -1,9 +1,9 @@
 use owning_ref::ArcRef;
-use rollsum;
-use rollsum::CDC;
+use crate::rollsum;
+use crate::rollsum::CDC;
 use std::mem;
 use std::sync::Arc;
-use SGData;
+use crate::SGData;
 
 /// Abstraction over the specific chunking algorithms being used
 pub(crate) trait Chunking {

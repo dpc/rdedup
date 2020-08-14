@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::{fs, io};
 
-use aio;
+use crate::aio;
 
 use super::Metadata;
 use super::{Backend, BackendThread};
@@ -24,7 +24,7 @@ use hyper::net::HttpsConnector;
 use hyper::Client;
 use hyper_native_tls::NativeTlsClient;
 
-use config;
+use crate::config;
 
 // TODO: make a thread, that keeps updating
 // a timestamp file on the backend

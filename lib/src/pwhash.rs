@@ -1,6 +1,6 @@
 use sodiumoxide::crypto::pwhash;
 use std::io;
-use util::{as_base64, from_base64};
+use crate::util::{as_base64, from_base64};
 
 pub(crate) trait PWHash {
     fn derive_key(&self, passphrase: &str) -> io::Result<Vec<u8>>;

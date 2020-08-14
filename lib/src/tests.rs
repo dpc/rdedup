@@ -5,11 +5,11 @@ mod lib {
 use url::Url;
 
 use hex;
-use iterators::StoredChunks;
+use crate::iterators::StoredChunks;
 use rand::{self, Rng};
-use settings;
+use crate::settings;
 use sha2::{Digest, Sha256};
-use util::{ReaderVecIter, WhileOk};
+use crate::util::{ReaderVecIter, WhileOk};
 
 use std::{cmp, io};
 

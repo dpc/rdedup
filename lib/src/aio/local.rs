@@ -2,7 +2,7 @@
 use rand;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use INGRESS_BUFFER_SIZE;
+use crate::INGRESS_BUFFER_SIZE;
 
 use fs2::FileExt;
 use sgdata::SGData;
@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 
 use super::{Backend, BackendThread};
 use super::{Lock, Metadata};
-use config;
+use crate::config;
 // }}}
 
 impl Lock for fs::File {}

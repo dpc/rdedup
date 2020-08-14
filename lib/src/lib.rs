@@ -58,22 +58,22 @@ mod iterators;
 mod config;
 
 mod aio;
-use aio::*;
+use crate::aio::*;
 
 mod chunking;
 mod hashing;
 
 mod chunk_processor;
-use chunk_processor::*;
+use crate::chunk_processor::*;
 
 mod sorting_recv;
-use sorting_recv::SortingIterator;
+use crate::sorting_recv::SortingIterator;
 
 mod encryption;
-use encryption::EncryptionEngine;
+use crate::encryption::EncryptionEngine;
 
 mod compression;
-use compression::ArcCompression;
+use crate::compression::ArcCompression;
 
 mod pwhash;
 
