@@ -1,11 +1,11 @@
-use crate::aio;
 use hex::FromHex;
-
 use slog::{trace, Logger};
 
 use std::io;
 use std::io::Result;
 use std::path::PathBuf;
+
+use crate::aio;
 
 /// `StoredChunks` is an iterator for the list of chunks stored in a path,
 /// it will crawl the directory structure looking for chunks that have valid

@@ -1,9 +1,6 @@
-use owning_ref::ArcRef;
-use sgdata::SGData;
-use std::io;
-
 #[cfg(feature = "with-xz2")]
 use std::cmp;
+use std::io;
 #[cfg(feature = "with-zstd")]
 use std::io::Read;
 #[cfg(any(
@@ -14,6 +11,9 @@ use std::io::Read;
 ))]
 use std::io::Write;
 use std::sync::Arc;
+
+use owning_ref::ArcRef;
+use sgdata::SGData;
 
 pub type ArcCompression = Arc<dyn Compression + Send + Sync>;
 

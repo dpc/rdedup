@@ -1,8 +1,10 @@
-use owning_ref::ArcRef;
-use crate::rollsum;
-use crate::rollsum::CDC;
 use std::mem;
 use std::sync::Arc;
+
+use owning_ref::ArcRef;
+
+use crate::rollsum;
+use crate::rollsum::CDC;
 use crate::SGData;
 
 /// Abstraction over the specific chunking algorithms being used

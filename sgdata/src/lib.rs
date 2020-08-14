@@ -1,6 +1,7 @@
-use owning_ref::ArcRef;
 use std::io::Write;
 use std::sync::Arc;
+
+use owning_ref::ArcRef;
 
 /// Scattered, gathered, immutable, arc-ed data
 ///

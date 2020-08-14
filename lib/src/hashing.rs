@@ -1,8 +1,9 @@
-use crate::SGData;
-use crate::DIGEST_SIZE;
+use std::sync::Arc;
+
 use digest::Digest;
 
-use std::sync::Arc;
+use crate::SGData;
+use crate::DIGEST_SIZE;
 
 pub type ArcHasher = Arc<dyn Hasher + Send + Sync>;
 

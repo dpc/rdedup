@@ -1,12 +1,13 @@
-use digest::Digest;
-use hex::ToHex;
-use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::default::Default;
 use std::io;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+
+use digest::Digest;
+use hex::ToHex;
+use rand::{thread_rng, Rng};
 
 /// Generate data that has plenty of redundancy
 struct ExampleDataGen {

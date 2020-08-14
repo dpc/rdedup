@@ -1,7 +1,8 @@
-use sgdata::SGData;
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc;
+
+use sgdata::SGData;
 
 /// A lock held on the backend
 ///

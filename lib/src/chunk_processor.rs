@@ -1,10 +1,9 @@
 use std::io;
 use std::sync::mpsc;
 
+use sgdata::SGData;
 use slog::{trace, Level, Logger};
 use slog_perf::TimeReporter;
-
-use sgdata::SGData;
 
 use super::aio;
 use super::{DataType, Repo};

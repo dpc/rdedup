@@ -122,13 +122,14 @@
 use std::str::FromStr;
 use std::{env, io, path::PathBuf, process};
 
-use crate::lib::settings;
-use crate::lib::Repo;
 use clap::Clap;
 use slog::{info, o, Drain};
 use url::Url;
 
 use rdedup_lib as lib;
+
+use crate::lib::settings;
+use crate::lib::Repo;
 
 // Url parse with `io::Result` shortcut
 fn parse_url(s: &str) -> io::Result<Url> {
