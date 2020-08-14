@@ -9,6 +9,7 @@ documentation = "https://dpc.github.io/rdedup-lib/"
 homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
+edition = "2018"
 
 [[bin]]
 name = "tester"
