@@ -1,19 +1,18 @@
-// {{{ extern crate ...
-use rdedup_cdc as rollsum;
-// }}}
-
 // {{{ use and mod
-use sgdata::SGData;
-use slog::{info, o, warn, FnValue, Level, Logger};
-use slog_perf::TimeReporter;
-use sodiumoxide::crypto::{self, box_, secretbox};
 use std::collections::HashSet;
 use std::io;
 use std::io::{Error, Read, Result, Write};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
+
+use sgdata::SGData;
+use slog::{info, o, warn, FnValue, Level, Logger};
+use slog_perf::TimeReporter;
+use sodiumoxide::crypto::{self, box_, secretbox};
 use url::Url;
+
+use rdedup_cdc as rollsum;
 
 mod iterators;
 
