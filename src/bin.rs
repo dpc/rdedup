@@ -130,8 +130,8 @@ extern crate slog_term;
 extern crate url;
 
 use clap::Clap;
-use lib::settings;
-use lib::Repo;
+use crate::lib::settings;
+use crate::lib::Repo;
 use slog::Drain;
 use std::{env, io, path::PathBuf, process};
 use url::Url;
@@ -245,7 +245,7 @@ impl Options {
 }
 
 mod util;
-use util::{read_new_passphrase, read_passphrase};
+use crate::util::{read_new_passphrase, read_passphrase};
 
 fn validate_chunk_size(s: &str) -> Result<(), String> {
     util::parse_size(&s)
