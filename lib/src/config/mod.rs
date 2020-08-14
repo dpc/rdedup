@@ -2,19 +2,17 @@
 //! from `settings`.
 
 // {{{ use and mod
-use crate::{serde_yaml, PassphraseFn, SGData};
-
-use crate::aio;
-use crate::pwhash;
-
-use crate::hashing;
-
-use hex;
-use crate::settings;
-
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
+use crate::aio;
+use crate::hashing;
+use crate::pwhash;
+use crate::settings;
+use crate::{PassphraseFn, SGData};
 
 mod chunking;
 mod compression;
@@ -154,7 +152,7 @@ pub(crate) struct Repo {
 
 impl Repo {
     pub fn new_from_settings(
-        pass: PassphraseFn,
+        pass: PassphraseFn<'_>,
         settings: settings::Repo,
     ) -> io::Result<Self> {
         let pwhash = PWHash::from_settings(settings.pwhash);

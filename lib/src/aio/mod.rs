@@ -1,22 +1,17 @@
 //! Asynchronous IO operations & backends
-use self::url::Url;
-use url;
-
-use dangerous_option::DangerousOption as AutoOption;
-
-use crossbeam_channel;
-use num_cpus;
-use sgdata::SGData;
-use slog;
-use slog::{Level, Logger};
-use slog_perf::TimeReporter;
-use std;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
+
+use dangerous_option::DangerousOption as AutoOption;
+use sgdata::SGData;
+use slog::{o, trace};
+use slog::{Level, Logger};
+use slog_perf::TimeReporter;
+use url::Url;
 
 mod local;
 pub(crate) use self::local::Local;

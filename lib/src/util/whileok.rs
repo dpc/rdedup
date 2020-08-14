@@ -1,5 +1,3 @@
-use std;
-
 /// Iterator stopping on error
 pub struct WhileOk<I, E>
 where

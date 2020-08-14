@@ -1,5 +1,8 @@
-use crate::compression;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
+use crate::compression;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]

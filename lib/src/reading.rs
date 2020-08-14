@@ -1,16 +1,18 @@
 //! Primitives used for reading the chunked data stored in the `Repo`
 // {{{ use and mod
-use hex;
-use slog::{FnValue, Logger};
-use std;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::io;
 use std::io::Write;
+
+use slog::{trace, warn, FnValue, Logger};
+
 use crate::Generation;
 use crate::VerifyResults;
 use crate::{ArcCompression, ArcDecrypter};
-use crate::{DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE};
+use crate::{
+    DataAddressRef, DataType, Digest, DigestRef, Error, Repo, DIGEST_SIZE,
+};
 // }}}
 
 /// Translates index stream into data stream
@@ -157,7 +159,7 @@ impl<'a> ReadContext<'a> {
         ReadContext { accessor }
     }
 
-    fn on_index(&self, mut req: ReadRequest) -> io::Result<()> {
+    fn on_index(&self, mut req: ReadRequest<'_>) -> io::Result<()> {
         trace!(
             req.log,
             "Traversing index";
@@ -184,7 +186,7 @@ impl<'a> ReadContext<'a> {
         self.read_recursively(req)
     }
 
-    fn on_data(&self, mut req: ReadRequest) -> io::Result<()> {
+    fn on_data(&self, mut req: ReadRequest<'_>) -> io::Result<()> {
         trace!(
             req.log,
             "Traversing data";
@@ -201,7 +203,10 @@ impl<'a> ReadContext<'a> {
         }
     }
 
-    pub(crate) fn read_recursively(&self, req: ReadRequest) -> io::Result<()> {
+    pub(crate) fn read_recursively(
+        &self,
+        req: ReadRequest<'_>,
+    ) -> io::Result<()> {
         trace!(
             req.log,
             "Reading recursively";
@@ -223,12 +228,12 @@ pub(crate) trait ChunkAccessor {
     /// Read a chunk identified by `digest` into `writer`
     fn read_chunk_into(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         data_type: DataType,
         writer: &mut dyn Write,
     ) -> io::Result<()>;
 
-    fn touch(&self, _digest: DigestRef) -> io::Result<()>;
+    fn touch(&self, _digest: DigestRef<'_>) -> io::Result<()>;
 }
 
 /// `ChunkAccessor` that just reads the chunks as requested, without doing
@@ -263,7 +268,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         data_type: DataType,
         writer: &mut dyn Write,
     ) -> io::Result<()> {
@@ -353,7 +358,7 @@ impl<'a> ChunkAccessor for DefaultChunkAccessor<'a> {
         }
     }
 
-    fn touch(&self, _digest: DigestRef) -> io::Result<()> {
+    fn touch(&self, _digest: DigestRef<'_>) -> io::Result<()> {
         Ok(())
     }
 }
@@ -394,7 +399,7 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         data_type: DataType,
         writer: &mut dyn Write,
     ) -> io::Result<()> {
@@ -402,7 +407,7 @@ impl<'a> ChunkAccessor for RecordingChunkAccessor<'a> {
         self.raw.read_chunk_into(digest, data_type, writer)
     }
 
-    fn touch(&self, digest: DigestRef) -> io::Result<()> {
+    fn touch(&self, digest: DigestRef<'_>) -> io::Result<()> {
         self.accessed.borrow_mut().insert(digest.0.into());
         Ok(())
     }
@@ -452,7 +457,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         data_type: DataType,
         writer: &mut dyn Write,
     ) -> io::Result<()> {
@@ -473,7 +478,7 @@ impl<'a> ChunkAccessor for VerifyingChunkAccessor<'a> {
         Ok(())
     }
 
-    fn touch(&self, digest: DigestRef) -> io::Result<()> {
+    fn touch(&self, digest: DigestRef<'_>) -> io::Result<()> {
         self.raw.touch(digest)
     }
 }
@@ -508,14 +513,14 @@ impl<'a> ChunkAccessor for GenerationUpdateChunkAccessor<'a> {
 
     fn read_chunk_into(
         &self,
-        digest: DigestRef,
+        digest: DigestRef<'_>,
         data_type: DataType,
         writer: &mut dyn Write,
     ) -> io::Result<()> {
         self.raw.read_chunk_into(digest, data_type, writer)
     }
 
-    fn touch(&self, digest: DigestRef) -> io::Result<()> {
+    fn touch(&self, digest: DigestRef<'_>) -> io::Result<()> {
         let cur_gen_str = self.raw.gen_strings.last().unwrap();
         let mut data_gen_str = None;
 

@@ -1,5 +1,8 @@
 use std::io;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
 use crate::PassphraseFn;
 use crate::{config, encryption};
 
@@ -18,8 +21,8 @@ pub(crate) enum Encryption {
 impl encryption::EncryptionEngine for Encryption {
     fn change_passphrase(
         &mut self,
-        old_p: PassphraseFn,
-        new_p: PassphraseFn,
+        old_p: PassphraseFn<'_>,
+        new_p: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<()> {
         match *self {
@@ -32,7 +35,7 @@ impl encryption::EncryptionEngine for Encryption {
 
     fn encrypter(
         &self,
-        pass: PassphraseFn,
+        pass: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<encryption::ArcEncrypter> {
         match *self {
@@ -42,7 +45,7 @@ impl encryption::EncryptionEngine for Encryption {
     }
     fn decrypter(
         &self,
-        pass: PassphraseFn,
+        pass: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<encryption::ArcDecrypter> {
         match *self {

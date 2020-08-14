@@ -1,20 +1,19 @@
 // {{{ use and mod
-use rand;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
-use crate::INGRESS_BUFFER_SIZE;
-
-use fs2::FileExt;
-use sgdata::SGData;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{fs, io, mem};
+
+use fs2::FileExt;
+use rand::distributions::Alphanumeric;
+use rand::Rng;
+use sgdata::SGData;
 use walkdir::WalkDir;
 
 use super::{Backend, BackendThread};
 use super::{Lock, Metadata};
 use crate::config;
+use crate::INGRESS_BUFFER_SIZE;
 // }}}
 
 impl Lock for fs::File {}

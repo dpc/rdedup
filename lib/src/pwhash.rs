@@ -1,5 +1,8 @@
-use sodiumoxide::crypto::pwhash;
 use std::io;
+
+use serde::{Deserialize, Serialize};
+use sodiumoxide::crypto::pwhash;
+
 use crate::util::{as_base64, from_base64};
 
 pub(crate) trait PWHash {

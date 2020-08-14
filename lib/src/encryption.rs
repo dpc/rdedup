@@ -1,13 +1,15 @@
-use hex;
-use crate::pwhash::PWHash;
-use crate::PassphraseFn;
-use crate::{as_base64, box_, from_base64, pwhash, secretbox};
+use std::io;
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 
 use sgdata::SGData;
 
 use crate::config;
-use std::io;
-use std::sync::Arc;
+use crate::pwhash::PWHash;
+use crate::util::{as_base64, from_base64};
+use crate::PassphraseFn;
+use crate::{box_, pwhash, secretbox};
 
 pub type ArcEncrypter = Arc<dyn Encrypter + Send + Sync>;
 pub type ArcDecrypter = Arc<dyn Decrypter + Send + Sync>;
@@ -15,19 +17,19 @@ pub type ArcDecrypter = Arc<dyn Decrypter + Send + Sync>;
 pub(crate) trait EncryptionEngine {
     fn change_passphrase(
         &mut self,
-        old_p: PassphraseFn,
-        new_p: PassphraseFn,
+        old_p: PassphraseFn<'_>,
+        new_p: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<()>;
 
     fn encrypter(
         &self,
-        passphrase_f: PassphraseFn,
+        passphrase_f: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<ArcEncrypter>;
     fn decrypter(
         &self,
-        passphrase_f: PassphraseFn,
+        passphrase_f: PassphraseFn<'_>,
 
         pwhash: &config::PWHash,
     ) -> io::Result<ArcDecrypter>;
@@ -70,7 +72,7 @@ pub struct Curve25519 {
 
 impl Curve25519 {
     pub(crate) fn new(
-        passphrase_f: PassphraseFn,
+        passphrase_f: PassphraseFn<'_>,
         pwhash: &dyn pwhash::PWHash,
     ) -> super::Result<Self> {
         let (pk, sk) = box_::gen_keypair();
@@ -129,8 +131,8 @@ impl Curve25519 {
 impl EncryptionEngine for Curve25519 {
     fn change_passphrase(
         &mut self,
-        old_p: PassphraseFn,
-        new_p: PassphraseFn,
+        old_p: PassphraseFn<'_>,
+        new_p: PassphraseFn<'_>,
         pwhash: &config::PWHash,
     ) -> io::Result<()> {
         let sec_key = self.unseal_decrypt(old_p, pwhash)?;
@@ -151,7 +153,7 @@ impl EncryptionEngine for Curve25519 {
     }
     fn encrypter(
         &self,
-        _pass: PassphraseFn,
+        _pass: PassphraseFn<'_>,
         _pwhash: &config::PWHash,
     ) -> io::Result<ArcEncrypter> {
         let key = self.unseal_encrypt()?;

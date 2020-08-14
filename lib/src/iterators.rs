@@ -1,7 +1,7 @@
 use crate::aio;
 use hex::FromHex;
 
-use slog::Logger;
+use slog::{trace, Logger};
 
 use std::io;
 use std::io::Result;

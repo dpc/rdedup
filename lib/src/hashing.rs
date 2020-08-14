@@ -1,8 +1,6 @@
-use blake2;
-use digest::Digest;
-use sha2;
 use crate::SGData;
 use crate::DIGEST_SIZE;
+use digest::Digest;
 
 use std::sync::Arc;
 

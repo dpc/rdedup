@@ -29,7 +29,7 @@ pub(crate) struct DataAddress {
 }
 
 impl DataAddress {
-    pub(crate) fn as_ref(&self) -> DataAddressRef {
+    pub(crate) fn as_ref(&self) -> DataAddressRef<'_> {
         DataAddressRef {
             index_level: self.index_level,
             digest: self.digest.as_digest_ref(),
@@ -52,7 +52,7 @@ impl From<Name> for DataAddress {
 pub(crate) struct Digest(pub(crate) Vec<u8>);
 
 impl Digest {
-    pub(crate) fn as_digest_ref(&self) -> DigestRef {
+    pub(crate) fn as_digest_ref(&self) -> DigestRef<'_> {
         DigestRef(self.0.as_slice())
     }
 }
