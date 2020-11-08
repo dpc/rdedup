@@ -22,7 +22,7 @@ use crate::config;
 
 // TODO: make a thread, that keeps updating
 // a timestamp file on the backend
-struct Lock {
+pub struct Lock {
     path: PathBuf,
 }
 
@@ -35,17 +35,17 @@ impl Lock {
 impl aio::Lock for Lock {}
 
 #[derive(Debug)]
-pub(crate) struct B2 {
+pub struct B2 {
     cred: B2Credentials,
     bucket: String,
 }
 
-struct Auth {
+pub struct Auth {
     auth: B2Authorization,
     upload_auth: UploadAuthorization,
 }
 
-struct B2Thread {
+pub struct B2Thread {
     cred: B2Credentials,
     auth: RefCell<Option<Auth>>,
     client: Client,

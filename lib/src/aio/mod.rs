@@ -7,18 +7,19 @@ use std::sync::{Arc, Mutex};
 use std::{io, thread};
 
 use dangerous_option::DangerousOption as AutoOption;
+use serde::{Deserialize, Serialize};
 use sgdata::SGData;
 use slog::{o, trace};
 use slog::{Level, Logger};
 use slog_perf::TimeReporter;
 use url::Url;
 
-mod local;
+pub(crate) mod local;
 pub(crate) use self::local::Local;
-mod b2;
+pub(crate) mod b2;
 pub(crate) use self::b2::B2;
 
-mod backend;
+pub(crate) mod backend;
 use self::backend::*;
 
 // {{{ Misc
@@ -29,9 +30,10 @@ struct WriteArgs {
     complete_tx: Option<mpsc::Sender<io::Result<()>>>,
 }
 
-pub(crate) struct Metadata {
-    _len: u64,
-    _is_file: bool,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Metadata {
+    pub len: u64,
+    pub is_file: bool,
 }
 
 /// A result of async io operation

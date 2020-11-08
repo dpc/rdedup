@@ -7,13 +7,13 @@ use sgdata::SGData;
 /// A lock held on the backend
 ///
 /// It doesn't do much, except unlock on `drop`.
-pub(crate) trait Lock {}
+pub trait Lock {}
 
 /// Backend API
 ///
 /// Backend is thread-safe, and the actual work
 /// is implemented by per-thread instances of it.
-pub(crate) trait Backend: Send + Sync {
+pub trait Backend: Send + Sync {
     /// Lock the repository exclusively
     ///
     /// Use to protect operations that are potentially destructive,
@@ -29,7 +29,7 @@ pub(crate) trait Backend: Send + Sync {
     fn new_thread(&self) -> io::Result<Box<dyn BackendThread>>;
 }
 
-pub(crate) trait BackendThread: Send {
+pub trait BackendThread: Send {
     fn remove_dir_all(&mut self, path: PathBuf) -> io::Result<()>;
 
     fn rename(

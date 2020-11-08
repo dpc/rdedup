@@ -56,6 +56,20 @@ mod misc;
 use self::misc::*;
 // }}}
 
+// Fancy reexport of backends API and particular backends structs
+pub mod backends {
+    pub use crate::aio::backend::{Backend, BackendThread, Lock};
+    pub use crate::aio::Metadata;
+
+    pub mod local {
+        pub use crate::aio::local::{Local, LocalThread};
+    }
+
+    pub mod b2 {
+        pub use crate::aio::b2::{Auth, B2Thread, Lock, B2};
+    }
+}
+
 type ArcDecrypter = Arc<dyn encryption::Decrypter + Send + Sync + 'static>;
 type ArcEncrypter = Arc<dyn encryption::Encrypter + Send + Sync + 'static>;
 
@@ -63,7 +77,12 @@ const INGRESS_BUFFER_SIZE: usize = 128 * 1024;
 const DIGEST_SIZE: usize = 32;
 
 /// Type of user provided closure that will ask user for a passphrase is needed
-type PassphraseFn<'a> = &'a dyn Fn() -> io::Result<String>;
+pub type PassphraseFn<'a> = &'a dyn Fn() -> io::Result<String>;
+
+/// Type of user provided closure that will find backend based on URL
+pub type BackendSelectFn = &'static (dyn Fn(&Url) -> io::Result<Box<dyn backends::Backend + Send + Sync>>
+              + Send
+              + Sync);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 /// Data type (index/data)
@@ -111,6 +130,7 @@ pub struct EncryptHandle {
 #[derive(Clone)]
 pub struct Repo {
     url: Url,
+    backend_select: BackendSelectFn,
     config: config::Repo,
 
     compression: compression::ArcCompression,
@@ -171,11 +191,38 @@ impl Repo {
     where
         L: Into<Option<Logger>>,
     {
+        Self::init_custom(
+            url,
+            &aio::backend_from_url,
+            passphrase,
+            settings,
+            log,
+        )
+    }
+
+    pub fn open<L>(url: &Url, log: L) -> Result<Repo>
+    where
+        L: Into<Option<Logger>>,
+    {
+        Self::open_custom(url, &aio::backend_from_url, log)
+    }
+
+    /// Create new rdedup repository
+    pub fn init_custom<L>(
+        url: &Url,
+        backend_select: BackendSelectFn,
+        passphrase: PassphraseFn<'_>,
+        settings: settings::Repo,
+        log: L,
+    ) -> Result<Repo>
+    where
+        L: Into<Option<Logger>>,
+    {
         let log = log
             .into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let backend = aio::backend_from_url(url)?;
+        let backend = backend_select(&url)?;
         let aio = aio::AsyncIO::new(backend, log.clone())?;
 
         Repo::ensure_repo_empty_or_new(&aio)?;
@@ -187,6 +234,7 @@ impl Repo {
 
         Ok(Repo {
             url: url.clone(),
+            backend_select,
             config,
             compression,
             hasher,
@@ -195,7 +243,11 @@ impl Repo {
         })
     }
 
-    pub fn open<L>(url: &Url, log: L) -> Result<Repo>
+    pub fn open_custom<L>(
+        url: &Url,
+        backend_select: BackendSelectFn,
+        log: L,
+    ) -> Result<Repo>
     where
         L: Into<Option<Logger>>,
     {
@@ -203,7 +255,7 @@ impl Repo {
             .into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let backend = aio::backend_from_url(url)?;
+        let backend = backend_select(url)?;
         let aio = aio::AsyncIO::new(backend, log.clone())?;
 
         let config = config::Repo::read(&aio)?;
@@ -212,6 +264,7 @@ impl Repo {
         let hasher = config.hashing.to_hasher();
         Ok(Repo {
             url: url.clone(),
+            backend_select,
             config,
             compression,
             hasher,
@@ -786,7 +839,7 @@ impl Repo {
         let (chunker_tx, chunker_rx) =
             mpsc::sync_channel(self.write_cpu_thread_num());
 
-        let backend = backend_from_url(&self.url)?;
+        let backend = (self.backend_select)(&self.url)?;
         let aio = aio::AsyncIO::new(backend, self.log.clone())?;
 
         let stats = aio.stats();
