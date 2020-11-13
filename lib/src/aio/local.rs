@@ -23,12 +23,12 @@ pub(crate) fn lock_file_path(path: &Path) -> PathBuf {
 }
 
 #[derive(Debug)]
-pub(crate) struct Local {
+pub struct Local {
     path: PathBuf,
 }
 
 #[derive(Debug)]
-struct LocalThread {
+pub struct LocalThread {
     path: PathBuf,
     rand_ext: String,
 }
@@ -64,7 +64,7 @@ impl Backend for Local {
 }
 
 impl Local {
-    pub(crate) fn new(path: PathBuf) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         Local { path }
     }
 }
@@ -151,8 +151,8 @@ impl BackendThread for LocalThread {
         let path = self.path.join(path);
         let md = fs::metadata(&path)?;
         Ok(Metadata {
-            _len: md.len(),
-            _is_file: md.is_file(),
+            len: md.len(),
+            is_file: md.is_file(),
         })
     }
 
