@@ -203,6 +203,7 @@ impl BackendThread for B2Thread {
     }
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
+        use chrono::TimeZone;
         let file_info: MoreFileInfo<serde_json::value::Value> =
             retry(Some(self), || {
                 self.auth
@@ -216,12 +217,15 @@ impl BackendThread for B2Thread {
         let MoreFileInfo {
             content_length,
             action,
+            upload_timestamp,
             ..
         } = file_info;
+        let created = chrono::Utc.timestamp(upload_timestamp as i64, 0);
 
-        Ok(super::Metadata {
-            _len: content_length,
-            _is_file: action == backblaze_b2::raw::files::FileType::File,
+        Ok(Metadata {
+            len: content_length,
+            is_file: action == backblaze_b2::raw::files::FileType::File,
+            created,
         })
     }
 

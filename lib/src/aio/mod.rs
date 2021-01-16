@@ -34,6 +34,7 @@ struct WriteArgs {
 pub struct Metadata {
     pub len: u64,
     pub is_file: bool,
+    pub(crate) created: chrono::DateTime<chrono::Utc>,
 }
 
 /// A result of async io operation
