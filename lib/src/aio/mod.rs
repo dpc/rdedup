@@ -612,21 +612,27 @@ impl AsyncIOThread {
 }
 // }}}
 
-/// Convert URL to a backend instance
+/// Converts the given `url` into a backend instance.
+///
+/// # Panics
+///
+/// Panics if the `url` specifies a supported backend schema that is not enabled through future
+/// flags
+//
 // ```norust
 // let s = "file:/foo/bar";
 // let s = "b2:myid#bucket";
 // ```
 pub(crate) fn backend_from_url(
-    u: &Url,
+    url: &Url,
 ) -> io::Result<Box<dyn Backend + Send + Sync>> {
-    if u.scheme() == "file" {
-        return Ok(Box::new(Local::new(u.to_file_path().unwrap())));
-    } else if u.scheme() == "b2" {
+    if url.scheme() == "file" {
+        return Ok(Box::new(Local::new(url.to_file_path().unwrap())));
+    } else if url.scheme() == "b2" {
         #[cfg(feature = "backend-b2")]
         {
-            let id = u.path();
-            let bucket = u.fragment().ok_or_else(|| {
+            let id = url.path();
+            let bucket = url.fragment().ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "bucket in the url missing",
@@ -651,11 +657,16 @@ pub(crate) fn backend_from_url(
                 })?;
             return Ok(Box::new(B2::new(id, bucket, &key)));
         }
+
+        #[cfg(not(feature = "backend-b2"))]
+        {
+            panic!("Backblaze B2 backend feature not enabled");
+        }
     }
 
     Err(io::Error::new(
         io::ErrorKind::InvalidData,
-        format!("Unsupported scheme: {}", u.scheme()),
+        format!("Unsupported scheme: {}", url.scheme()),
     ))
 }
 
