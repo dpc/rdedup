@@ -65,6 +65,7 @@ pub mod backends {
         pub use crate::aio::local::{Local, LocalThread};
     }
 
+    #[cfg(feature = "backend-b2")]
     pub mod b2 {
         pub use crate::aio::b2::{Auth, B2Thread, Lock, B2};
     }

@@ -16,7 +16,10 @@ use url::Url;
 
 pub(crate) mod local;
 pub(crate) use self::local::Local;
+
+#[cfg(feature = "backend-b2")]
 pub(crate) mod b2;
+#[cfg(feature = "backend-b2")]
 pub(crate) use self::b2::B2;
 
 pub(crate) mod backend;
@@ -620,31 +623,34 @@ pub(crate) fn backend_from_url(
     if u.scheme() == "file" {
         return Ok(Box::new(Local::new(u.to_file_path().unwrap())));
     } else if u.scheme() == "b2" {
-        let id = u.path();
-        let bucket = u.fragment().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "bucket in the url missing",
-            )
-        })?;
-        let key = std::env::var_os("RDEDUP_B2_KEY")
-            .ok_or_else(|| {
+        #[cfg(feature = "backend-b2")]
+        {
+            let id = u.path();
+            let bucket = u.fragment().ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "RDEDUP_B2_KEY environment variable not found",
-                )
-            })?
-            .into_string()
-            .map_err(|os_string| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!(
-                        "b2 key is not utf8 string: {}",
-                        os_string.to_string_lossy()
-                    ),
+                    "bucket in the url missing",
                 )
             })?;
-        return Ok(Box::new(B2::new(id, bucket, &key)));
+            let key = std::env::var_os("RDEDUP_B2_KEY")
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "RDEDUP_B2_KEY environment variable not found",
+                    )
+                })?
+                .into_string()
+                .map_err(|os_string| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "b2 key is not utf8 string: {}",
+                            os_string.to_string_lossy()
+                        ),
+                    )
+                })?;
+            return Ok(Box::new(B2::new(id, bucket, &key)));
+        }
     }
 
     Err(io::Error::new(
