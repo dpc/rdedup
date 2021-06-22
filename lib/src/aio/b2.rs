@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::{fs, io};
 
 use backblaze_b2::raw::authorize::{B2Authorization, B2Credentials};
-use backblaze_b2::raw::files::FileNameListing;
+use backblaze_b2::raw::files::{FileNameListing, MoreFileInfo};
 use backblaze_b2::raw::upload::UploadAuthorization;
 use backblaze_b2::B2Error;
 use hyper::net::HttpsConnector;
@@ -203,7 +203,30 @@ impl BackendThread for B2Thread {
     }
 
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
-        unimplemented!();
+        use chrono::TimeZone;
+        let file_info: MoreFileInfo<serde_json::value::Value> =
+            retry(Some(self), || {
+                self.auth
+                    .borrow_mut()
+                    .as_ref()
+                    .unwrap()
+                    .auth
+                    .get_file_info(&path.to_string_lossy(), &self.client)
+            })?;
+
+        let MoreFileInfo {
+            content_length,
+            action,
+            upload_timestamp,
+            ..
+        } = file_info;
+        let created = chrono::Utc.timestamp(upload_timestamp as i64, 0);
+
+        Ok(Metadata {
+            len: content_length,
+            is_file: action == backblaze_b2::raw::files::FileType::File,
+            created,
+        })
     }
 
     fn list(&mut self, path: PathBuf) -> io::Result<Vec<PathBuf>> {

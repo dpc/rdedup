@@ -11,11 +11,14 @@ use crate::{DataAddress, DataAddressRef, Generation};
 
 pub(crate) const NAME_SUBDIR: &str = "name";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Name {
     #[serde(serialize_with = "as_hex", deserialize_with = "from_hex")]
     pub(crate) digest: Vec<u8>,
     pub(crate) index_level: u32,
+    #[serde(serialize_with = "as_rfc3339", deserialize_with = "from_rfc3339")]
+    /// The UTC timestamp when this `Name` was created.
+    pub(crate) created: chrono::DateTime<chrono::Utc>,
 }
 
 // TODO: I am very displeased with myself how this
@@ -25,6 +28,11 @@ pub(crate) struct Name {
 // Smells badly, but oh well...
 // -- dpc
 impl Name {
+    /// The UTC timestamp when this `Name` was created.
+    pub(crate) fn created(&self) -> chrono::DateTime<chrono::Utc> {
+        self.created
+    }
+
     pub(crate) fn remove(
         name: &str,
         gen: Generation,
@@ -145,23 +153,64 @@ impl Name {
         Ok(())
     }
 
+    /// Attempts to deserialize `path` as a `Name`. For backwards compatibility, if the source `Name`
+    /// does not have populated `created` information, populates from filesystem metadata.
+    fn try_deserialize(
+        name_str: &str,
+        gen: Generation,
+        aio: &aio::AsyncIO,
+    ) -> Result<Name, io::Error> {
+        let path = Name::path(name_str, gen);
+
+        let config_data = aio.read(path.clone()).wait()?;
+        let config_data = config_data.to_linear_vec();
+
+        if let Ok(name) = serde_yaml::from_reader(config_data.as_slice()) {
+            return Ok(name); // Ok-rewrap for change in Result Error type
+        }
+
+        #[derive(Debug, Deserialize)]
+        /// Legacy version of `Name` missing `created` field
+        struct NameLegacyV3 {
+            #[serde(deserialize_with = "from_hex")]
+            digest: Vec<u8>,
+            index_level: u32,
+        }
+
+        let NameLegacyV3 {
+            digest,
+            index_level,
+        } = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("couldn't parse yaml: {}", e.to_string()),
+            )
+        })?;
+
+        let created = aio.read_metadata(path.clone()).wait()?.created;
+
+        let name = Name {
+            digest,
+            index_level,
+            created,
+        };
+
+        // re-write the `Name` configuration to include the `created` field.
+        if let Err(_) = serde_yaml::to_string(&name).map(|serialized_str| {
+            aio.write(path, SGData::from_single(serialized_str.into_bytes()))
+                .wait()
+        }) {
+            // FIXME: log the write error?
+        }
+        Ok(name)
+    }
+
     pub fn load_from(
         name: &str,
         gen: Generation,
         aio: &aio::AsyncIO,
     ) -> io::Result<Self> {
-        let path = Name::path(name, gen);
-
-        let config_data = aio.read(path).wait()?;
-        let config_data = config_data.to_linear_vec();
-
-        let name: Name = serde_yaml::from_reader(config_data.as_slice())
-            .map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("couldn't parse yaml: {}", e.to_string()),
-                )
-            })?;
+        let name = Name::try_deserialize(name, gen, aio)?;
 
         if name.digest.len() != DIGEST_SIZE {
             return Err(io::Error::new(
@@ -197,6 +246,7 @@ impl<'a> From<DataAddressRef<'a>> for Name {
         Name {
             digest: da.digest.0.into(),
             index_level: da.index_level,
+            created: chrono::Utc::now(),
         }
     }
 }
@@ -206,6 +256,7 @@ impl From<DataAddress> for Name {
         Name {
             digest: da.digest.0,
             index_level: da.index_level,
+            created: chrono::Utc::now(),
         }
     }
 }

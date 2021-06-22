@@ -150,9 +150,19 @@ impl BackendThread for LocalThread {
     fn read_metadata(&mut self, path: PathBuf) -> io::Result<Metadata> {
         let path = self.path.join(path);
         let md = fs::metadata(&path)?;
+        let created = if let Ok(created) = md.created().map(Into::into) {
+            created
+        } else if let Ok(modified) = md.modified().map(Into::into) {
+            modified
+        } else {
+            return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("filesystem metadata does not contain `created` or `modified` for {}", path.display())));
+        };
         Ok(Metadata {
             len: md.len(),
             is_file: md.is_file(),
+            created,
         })
     }
 
