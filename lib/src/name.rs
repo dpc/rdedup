@@ -163,7 +163,7 @@ impl Name {
         let path = Name::path(name_str, gen);
 
         let config_data = aio.read(path.clone()).wait()?;
-        let config_data = config_data.to_linear_vec();
+        let config_data = config_data.into_linear_vec();
 
         if let Ok(name) = serde_yaml::from_reader(config_data.as_slice()) {
             return Ok(name); // Ok-rewrap for change in Result Error type

@@ -141,7 +141,7 @@ impl Generation {
         let path = self.config_path();
         let sg = aio.read(path).wait()?;
 
-        let config_data = sg.to_linear_vec();
+        let config_data = sg.into_linear_vec();
 
         let config: Config = serde_yaml::from_reader(config_data.as_slice())
             .map_err(|e| {

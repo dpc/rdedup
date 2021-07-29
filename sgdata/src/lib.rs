@@ -103,7 +103,7 @@ impl SGData {
         }
     }
 
-    pub fn to_linear_vec(mut self) -> Vec<u8> {
+    pub fn into_linear_vec(mut self) -> Vec<u8> {
         match self.0.len() {
             0 => vec![],
             1 => {

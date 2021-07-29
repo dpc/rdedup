@@ -191,7 +191,7 @@ impl Repo {
 
     pub fn read(aio: &aio::AsyncIO) -> io::Result<Self> {
         let config_data = aio.read(CONFIG_YML_FILE.into()).wait()?;
-        let config_data = config_data.to_linear_vec();
+        let config_data = config_data.into_linear_vec();
 
         let config: Repo = serde_yaml::from_reader(config_data.as_slice())
             .map_err(|e| {
