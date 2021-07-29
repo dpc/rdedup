@@ -88,8 +88,8 @@ impl Default for Hashing {
 }
 
 impl Hashing {
-    pub(crate) fn to_hasher(&self) -> hashing::ArcHasher {
-        match *self {
+    pub(crate) fn to_hasher(self) -> hashing::ArcHasher {
+        match self {
             Hashing::Sha256 => Arc::new(hashing::Sha256),
             Hashing::Blake2b => Arc::new(hashing::Blake2b),
         }

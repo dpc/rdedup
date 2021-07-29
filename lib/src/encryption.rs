@@ -115,12 +115,12 @@ impl Curve25519 {
                     )
                 })?;
 
-        Ok(box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
+        box_::SecretKey::from_slice(&plain_seckey).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "plain secret key in a wrong format",
             )
-        })?)
+        })
     }
 
     fn unseal_encrypt(&self) -> super::Result<box_::PublicKey> {

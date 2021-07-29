@@ -29,6 +29,7 @@ pub(crate) struct Name {
 // -- dpc
 impl Name {
     /// The UTC timestamp when this `Name` was created.
+    #[allow(unused)]
     pub(crate) fn created(&self) -> chrono::DateTime<chrono::Utc> {
         self.created
     }
@@ -196,10 +197,16 @@ impl Name {
         };
 
         // re-write the `Name` configuration to include the `created` field.
-        if let Err(_) = serde_yaml::to_string(&name).map(|serialized_str| {
-            aio.write(path, SGData::from_single(serialized_str.into_bytes()))
+        if serde_yaml::to_string(&name)
+            .map(|serialized_str| {
+                aio.write(
+                    path,
+                    SGData::from_single(serialized_str.into_bytes()),
+                )
                 .wait()
-        }) {
+            })
+            .is_err()
+        {
             // FIXME: log the write error?
         }
         Ok(name)

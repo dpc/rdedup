@@ -206,8 +206,7 @@ impl BackendThread for LocalThread {
                     }
                     v.push(path.path().into());
                     if v.len() > 100 {
-                        tx.send(Ok(mem::replace(&mut v, vec![])))
-                            .expect("send failed")
+                        tx.send(Ok(mem::take(&mut v))).expect("send failed")
                     }
                 }
                 Err(e) => tx.send(Err(e.into())).expect("send failed"),

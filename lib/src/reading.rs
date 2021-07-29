@@ -138,8 +138,8 @@ impl<'a> ReadRequest<'a> {
         log: Logger,
     ) -> Self {
         ReadRequest {
-            data_type,
             data_address,
+            data_type,
             writer,
             log,
         }

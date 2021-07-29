@@ -20,7 +20,7 @@
     let pkgs = nixpkgs.legacyPackages.${system};
     in {
       packages.rdedup = (naersk.lib.${system}.override {
-        inherit (fenix.packages.${system}.minimal) cargo rustc;
+        inherit (fenix.packages.${system}.stable) cargo rustc;
       }).buildPackage {
         pname = "rdedup";
         root = ./.;
@@ -32,7 +32,7 @@
       devShell =
         # pkgs.mkShell { buildInputs = [ self.packages.${system}.rdedup ]; };
         pkgs.mkShell {
-          nativeBuildInputs = [ fenix.packages.${system}.minimal.rustc ];
+          nativeBuildInputs = [ fenix.packages.${system}.stable.rustc ];
           buildInputs = with pkgs; [ pkgconfig libsodium lzma openssl fenix.packages.x86_64-linux.rust-analyzer ];
         };
   });

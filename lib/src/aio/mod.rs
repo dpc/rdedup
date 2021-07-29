@@ -1,7 +1,7 @@
 //! Asynchronous IO operations & backends
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
@@ -362,7 +362,7 @@ struct AsyncIOThread {
 }
 
 /// Guard that removes entry from the pending paths on drop
-struct PendingGuard<'a, 'b>(&'a AsyncIOThread, &'b PathBuf);
+struct PendingGuard<'a, 'b>(&'a AsyncIOThread, &'b Path);
 
 impl<'a, 'b> Drop for PendingGuard<'a, 'b> {
     fn drop(&mut self) {
@@ -489,7 +489,7 @@ impl AsyncIOThread {
 
     fn pending_wait_and_insert<'a, 'path>(
         &'a self,
-        path: &'path PathBuf,
+        path: &'path Path,
     ) -> PendingGuard<'a, 'path> {
         loop {
             let mut sh = self.shared.inner.lock().unwrap();
@@ -500,11 +500,11 @@ impl AsyncIOThread {
                 drop(sh);
                 thread::sleep(std::time::Duration::from_millis(1000));
             } else {
-                sh.in_progress.insert(path.clone());
+                sh.in_progress.insert(path.to_path_buf());
                 break;
             }
         }
-        PendingGuard(self, path)
+        PendingGuard(self, &path)
     }
 
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {
