@@ -186,6 +186,7 @@ fn byte_size() {
 }
 
 #[test]
+#[ignore] // too slow to run by default
 fn random_sanity() {
     let mut names = vec![];
 
