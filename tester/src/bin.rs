@@ -7,7 +7,8 @@ use std::str::FromStr;
 
 use digest::Digest;
 use hex::ToHex;
-use rand::{thread_rng, Rng};
+use rand::distributions::Standard;
+use rand::{rngs::SmallRng, thread_rng, Rng, SeedableRng};
 
 /// Generate data that has plenty of redundancy
 struct ExampleDataGen {
@@ -19,18 +20,20 @@ struct ExampleDataGen {
 
 impl ExampleDataGen {
     fn new() -> Self {
+        let mut rng = SmallRng::from_entropy();
+
         ExampleDataGen {
-            a: rand_data(123),
-            b: rand_data(511),
-            c: rand_data(1020),
-            d: rand_data(2041),
+            a: (&mut rng).sample_iter(Standard).take(123).collect(),
+            b: (&mut rng).sample_iter(Standard).take(511).collect(),
+            c: (&mut rng).sample_iter(Standard).take(1020).collect(),
+            d: (&mut rng).sample_iter(Standard).take(2041).collect(),
         }
     }
 
     fn gen(&self, size_kb: usize) -> Vec<u8> {
         let mut res = vec![];
         for _ in 0..size_kb {
-            res.extend_from_slice(match thread_rng().gen_range(0, 4) {
+            res.extend_from_slice(match thread_rng().gen_range(0..4) {
                 0 => &self.a,
                 1 => &self.b,
                 2 => &self.c,
@@ -41,10 +44,6 @@ impl ExampleDataGen {
 
         res
     }
-}
-
-fn rand_data(len: usize) -> Vec<u8> {
-    (0..len).map(|_| rand::random::<u8>()).collect::<Vec<u8>>()
 }
 
 fn simple_digest(data: &[u8]) -> Vec<u8> {
@@ -120,7 +119,7 @@ impl TestState {
     }
 
     fn store_one(&mut self) -> io::Result<()> {
-        let data = self.data_gen.gen(16 * 1024);
+        let data = self.data_gen.gen(1024);
 
         let name = NameStats {
             digest: simple_digest(&data).encode_hex(),
@@ -135,7 +134,7 @@ impl TestState {
 
     fn select_random_name(&self) -> NameStats {
         let mut rng = thread_rng();
-        let random_key = rng.gen_range(0, self.names.keys().len());
+        let random_key = rng.gen_range(0..self.names.keys().len());
         let random_name = self.names.keys().nth(random_key).unwrap();
         self.names.get(random_name).unwrap().clone()
     }
@@ -182,7 +181,7 @@ impl TestState {
 
     fn gc(&mut self) -> io::Result<()> {
         eprintln!("GC");
-        let grace = thread_rng().gen_range(0, 2000);
+        let grace = thread_rng().gen_range(0..2000);
         let _out =
             run_rdedup_with(&["gc", "--grace", &grace.to_string()], vec![]);
         Ok(())
@@ -208,7 +207,7 @@ fn main() {
             test.rm_one().unwrap();
         }
 
-        match thread_rng().gen_range(0, 6) {
+        match thread_rng().gen_range(0..6) {
             0 | 1 => test.store_one().unwrap(),
             2 => test.load_one().unwrap(),
             3 => test.rm_one().unwrap(),
