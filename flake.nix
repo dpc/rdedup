@@ -30,10 +30,10 @@
       defaultApp = self.packages.${system}.rdedup;
 
       devShell =
-        # pkgs.mkShell { buildInputs = [ self.packages.${system}.rdedup pkgs.cowsay ]; };
+        # pkgs.mkShell { buildInputs = [ self.packages.${system}.rdedup ]; };
         pkgs.mkShell {
           nativeBuildInputs = [ fenix.packages.${system}.minimal.rustc ];
-          buildInputs = with pkgs; [ cowsay pkgconfig libsodium lzma openssl ];
+          buildInputs = with pkgs; [ pkgconfig libsodium lzma openssl fenix.packages.x86_64-linux.rust-analyzer ];
         };
   });
 }
