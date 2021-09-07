@@ -1,6 +1,6 @@
 [package]
 name = "sgdata"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Scattered, gathered, immutable, arc-ed data"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
