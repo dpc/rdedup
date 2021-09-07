@@ -47,7 +47,7 @@ members = [ "tester" ]
 [dependencies]
 # Default features disabled so they can be explicitly opted into
 rdedup-lib = { version = "3.2.0", path = "lib", default-features = false }
-clap = "=3.0.0-beta.2"
+clap = "3.0.0-beta.4"
 log = "0.4.11"
 hex = "0.4.2"
 rpassword = "4.0"
