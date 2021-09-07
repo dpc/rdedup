@@ -1,4 +1,9 @@
 
+# v3.2.0 - 2021-09-07
+### Changed
+
+- Bump dependencies & fix compilation
+
 # v3.1.0 - 2019-01-27
 ### Changed
 

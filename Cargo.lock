@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "rdedup"
-version = "3.1.1"
+version = "3.2.0"
 dependencies = [
  "clap",
  "hex",
@@ -918,7 +918,7 @@ checksum = "ede09e0e8cb5de6697bde1b2cd4420bfa703d2252fbfcd540d4d1160fd4b5441"
 
 [[package]]
 name = "rdedup-lib"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "backblaze-b2",
  "base64 0.12.3",

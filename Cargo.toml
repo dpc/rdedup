@@ -1,6 +1,6 @@
 [package]
 name = "rdedup"
-version = "3.1.1"
+version = "3.2.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
 description = "Data deduplication with compression and public key encryption. - binary"
 keywords = ["data", "backup", "dedupliation", "encryption", "dedup"]
@@ -46,7 +46,7 @@ members = [ "tester" ]
 
 [dependencies]
 # Default features disabled so they can be explicitly opted into
-rdedup-lib = { version = "3.1.0", path = "lib", default-features = false }
+rdedup-lib = { version = "3.2.0", path = "lib", default-features = false }
 clap = "=3.0.0-beta.2"
 log = "0.4.11"
 hex = "0.4.2"
