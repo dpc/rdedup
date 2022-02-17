@@ -76,7 +76,7 @@ mostly implemented, but the actual backends are not.
 If you have `cargo` installed:
 
 ```norust
-cargo install rdedup
+cargo install --locked rdedup
 ```
 
 If not, I highly recommend installing [rustup][rustup] (think `pip`, `npm`
@@ -86,7 +86,7 @@ If you're interested in running `rdedup` with maximum possible performance,
 try:
 
 ```norust
-RUSTFLAGS="-C target-cpu=native" cargo install rdedup --vers ...
+RUSTFLAGS="-C target-cpu=native" cargo install --locked rdedup
 ```
 
 [rustup]: https://www.rustup.rs/
