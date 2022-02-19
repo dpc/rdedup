@@ -504,7 +504,7 @@ impl AsyncIOThread {
                 break;
             }
         }
-        PendingGuard(self, &path)
+        PendingGuard(self, path)
     }
 
     fn read(&mut self, path: PathBuf, tx: mpsc::Sender<io::Result<SGData>>) {

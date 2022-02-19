@@ -39,7 +39,7 @@ impl Drop for StoredChunks {
     fn drop(&mut self) {
         // drain the receiver so the sender can send everything
         // without failing
-        while let Some(_) = self.paths.next() {}
+        for _ in self.paths.by_ref() {}
     }
 }
 impl Iterator for StoredChunks {

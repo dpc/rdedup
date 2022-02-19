@@ -60,11 +60,11 @@ fn test_parse_size() {
 
 fn read_passphrase_env() -> io::Result<Option<String>> {
     if let Ok(pass) = env::var("RDEDUP_PASSPHRASE") {
-        eprint!("Using passphrase set in RDEDUP_PASSPHRASE\n");
+        eprintln!("Using passphrase set in RDEDUP_PASSPHRASE");
         return Ok(Some(pass));
     }
     if let Ok(file_path) = env::var("RDEDUP_PASSPHRASE_FILE") {
-        eprint!("Using passphrase from file set in RDEDUP_PASSPHRASE_FILE\n");
+        eprintln!("Using passphrase from file set in RDEDUP_PASSPHRASE_FILE");
         return Ok(Some(fs::read_to_string(file_path)?.trim().to_string()));
     }
     Ok(None)

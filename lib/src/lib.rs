@@ -223,7 +223,7 @@ impl Repo {
             .into()
             .unwrap_or_else(|| Logger::root(slog::Discard, o!()));
 
-        let backend = backend_select(&url)?;
+        let backend = backend_select(url)?;
         let aio = aio::AsyncIO::new(backend, log.clone())?;
 
         Repo::ensure_repo_empty_or_new(&aio)?;

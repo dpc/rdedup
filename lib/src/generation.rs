@@ -147,7 +147,7 @@ impl Generation {
             .map_err(|e| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("couldn't parse yaml: {}", e.to_string()),
+                    format!("couldn't parse yaml: {}", e),
                 )
             })?;
 
