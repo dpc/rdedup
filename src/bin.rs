@@ -122,7 +122,7 @@
 use std::str::FromStr;
 use std::{env, io, path::PathBuf, process};
 
-use clap::Clap;
+use clap::{Parser, Subcommand};
 use slog::{info, o, Drain};
 use url::Url;
 
@@ -313,7 +313,7 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
     }
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 #[clap(author, about = "Data deduplication toolkit")]
 struct CliOpts {
     #[clap(name = "dir", short = 'd', long, value_name = "PATH")]
@@ -341,7 +341,7 @@ struct CliOpts {
     command: Command,
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Subcommand)]
 #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
 enum Command {
     #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
