@@ -33,6 +33,7 @@ impl Default for Compression {
 }
 
 impl Compression {
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_engine(&self) -> compression::ArcCompression {
         match *self {
             Compression::None => Arc::new(compression::NoCompression),

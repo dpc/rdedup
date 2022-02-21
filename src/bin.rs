@@ -122,7 +122,7 @@
 use std::str::FromStr;
 use std::{env, io, path::PathBuf, process};
 
-use clap::Clap;
+use clap::{Parser, Subcommand};
 use slog::{info, o, Drain};
 use url::Url;
 
@@ -136,7 +136,7 @@ fn parse_url(s: &str) -> io::Result<Url> {
     Url::parse(s).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("URI parsing error : {}", e.to_string()),
+            format!("URI parsing error : {}", e),
         )
     })
 }
@@ -144,7 +144,6 @@ fn parse_url(s: &str) -> io::Result<Url> {
 #[derive(Clone)]
 struct Options {
     url: Url,
-    debug_level: u32,
     settings: settings::Repo,
 }
 
@@ -152,7 +151,6 @@ impl Options {
     fn new(url: Url) -> Options {
         Options {
             url,
-            debug_level: 0,
             settings: settings::Repo::new(),
         }
     }
@@ -241,7 +239,7 @@ mod util;
 use crate::util::{read_new_passphrase, read_passphrase};
 
 fn validate_chunk_size(s: &str) -> Result<(), String> {
-    util::parse_size(&s)
+    util::parse_size(s)
         .map(|_| ())
         .ok_or_else(|| "Can't parse a human readable byte-size value".into())
 }
@@ -313,7 +311,7 @@ fn create_logger(verbosity: u32, timing_verbosity: u32) -> slog::Logger {
     }
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 #[clap(author, about = "Data deduplication toolkit")]
 struct CliOpts {
     #[clap(name = "dir", short = 'd', long, value_name = "PATH")]
@@ -341,7 +339,7 @@ struct CliOpts {
     command: Command,
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Subcommand)]
 #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
 enum Command {
     #[clap(setting = clap::AppSettings::DeriveDisplayOrder)]
@@ -545,26 +543,26 @@ fn run() -> io::Result<()> {
             options.set_hashing(&hashing);
             let _ = Repo::init(
                 &options.url,
-                &|| util::read_new_passphrase(),
+                &read_new_passphrase,
                 options.settings,
                 log,
             )?;
         }
         Command::Store { name } => {
             let repo = Repo::open(&options.url, log)?;
-            let enc = repo.unlock_encrypt(&|| util::read_passphrase())?;
+            let enc = repo.unlock_encrypt(&read_passphrase)?;
             let stats = repo.write(&name, &mut io::stdin(), &enc)?;
             println!("{} new chunks", stats.new_chunks);
             println!("{} new bytes", stats.new_bytes);
         }
         Command::Load { name } => {
             let repo = Repo::open(&options.url, log)?;
-            let dec = repo.unlock_decrypt(&|| util::read_passphrase())?;
+            let dec = repo.unlock_decrypt(&read_passphrase)?;
             repo.read(&name, &mut io::stdout(), &dec)?;
         }
         Command::ChangePassphrase => {
             let mut repo = Repo::open(&options.url, log)?;
-            repo.change_passphrase(&|| read_passphrase(), &|| {
+            repo.change_passphrase(&read_passphrase, &|| {
                 read_new_passphrase()
             })?;
         }
@@ -576,7 +574,7 @@ fn run() -> io::Result<()> {
         }
         Command::Du { names } => {
             let repo = Repo::open(&options.url, log)?;
-            let dec = repo.unlock_decrypt(&|| read_passphrase())?;
+            let dec = repo.unlock_decrypt(&read_passphrase)?;
 
             for name in names {
                 let result = repo.du(&name, &dec)?;
@@ -598,7 +596,7 @@ fn run() -> io::Result<()> {
         }
         Command::Verify { names } => {
             let repo = Repo::open(&options.url, log)?;
-            let dec = repo.unlock_decrypt(&|| read_passphrase())?;
+            let dec = repo.unlock_decrypt(&read_passphrase)?;
             for name in names {
                 let results = repo.verify(&name, &dec)?;
                 println!("scanned {} chunk(s)", results.scanned);

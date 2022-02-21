@@ -184,7 +184,7 @@ impl Name {
         } = serde_yaml::from_reader(config_data.as_slice()).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("couldn't parse yaml: {}", e.to_string()),
+                format!("couldn't parse yaml: {}", e),
             )
         })?;
 
@@ -196,8 +196,7 @@ impl Name {
             created,
         };
 
-        // re-write the `Name` configuration to include the `created` field.
-        if serde_yaml::to_string(&name)
+        let is_serde_err = serde_yaml::to_string(&name)
             .map(|serialized_str| {
                 aio.write(
                     path,
@@ -205,8 +204,9 @@ impl Name {
                 )
                 .wait()
             })
-            .is_err()
-        {
+            .is_err();
+        // re-write the `Name` configuration to include the `created` field.
+        if is_serde_err {
             // FIXME: log the write error?
         }
         Ok(name)

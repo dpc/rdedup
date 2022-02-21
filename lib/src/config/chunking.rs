@@ -36,11 +36,12 @@ impl Chunking {
             Chunking::Bup { chunk_bits: bits }
             | Chunking::Gear { chunk_bits: bits }
             | Chunking::FastCDC { chunk_bits: bits } => {
-                30 >= bits && bits >= 10
+                (10..=30).contains(&bits)
             }
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_engine(&self) -> Box<dyn chunking::Chunking> {
         match *self {
             Chunking::Bup { chunk_bits } => {
