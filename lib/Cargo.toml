@@ -9,7 +9,7 @@ documentation = "https://docs.rs/rdedup-lib/"
 homepage = "https://github.com/dpc/rdedup"
 repository = "https://github.com/dpc/rdedup"
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "rdedup_lib"
@@ -31,24 +31,24 @@ sodiumoxide = { version = "0.2", features = ["serde"] }
 fs2 = "0.4"
 serde = { version = "1", features=["derive"] }
 serde_yaml = "0.8.13"
-base64 = "0.12.3"
+base64 = "0.13.0"
 owning_ref = "0.4.1"
 num_cpus = "1.2.1"
-crossbeam = "0.7"
-crossbeam-channel = "0.4"
+crossbeam = "0.8.1"
+crossbeam-channel = "0.5.2"
 slog = "2.0.10"
 slog-perf = "0.2"
 hex = "0.4.2"
 sgdata = { version = "0.2.0", path = "../sgdata" }
-rand = "0.7.3"
+rand = "0.8.5"
 dangerous_option = "0.2"
 walkdir = "2"
-sha2 = "0.9.1"
-blake2 = "0.9.0"
-digest = "0.9.0"
+sha2 = "0.10.2"
+blake2 = "0.10.4"
+digest = "0.10.3"
 bytevec = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
-url = "1"
+url = "2"
 backblaze-b2 = { version = "0.1", optional = true }
 hyper = { version = "0.10", optional = true }
 hyper-native-tls = { version = "0.3", optional = true }
@@ -57,4 +57,4 @@ serde_json = "1"
 bzip2 = { version = "0.4.1", optional = true }
 flate2 = { version = "1", optional = true }
 rust-lzma = { version = "0.5.1", optional = true }
-zstd = { version = "0.9", optional = true }
+zstd = { version = "0.10.0+zstd.1.5.2", optional = true }

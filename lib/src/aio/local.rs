@@ -55,10 +55,14 @@ impl Backend for Local {
     fn new_thread(&self) -> io::Result<Box<dyn BackendThread>> {
         Ok(Box::new(LocalThread {
             path: self.path.clone(),
-            rand_ext: rand::thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(20)
-                .collect::<String>(),
+            rand_ext: std::str::from_utf8(
+                &rand::thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(20)
+                    .collect::<Vec<_>>()[..],
+            )
+            .expect("must always be utf8")
+            .to_string(),
         }))
     }
 }

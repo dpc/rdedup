@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use digest::consts::U32;
 use digest::Digest;
 
 use crate::SGData;
@@ -44,7 +45,7 @@ pub struct Blake2b;
 
 impl Hasher for Blake2b {
     fn calculate_digest(&self, sg: &SGData) -> Vec<u8> {
-        let mut blake2 = blake2::Blake2b::default();
+        let mut blake2: blake2::Blake2b<U32> = blake2::Blake2b::default();
 
         for sg_part in sg.as_parts() {
             blake2.update(sg_part);
@@ -57,7 +58,7 @@ impl Hasher for Blake2b {
     }
 
     fn calculate_digest_simple(&self, data: &[u8]) -> Vec<u8> {
-        let mut blake2 = blake2::Blake2b::default();
+        let mut blake2: blake2::Blake2b<U32> = blake2::Blake2b::default();
 
         blake2.update(data);
 
