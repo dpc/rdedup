@@ -617,8 +617,8 @@ impl AsyncIOThread {
 ///
 /// # Panics
 ///
-/// Panics if the `url` specifies a supported backend schema that is not enabled through future
-/// flags
+/// Panics if the `url` specifies a supported backend schema that is not enabled
+/// through future flags
 //
 // ```norust
 // let s = "file:/foo/bar";

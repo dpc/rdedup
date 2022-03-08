@@ -154,8 +154,9 @@ impl Name {
         Ok(())
     }
 
-    /// Attempts to deserialize `path` as a `Name`. For backwards compatibility, if the source `Name`
-    /// does not have populated `created` information, populates from filesystem metadata.
+    /// Attempts to deserialize `path` as a `Name`. For backwards compatibility,
+    /// if the source `Name` does not have populated `created` information,
+    /// populates from filesystem metadata.
     fn try_deserialize(
         name_str: &str,
         gen: Generation,

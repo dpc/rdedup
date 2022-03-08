@@ -10,8 +10,8 @@
 //!
 //!  * simple but solid cryptography:
 //!    * libsodium based
-//!    * public-key encryption mode (the only tool like that I'm aware of,
-//!      and primary reason `rdedup` was created)
+//!    * public-key encryption mode (the only tool like that I'm aware of, and
+//!      primary reason `rdedup` was created)
 //!  * flat-file synchronization friendly (Dropbox/syncthing, rsync, rclone)
 //!  * immutable data-conflict-free data store
 //!  * cloud backends are WIP
@@ -23,10 +23,9 @@
 //!    * encryption: curve25519, none
 //!    * very easy to add new ones
 //!    * check `rdedup init --help` output for up-to-date list
-//!  * extreme performance and parallelism - see
-//!    [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
-//!  * reliability focus (eg. `rdedup` is using `fsync` + `rename`
-//!    to avoid data corruption even in case of a hardware crash)
+//!  * extreme performance and parallelism - see [Rust fearless concurrency in `rdedup`](https://dpc.pw/blog/2017/04/rusts-fearless-concurrency-in-rdedup/)
+//!  * reliability focus (eg. `rdedup` is using `fsync` + `rename` to avoid data
+//!    corruption even in case of a hardware crash)
 //!  * built-in time/performance profiler
 //!
 //! ## Strong parts
@@ -85,8 +84,8 @@
 //!   * `rdedup init --help` for repository configuration options.
 //! * `rdedup store <name>` - store data from standard input under a given
 //!   *name*.
-//! * `rdedup load <name>` - load data stored under given *name* and write it
-//!   to standard output.
+//! * `rdedup load <name>` - load data stored under given *name* and write it to
+//!   standard output.
 //! * `rdedup rm <name>` - remove the given *name*.
 //! * `rdedup ls` - list all stored names.
 //! * `rdedup gc` - remove any no longer reachable data.
@@ -373,7 +372,8 @@ enum Command {
         compression: String,
 
         #[clap(long, default_value = "0", value_name = "N")]
-        /// Set compression level where negative numbers mean "faster" and positive ones "smaller"
+        /// Set compression level where negative numbers mean "faster" and
+        /// positive ones "smaller"
         compression_level: i32,
 
         #[clap(
