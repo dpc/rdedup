@@ -50,7 +50,7 @@ rdedup-lib = { version = "3.2.0", path = "lib", default-features = false }
 clap = { version = "3.1.0", features = [ "derive" ] }
 log = "0.4.11"
 hex = "0.4.2"
-rpassword = "5.0"
+rpassword = "7.0"
 slog = { version = "2.0.10", features = ["max_level_trace", "release_max_level_trace"]}
 slog-term = "2"
 slog-async = "2"

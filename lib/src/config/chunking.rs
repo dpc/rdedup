@@ -4,7 +4,7 @@ use crate::chunking;
 
 pub const DEFAULT_BUP_CHUNK_BITS: u32 = 17;
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 /// `Chunking` are the algorithms supported by rdedup
 pub enum Chunking {

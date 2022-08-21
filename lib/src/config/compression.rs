@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compression;
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum Compression {
     #[cfg(feature = "with-deflate")]
@@ -51,7 +51,7 @@ impl Compression {
     }
 }
 #[cfg(feature = "with-deflate")]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Deflate {
     #[serde(rename = "level")]
     level: i32,
@@ -63,7 +63,7 @@ impl Deflate {
     }
 }
 #[cfg(feature = "with-bzip2")]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Bzip2 {
     #[serde(rename = "level")]
     level: i32,
@@ -76,7 +76,7 @@ impl Bzip2 {
 }
 
 #[cfg(feature = "with-zstd")]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Zstd {
     #[serde(rename = "level")]
     level: i32,
@@ -89,7 +89,7 @@ impl Zstd {
 }
 
 #[cfg(feature = "with-xz2")]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Xz2 {
     #[serde(rename = "level")]
     level: i32,
