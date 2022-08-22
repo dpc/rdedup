@@ -30,7 +30,7 @@ rdedup-cdc = "0.1.0"
 sodiumoxide = { version = "0.2", features = ["serde"] }
 fs2 = "0.4"
 serde = { version = "1", features=["derive"] }
-serde_yaml = "0.8.13"
+serde_yaml = "0.9.9"
 base64 = "0.13.0"
 owning_ref = "0.4.1"
 num_cpus = "1.2.1"
@@ -57,4 +57,4 @@ serde_json = "1"
 bzip2 = { version = "0.4.1", optional = true }
 flate2 = { version = "1", optional = true }
 rust-lzma = { version = "0.5.1", optional = true }
-zstd = { version = "0.10.0+zstd.1.5.2", optional = true }
+zstd = { version = "0.11.2", optional = true }

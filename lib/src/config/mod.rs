@@ -72,7 +72,7 @@ impl pwhash::PWHash for PWHash {
 // }}}
 
 // {{{ Hashing
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum Hashing {
     #[serde(rename = "sha256")]
@@ -98,7 +98,7 @@ impl Hashing {
 // }}}
 
 // {{{ Nesting
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Nesting(pub u8);
 impl Default for Nesting {
     fn default() -> Self {
