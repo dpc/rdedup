@@ -35,7 +35,7 @@
       channel = (mozilla.rustChannelOf {
         # date = "2020-01-01"; # get the current date with `date -I`
         channel = "stable";
-        sha256 = "2NfCJiH3wk7sR1XlRf8+IZfY3S9sYKdL8TpMqk82Bq0=";
+        sha256 = "KXx+ID0y4mg2B3LHp7IyaiMrdexF6octADnAtFIOjrY=";
       });
       rust = channel.rust;
 
@@ -69,12 +69,8 @@
           nativeBuildInputs = (with pkgs;
             [
               pkgconfig
-              # nixpkgs-fmt
-              # cargo-watch
               rust-analyzer
-              # rustc
-              # cargo
-              rust
+              rustup
             ]);
           RUST_SRC_PATH = "${channel.rust-src}/lib/rustlib/src/rust/library";
         };
